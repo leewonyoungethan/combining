@@ -2,30 +2,38 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>몬스터 합치기</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<canvas id="world"></canvas>
+
 <header class="hud">
   <div class="logo">🧬 몬스터 합치기</div>
   <div class="res">
-    <div class="pill gold"><span>💰</span><b id="gold">0</b><small id="income">+0/초</small></div>
-    <div class="pill food"><span>🍅</span><b id="food">0</b></div>
+    <div class="pill"><span>💰</span><b id="gold">0</b></div>
+    <div class="pill"><span>💎</span><b id="gems">0</b></div>
+    <div class="pill"><span>🍖</span><b id="food">0</b></div>
     <button class="pill code-btn" data-act="code" title="비밀코드">🔒</button>
   </div>
 </header>
 
-<nav class="tabs">
-  <button data-act="tab" data-tab="mons">🐾<span>몬스터</span></button>
-  <button data-act="tab" data-tab="breed">⛰️<span>교배산</span></button>
-  <button data-act="tab" data-tab="farm">🌾<span>농장</span></button>
-  <button data-act="tab" data-tab="battle">⚔️<span>전투</span></button>
-  <button data-act="tab" data-tab="dex">📖<span>도감</span></button>
+<section id="panel" class="panel hidden">
+  <button class="panel-x" data-act="tab" data-tab="island">✕</button>
+  <main id="view"></main>
+</section>
+
+<nav class="bottom-bar">
+  <button class="round" data-act="tab" data-tab="island">🏝️<span>섬</span></button>
+  <button class="round" data-act="tab" data-tab="adventure">⚔️<span>모험</span></button>
+  <button class="round" data-act="tab" data-tab="mons">🐾<span>몬스터</span></button>
+  <button class="round" data-act="tab" data-tab="shop">🛒<span>상점</span></button>
+  <button class="round" data-act="tab" data-tab="dex">📖<span>도감</span></button>
+  <button class="round gold" data-act="collectAll">💰<span>모두 걷기</span></button>
 </nav>
 
-<main id="view"></main>
-
+<div id="battle" class="battle hidden"></div>
 <div id="modal" class="modal hidden"><div class="modal-box" id="modalBox"></div></div>
 <div id="toast" class="toast"></div>
 
