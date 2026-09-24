@@ -31,13 +31,14 @@ const BEATS = {
 };
 
 // ===================== 등급 =====================
-const RAR_ORDER = ['common', 'rare', 'epic', 'legendary', 'mythic'];
+const RAR_ORDER = ['common', 'rare', 'epic', 'legendary', 'mythic', 'divine'];
 const RAR = {
   common:    { name: '커먼',     color: '#b4bccb', time: 5,   income: 1,   cost: 50,   hp: 300,  atk: 50,  spd: 100 },
   rare:      { name: '레어',     color: '#5cb6ff', time: 15,  income: 3,   cost: 120,  hp: 420,  atk: 65,  spd: 108 },
   epic:      { name: '에픽',     color: '#c28cff', time: 40,  income: 10,  cost: 300,  hp: 600,  atk: 90,  spd: 116 },
   legendary: { name: '레전더리', color: '#ffb020', time: 90,  income: 40,  cost: 800,  hp: 900,  atk: 130, spd: 126 },
   mythic:    { name: '신화',     color: '#ff4d6d', time: 180, income: 200, cost: 2000, hp: 1400, atk: 190, spd: 140 },
+  divine:    { name: '초월',     color: '#3dffd8', time: 300, income: 1000, cost: 5000, hp: 2400, atk: 320, spd: 160 },
 };
 
 // ===================== 족보 =====================
@@ -58,6 +59,14 @@ const LEGENDS = [
   { id: 'L:yeti',    name: '서리 거인',     face: '🧊', els: ['ice', 'metal', 'water'],   ult: '절대 영도' },
 ];
 const MYTHIC = { id: 'M:arche', name: '태초의 신수 아르케', face: '🌌', els: ['magic', 'light', 'dark'], ult: '태초의 빛' };
+// 전설 상점 전용: 골드로 살 수는 있지만… 절대 모을 수 없는 가격
+const SHOP_LEGENDS = [
+  { id: 'X:goldking', name: '황금 용왕 골드킹',     face: '🐲', els: ['fire', 'light', 'metal'],   ult: '황금 멸망포',  price: 9999999999 },
+  { id: 'X:whale',    name: '은하 고래 코스모',     face: '🐋', els: ['water', 'magic', 'dark'],   ult: '은하 붕괴',    price: 77777777777 },
+  { id: 'X:lion',     name: '천둥 사자왕 제우스',   face: '🦁', els: ['thunder', 'light', 'earth'], ult: '신의 번개',    price: 500000000000 },
+  { id: 'X:owl',      name: '시간의 수호자 크로노', face: '🦉', els: ['magic', 'ice', 'light'],    ult: '시간 정지',    price: 12345678901234 },
+  { id: 'X:chaos',    name: '혼돈의 신 카오스',     face: '👁️', els: ['dark', 'fire', 'magic'],   ult: '혼돈의 눈',    price: 999999999999999 },
+];
 
 // ===================== 스킬 =====================
 const SK = {
@@ -88,7 +97,7 @@ function buildSkills(c) {
   const e = c.els;
   if (c.ult) {
     return [basicSkill(e[0]), atkSkill(e[0]), effSkill(e[1]), atkSkill(e[2]),
-      { name: c.ult, el: e[0], type: 'dmg', mult: c.rarity === 'mythic' ? 1.8 : 1.4, aoe: true, cost: 7 }];
+      { name: c.ult, el: e[0], type: 'dmg', mult: c.rarity === 'divine' ? 2.2 : c.rarity === 'mythic' ? 1.8 : 1.4, aoe: true, cost: 7 }];
   }
   const s = [basicSkill(e[0]), atkSkill(e[0]), effSkill(e[0])];
   if (e[1]) s.push(atkSkill(e[1]), effSkill(e[1]));
@@ -131,6 +140,7 @@ for (let i = 0; i < EL.length; i++) {
 }
 LEGENDS.forEach(l => addMon({ ...l, rarity: 'legendary' }));
 addMon({ ...MYTHIC, rarity: 'mythic' });
+SHOP_LEGENDS.forEach(l => addMon({ ...l, rarity: 'divine', shop: true }));
 CAT_LIST.sort((a, b) => RAR_ORDER.indexOf(a.rarity) - RAR_ORDER.indexOf(b.rarity));
 CAT_LIST.forEach(c => { c.skills = buildSkills(c); });
 
@@ -152,7 +162,9 @@ const shuffle = (arr) => {
 
 function breedResult(ta, tb) {
   if (isLegend(ta) && isLegend(tb)) {
-    return Math.random() < 0.35 ? MYTHIC.id : pick([ta, tb]);
+    if (Math.random() < 0.35) return MYTHIC.id;
+    const r = pick([ta, tb]);
+    return CAT[r].shop ? MYTHIC.id : r;   // 상점 전용 몬스터는 교배로 복제할 수 없다
   }
   const pool = [...new Set([...CAT[ta].els, ...CAT[tb].els])];
   const has = (need) => need.every(e => pool.includes(e));
@@ -249,7 +261,7 @@ function habsFor(type) {
   const c = CAT[type];
   return S.plots.map((p, i) => ({ p, i })).filter(({ p, i }) =>
     p && p.kind === 'hab' &&
-    (c.els.includes(p.el) || (isLegend(type) && p.el === 'legend')) &&
+    (isLegend(type) ? p.el === 'legend' : c.els.includes(p.el)) &&
     habMons(i).length < habCap(i));
 }
 
@@ -1261,6 +1273,22 @@ function renderShop() {
       <button class="shop-item" data-act="buyGold" data-n="5"><span class="si-ico">💰</span><span class="si-nm">골드 500</span><span class="si-cost">💎 5</span></button>
       <button class="shop-item" data-act="buyGold" data-n="50"><span class="si-ico">💰</span><span class="si-nm">골드 6,000</span><span class="si-cost">💎 50</span></button>
     </div>
+    <h3 class="sub">👑 전설 상점 <small class="muted">골드로 살 수 있어요… 모을 수만 있다면요</small></h3>
+    <div class="legend-shop">${SHOP_LEGENDS.map(l => {
+      const c = CAT[l.id];
+      const owned = S.monsters.filter(m => m.type === l.id).length + S.hatch.filter(t => t === l.id).length;
+      const can = S.infinite || S.gold >= l.price;
+      return `<div class="legend-item">
+        <div class="face" style="background:${grad(c)}">${c.face}</div>
+        <div class="li-info">
+          <div class="li-nm">${c.name}${owned ? ` <small class="muted">보유 ${owned}</small>` : ''}</div>
+          <div class="li-els">${elNames(c.els)} · <span class="rar" style="color:${RAR.divine.color}">초월</span></div>
+          <div class="li-price">💰 ${fmt(l.price)}</div>
+          <div class="li-wait muted">${S.infinite ? '♾️ 돈 무한이라 바로 살 수 있어요!' : waitText(l.price)}</div>
+        </div>
+        <button class="btn" data-act="buyLegend" data-id="${l.id}" ${can ? '' : 'disabled'}>구매</button>
+      </div>`;
+    }).join('')}</div>
     <h3 class="sub">💠 내 룬 <small class="muted">같은 룬 3개를 합성하면 한 단계 위 룬이 돼요</small></h3>
     <div class="rune-inv">${list.length ? list.map(g => `
       <div class="rune-row">
@@ -1268,6 +1296,29 @@ function renderShop() {
         <span class="muted">${g.total}개 (장착 ${g.total - g.free})</span>
         <button class="btn small" data-act="merge" data-t="${g.t}" data-lv="${g.lv}" ${g.free >= 3 && g.lv < 3 ? '' : 'disabled'}>합성</button>
       </div>`).join('') : '<p class="muted">아직 룬이 없어요.</p>'}</div>`;
+}
+
+// 지금 수입으로 모으려면 얼마나 걸리는지 (절망 표시기)
+function waitText(price) {
+  const inc = S.plots.reduce((s, p, i) => s + (p && p.kind === 'hab' ? habIncome(i) : 0), 0);
+  const left = price - S.gold;
+  if (left <= 0) return '살 수 있어요!';
+  if (inc <= 0) return '지금 수입으로는 영원히 못 모아요';
+  const years = left / inc / 31536000;
+  if (years < 1) return `지금 수입으로 약 ${fmt(left / inc / 86400)}일`;
+  return `지금 수입으로 약 ${fmt(years)}년 😱`;
+}
+
+function buyLegend(id) {
+  const l = SHOP_LEGENDS.find(x => x.id === id);
+  if (!l) return;
+  if (S.hatch.length >= HATCH_CAP) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
+  if (!spend(l.price)) return;
+  S.hatch.push(l.id);
+  save();
+  toast(`👑 ${CAT[l.id].name} 구매! 부화장에서 부화시켜 주세요`);
+  render();
+  openHatchery();
 }
 
 function buyRune(kind) {
@@ -1636,6 +1687,7 @@ function drawBattle() {
 
 // ===================== 화면: 도감 =====================
 function dexHint(c) {
+  if (c.shop) return `전설 상점 💰${fmt(c.price)}`;
   if (c.rarity === 'mythic') return '레전더리 + 레전더리';
   if (c.rarity === 'legendary') return `족보: ${elBadges(c.els)}`;
   const adv = ADV_RECIPES.find(r => 'p:' + r.el === c.id);
@@ -1754,6 +1806,7 @@ const ACTIONS = {
   equip: (d) => equip(d.uid, Number(d.slot), d.rid),
   unequip: (d) => unequip(d.uid, Number(d.slot)),
   buyRune: (d) => buyRune(d.kind),
+  buyLegend: (d) => buyLegend(d.id),
   buyFood: (d) => buyFood(d.n),
   buyGold: (d) => buyGold(d.n),
   merge: (d) => merge(d.t, d.lv),
