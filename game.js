@@ -204,27 +204,21 @@ const RUNE = {
 const runeText = (r) => `${RUNE[r.t].emoji} ${RUNE[r.t].name} +${RUNE[r.t].vals[r.lv - 1]}% ${'★'.repeat(r.lv)}`;
 
 // ===================== 상태 / 저장 =====================
-const KEY = 'combining-save-v3';
+const KEY = 'combining-save-v4';
 const SECRET_CODE = '방탄유리';
 
 function newState() {
   const s = {
-    gold: 500, gems: 30, food: 300, infinite: false,
+    gold: 2500, gems: 30, food: 300, infinite: false,
     plots: Array(PLOTS).fill(null),
     monsters: [], nextUid: 1, hatch: [], breed: null, dex: {},
     runes: [], nextRune: 1,
     stage: 1, team: [],
     last: Date.now(),
   };
+  // 처음엔 교배산과 부화장만 있는 빈 땅. 서식지와 알은 직접 사야 한다
   s.plots[0] = { kind: 'mountain' };
   s.plots[1] = { kind: 'hatchery' };
-  s.plots[5] = { kind: 'farm', crop: null, end: 0 };
-  const HOME = [6, 7, 8, 11, 12, 13, 16, 17];   // 기본 서식지 8개 자리
-  BASE.forEach((e, i) => {
-    s.plots[HOME[i]] = { kind: 'hab', el: e, lv: 1, gold: 0 };
-    s.monsters.push({ uid: s.nextUid++, type: 'p:' + e, lv: 1, hab: HOME[i], runes: [null, null] });
-    s.dex['p:' + e] = true;
-  });
   return s;
 }
 
@@ -1278,7 +1272,24 @@ function renderShop() {
       <button class="shop-item" data-act="buyGold" data-n="5"><span class="si-ico">💰</span><span class="si-nm">골드 500</span><span class="si-cost">💎 5</span></button>
       <button class="shop-item" data-act="buyGold" data-n="50"><span class="si-ico">💰</span><span class="si-nm">골드 6,000</span><span class="si-cost">💎 50</span></button>
     </div>
-    <h3 class="sub">🥚 몬스터 상점 <small class="muted">기본 몬스터 알을 살 수 있어요 (부화장으로 가요)</small></h3>
+    <h3 class="sub">🏠 서식지 상점 <small class="muted">사면 섬의 빈 땅에 바로 지어져요</small></h3>
+    <div class="grid small">${[...EL.map(e => e.id), 'legend'].map(el => {
+      const n = S.plots.filter(p => p && p.kind === 'hab' && p.el === el).length;
+      return `<div class="card mini hab-card" data-act="buyHab" data-el="${el}" style="--hc:${habColor(el)}">
+        <div class="price-tag">💰 ${fmt(habBuildCost(el))}</div>
+        <div class="face" style="background:linear-gradient(135deg, ${habColor(el)}, #1a1a3d)">${habEmoji(el)}</div>
+        <div class="nm">${habName(el)}</div>
+        <div class="meta">${n ? `보유 ${n}개` : BASE.includes(el) || el === 'legend' ? '&nbsp;' : '특수 속성'}</div>
+      </div>`;
+    }).join('')}
+      <div class="card mini hab-card" data-act="buyHab" data-el="farm">
+        <div class="price-tag">💰 ${fmt(FARM_COST)}</div>
+        <div class="face" style="background:linear-gradient(135deg, #8c5a2c, #1a1a3d)">🌾</div>
+        <div class="nm">농장</div>
+        <div class="meta">먹이 생산</div>
+      </div>
+    </div>
+    <h3 class="sub">🥚 몬스터 알 상점 <small class="muted">사면 부화장으로 가요. 알맞은 서식지가 있어야 키울 수 있어요</small></h3>
     <div class="grid small">${BASE.map(e => card({ type: 'p:' + e, lv: 1 }, `data-act="buyMon" data-type="p:${e}"`, 'mini',
       `<div class="price-tag">💰 ${fmt(MON_PRICE)}</div>`)).join('')}</div>
     <h3 class="sub">👑 전설 상점<small class="muted">골드로 살 수 있어요… 모을 수만 있다면요</small></h3>
@@ -1315,6 +1326,16 @@ function waitText(price) {
   const years = left / inc / 31536000;
   if (years < 1) return `지금 수입으로 약 ${fmt(left / inc / 86400)}일`;
   return `지금 수입으로 약 ${fmt(years)}년 😱`;
+}
+
+// 서식지/농장을 사면 섬 가운데에 가까운 빈 땅부터 채운다
+function buyHab(el) {
+  const center = (GRID - 1) / 2;
+  const free = S.plots.map((p, i) => i).filter(i => !S.plots[i])
+    .sort((a, b) => (Math.abs(a % GRID - center) + Math.abs(Math.floor(a / GRID) - center)) -
+                    (Math.abs(b % GRID - center) + Math.abs(Math.floor(b / GRID) - center)) || a - b);
+  if (!free.length) { toast('섬에 빈 땅이 없어요!'); return; }
+  build(free[0], el === 'farm' ? 'farm' : `hab:${el}`);
 }
 
 const MON_PRICE = 500;
@@ -1787,7 +1808,26 @@ function render() {
   refreshLive();
 }
 
+// 처음 시작한 사람을 위한 단계별 안내
+function guideText() {
+  const habs = S.plots.filter(p => p && p.kind === 'hab').length;
+  const farm = S.plots.some(p => p && p.kind === 'farm');
+  if (!habs) return '① 상점 🛒이나 빈 땅 ➕을 눌러 서식지를 지어 보세요';
+  if (!S.monsters.length && !S.hatch.length) return '② 상점 🛒에서 몬스터 알을 사 보세요 (서식지와 같은 속성으로!)';
+  if (!S.monsters.length) return '③ 섬의 부화장 🪺을 눌러 알을 부화시켜요';
+  if (S.monsters.length < 2) return '④ 몬스터를 한 마리 더 모으면 교배할 수 있어요';
+  if (!farm) return '⑤ 농장 🌾을 지어 먹이를 키워요. Lv.4가 되면 교배할 수 있어요';
+  return '';
+}
+function updateGuide() {
+  const g = $('#guide');
+  const text = tab === 'island' && !B ? guideText() : '';
+  g.classList.toggle('hidden', !text);
+  if (g.textContent !== text) g.textContent = text;
+}
+
 function updateHud() {
+  updateGuide();
   [['gold', S.gold], ['gems', S.gems]].forEach(([id, v]) => {
     const el = $('#' + id);
     el.textContent = S.infinite ? '∞' : fmt(v);
@@ -1833,6 +1873,7 @@ const ACTIONS = {
   buyRune: (d) => buyRune(d.kind),
   buyLegend: (d) => buyLegend(d.id),
   buyMon: (d) => buyMon(d.type),
+  buyHab: (d) => buyHab(d.el),
   buyFood: (d) => buyFood(d.n),
   buyGold: (d) => buyGold(d.n),
   merge: (d) => merge(d.t, d.lv),
