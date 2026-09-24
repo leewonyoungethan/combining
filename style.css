@@ -170,6 +170,8 @@ h4.sub { margin: 16px 0 8px; font-size: 14px; text-align: left; }
 .btn.big { font-size: 17px; padding: 13px 22px; }
 .btn.small { font-size: 13px; padding: 7px 12px; }
 .btn.green { background: linear-gradient(180deg, #6ee67f, #2fb344); color: #062a0e; box-shadow: 0 3px 0 #1f7a2e; }
+.btn.danger { color: #ff8fa3; border-color: #6b2a3a; }
+.btn.danger:hover { background: #3a1522; }
 .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 12px 0; }
 
 /* ===== 모달 공통 ===== */

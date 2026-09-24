@@ -877,7 +877,69 @@ function openHab(i) {
     <div class="grid small">${mons.length
       ? sortMons(mons).map(m => card(m, `data-act="openMon" data-uid="${m.uid}"`)).join('')
       : '<p class="muted">아직 사는 몬스터가 없어요. 교배산에서 몬스터를 만들어 보세요!</p>'}</div>
-    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+    <div class="row">
+      <button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 철거 (+💰 ${fmt(demolishRefund(p))})</button>
+      <button class="btn ghost small" data-act="close">닫기</button>
+    </div>`);
+}
+
+// ----- 철거 -----
+function demolishRefund(p) {
+  if (p.kind === 'farm') return FARM_COST / 2;
+  let spent = habBuildCost(p.el);
+  for (let lv = 1; lv < p.lv; lv++) spent += habUpCost(lv);
+  return Math.floor(spent / 2);
+}
+
+function demolish(i) {
+  i = Number(i);
+  const p = S.plots[i];
+  if (!p || (p.kind !== 'hab' && p.kind !== 'farm')) return;
+  if (p.kind === 'hab' && habMons(i).length) {
+    toast('안에 사는 몬스터를 먼저 다른 서식지로 이사시키거나 팔아 주세요');
+    return;
+  }
+  const name = p.kind === 'farm' ? '농장' : habName(p.el);
+  const lost = p.kind === 'farm' && p.crop != null ? '\n심어 둔 작물도 사라져요.' : '';
+  if (!confirm(`${name}을(를) 철거할까요?\n지을 때 쓴 골드의 절반(💰${fmt(demolishRefund(p))})을 돌려받아요.${lost}`)) return;
+  const refund = demolishRefund(p) + (p.kind === 'hab' ? Math.floor(p.gold) : 0);
+  earn(refund);
+  S.plots[i] = null;
+  save();
+  closeModal();
+  render();
+  toast(`🗑️ ${name} 철거! 💰 ${fmt(refund)} 돌려받았어요`);
+}
+
+// ----- 이사 -----
+function openMove(uid) {
+  const m = byUid(uid);
+  if (!m) return;
+  const habs = habsFor(m.type).filter(h => h.i !== m.hab);
+  showModal(`
+    <h3>🏠 이사하기</h3>
+    <p class="muted">${CAT[m.type].face} ${CAT[m.type].name}이(가) 옮겨 갈 서식지를 골라요.</p>
+    ${habs.length
+      ? `<div class="build-list">${habs.map(({ p, i }) => `
+          <button class="build-opt" data-act="move" data-uid="${m.uid}" data-i="${i}" style="--hc:${habColor(p.el)}">
+            <span class="bo-ico">${habEmoji(p.el)}</span>
+            <span class="bo-nm">${habName(p.el)} Lv.${p.lv}</span>
+            <span class="bo-cost">${habMons(i).length}/${habCap(i)}</span>
+          </button>`).join('')}</div>`
+      : '<p class="warn">옮겨 갈 수 있는 빈 서식지가 없어요.<br>같은 속성 서식지를 하나 더 지어 보세요.</p>'}
+    <div class="row"><button class="btn ghost small" data-act="openMon" data-uid="${m.uid}">← 뒤로</button></div>`);
+}
+
+function moveMon(uid, i) {
+  const m = byUid(uid);
+  i = Number(i);
+  if (!m || !habsFor(m.type).some(h => h.i === i)) return;
+  m.hab = i;
+  delete walkers[m.uid];
+  save();
+  toast(`🏠 ${CAT[m.type].name}이(가) ${habName(S.plots[i].el)}으로 이사했어요!`);
+  closeModal();
+  render();
 }
 
 function collectHab(i, quiet = false) {
@@ -919,7 +981,10 @@ function openFarm(i) {
           <span class="bo-nm">${c.name}<br><small>🍖 ${fmt(c.food)} · ${mmss(c.time)}</small></span>
           <span class="bo-cost">💰 ${fmt(c.cost)}</span>
         </button>`).join('')}</div>
-      <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+      <div class="row">
+        <button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 철거 (+💰 ${fmt(demolishRefund(p))})</button>
+        <button class="btn ghost small" data-act="close">닫기</button>
+      </div>`);
     return;
   }
   const c = CROPS[p.crop];
@@ -933,7 +998,10 @@ function openFarm(i) {
       <button class="btn green" data-act="harvest" data-i="${i}">🧺 수확하기</button>
       <button class="btn ghost" data-act="farmGem" data-i="${i}">💎 <span data-live="farmGem:${i}"></span> 즉시 완성</button>
     </div>
-    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+    <div class="row">
+      <button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 철거 (+💰 ${fmt(demolishRefund(p))})</button>
+      <button class="btn ghost small" data-act="close">닫기</button>
+    </div>`);
 }
 
 function plant(i, ci) {
@@ -1166,6 +1234,7 @@ function openMon(uid) {
     <div class="row">
       <button class="btn" data-act="feed" data-uid="${m.uid}" ${max ? 'disabled' : ''}>🍖 먹이 주기 (${fmt(feedCost(m))})</button>
       <button class="btn ghost" data-act="sell" data-uid="${m.uid}">팔기 (+💰 ${fmt(sellPrice(m))})</button>
+      <button class="btn ghost" data-act="openMove" data-uid="${m.uid}">🏠 이사</button>
     </div>
     <div class="row"><button class="btn ghost small" data-act="${back ? 'back' : 'close'}">${back ? '← 뒤로' : '닫기'}</button></div>`);
   modalStack = back;
@@ -1853,6 +1922,9 @@ const ACTIONS = {
   build: (d) => build(d.i, d.what),
   collectHab: (d) => collectHab(d.i),
   upHab: (d) => upHab(d.i),
+  demolish: (d) => demolish(d.i),
+  openMove: (d) => openMove(d.uid),
+  move: (d) => moveMon(d.uid, d.i),
   plant: (d) => plant(d.i, d.c),
   harvest: (d) => harvest(d.i),
   farmGem: (d) => farmGem(d.i),
