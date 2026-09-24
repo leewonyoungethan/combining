@@ -283,6 +283,11 @@ h4.sub { margin: 16px 0 8px; font-size: 14px; text-align: left; }
 .si-nm { flex: 1; font-weight: 700; display: flex; flex-direction: column; }
 .si-nm small { color: var(--muted); font-weight: 400; font-size: 11px; }
 .si-cost { font-weight: 800; white-space: nowrap; }
+.farm-all { background: linear-gradient(180deg, rgba(76, 217, 100, .12), var(--panel)); border: 1px solid #2f5a3f; border-radius: 14px; padding: 12px; margin-top: 12px; }
+.farm-all h4 { font-size: 14px; }
+.farm-all .row { margin: 10px 0 6px; }
+.small-note { font-size: 11px; }
+
 /* 도감 */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .chip { font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: var(--bg2); border: 1px solid var(--line); color: var(--muted); }

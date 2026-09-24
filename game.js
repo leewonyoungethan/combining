@@ -1082,6 +1082,7 @@ function openFarm(i) {
           <span class="bo-nm">${c.name}<br><small>🍖 ${fmt(c.food)} · ${mmss(c.time)}</small></span>
           <span class="bo-cost">💰 ${fmt(c.cost)}</span>
         </button>`).join('')}</div>
+      ${farmAllHTML(i)}
       <div class="row">
         <button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 철거 (+💰 ${fmt(demolishRefund(p))})</button>
         <button class="btn ghost small" data-act="close">닫기</button>
@@ -1099,6 +1100,7 @@ function openFarm(i) {
       <button class="btn green" data-act="harvest" data-i="${i}">🧺 수확하기</button>
       <button class="btn ghost" data-act="farmGem" data-i="${i}">💎 <span data-live="farmGem:${i}"></span> 즉시 완성</button>
     </div>
+    ${farmAllHTML(i)}
     <div class="row">
       <button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 철거 (+💰 ${fmt(demolishRefund(p))})</button>
       <button class="btn ghost small" data-act="close">닫기</button>
@@ -1111,9 +1113,85 @@ function plant(i, ci) {
   if (p.crop != null) return;
   if (!spend(CROPS[ci].cost)) return;
   p.crop = ci;
+  p.lastCrop = ci;
+  S.lastCrop = ci;
   p.end = Date.now() + CROPS[ci].time * 1000;
   save();
   openFarm(i);
+  render();
+}
+
+// ----- 모든 농장 한 번에 -----
+const farmIdx = () => S.plots.map((p, i) => (p && p.kind === 'farm' ? i : -1)).filter(i => i >= 0);
+const farmReady = (p) => p.crop != null && Date.now() >= p.end;
+const replantCrop = (p) => p.lastCrop ?? S.lastCrop ?? 0;
+
+function farmAllHTML(i) {
+  const all = farmIdx();
+  if (all.length < 1) return '';
+  const ready = all.filter(k => farmReady(S.plots[k])).length;
+  const growing = all.filter(k => S.plots[k].crop != null && !farmReady(S.plots[k])).length;
+  const toPlant = all.filter(k => S.plots[k].crop == null || farmReady(S.plots[k]));
+  const cost = toPlant.reduce((s, k) => s + CROPS[replantCrop(S.plots[k])].cost, 0);
+  return `<div class="farm-all">
+    <h4>🌾 모든 농장 <small class="muted">${all.length}개 · 수확 가능 ${ready} · 자라는 중 ${growing}</small></h4>
+    <div class="row">
+      <button class="btn green" data-act="harvestAll" data-i="${i}" ${ready ? '' : 'disabled'}>🧺 모두 수확</button>
+      <button class="btn" data-act="replantAll" data-i="${i}" ${toPlant.length ? '' : 'disabled'}>🔁 모두 다시 재배${toPlant.length ? ` (💰 ${fmt(cost)})` : ''}</button>
+    </div>
+    <p class="muted small-note">다시 재배는 다 자란 작물을 수확하고, 빈 농장 전부에 지난번 작물을 다시 심어요.</p>
+  </div>`;
+}
+
+function harvestReady() {
+  let food = 0, n = 0;
+  farmIdx().forEach(k => {
+    const p = S.plots[k];
+    if (!farmReady(p)) return;
+    const got = CROPS[p.crop].food;
+    food += got;
+    n++;
+    p.lastCrop = p.crop;
+    p.crop = null;
+    floatAt(k, `+🍖${fmt(got)}`);
+  });
+  S.food += food;
+  return { food, n };
+}
+
+function harvestAll(i) {
+  const { food, n } = harvestReady();
+  if (!n) { toast('아직 다 자란 작물이 없어요 🌱'); return; }
+  toast(`🧺 농장 ${n}개 수확! 🍖 먹이 ${fmt(food)}개`);
+  save();
+  refreshFarm(i);
+}
+
+function replantAll(i) {
+  const { food, n } = harvestReady();
+  let planted = 0, broke = false;
+  farmIdx().forEach(k => {
+    const p = S.plots[k];
+    if (p.crop != null || broke) return;
+    const ci = replantCrop(p);
+    if (!spend(CROPS[ci].cost)) { broke = true; return; }
+    p.crop = ci;
+    p.lastCrop = ci;
+    p.end = Date.now() + CROPS[ci].time * 1000;
+    planted++;
+  });
+  const parts = [];
+  if (n) parts.push(`🧺 ${n}개 수확 (🍖${fmt(food)})`);
+  if (planted) parts.push(`🔁 ${planted}개 다시 심음`);
+  if (broke) parts.push('💰 골드가 모자라서 일부만 심었어요');
+  toast(parts.join(' · ') || '다시 심을 빈 농장이 없어요');
+  save();
+  refreshFarm(i);
+}
+
+function refreshFarm(i) {
+  i = Number(i);
+  if (S.plots[i] && S.plots[i].kind === 'farm') openFarm(i); else closeModal();
   render();
 }
 
@@ -2382,6 +2460,8 @@ const ACTIONS = {
   move: (d) => moveMon(d.uid, d.i),
   plant: (d) => plant(d.i, d.c),
   harvest: (d) => harvest(d.i),
+  harvestAll: (d) => harvestAll(d.i),
+  replantAll: (d) => replantAll(d.i),
   farmGem: (d) => farmGem(d.i),
   pick: (d) => pickBreed(d.uid),
   breed: () => startBreed(),
