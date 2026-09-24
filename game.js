@@ -1847,9 +1847,14 @@ const ACTIONS = {
   code: () => openCode(),
   codeOk: () => submitCode(),
   reset: () => {
-    if (confirm('정말 처음부터 다시 할까요? 모든 몬스터가 사라져요.')) {
-      S = newState(); sel = []; save(); render();
-    }
+    if (!confirm('정말 처음부터 다시 할까요?\n모든 몬스터, 골드, 건물이 사라지고 돈 무한도 꺼져요.')) return;
+    if (B) { clearTimeout(B.timer); B = null; $('#battle').classList.add('hidden'); }
+    Object.keys(walkers).forEach(k => delete walkers[k]);
+    S = newState(); sel = []; tab = 'island';
+    save();
+    closeModal();
+    render();
+    toast('🔄 처음부터 다시 시작해요!');
   },
 };
 
