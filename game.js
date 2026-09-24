@@ -975,6 +975,13 @@ function openHab(i) {
       <button class="btn" data-act="collectHab" data-i="${i}">💰 골드 걷기</button>
       <button class="btn ghost" data-act="upHab" data-i="${i}" ${maxed ? 'disabled' : ''}>⬆️ ${maxed ? '최대 레벨' : `업그레이드 (💰 ${fmt(habUpCost(p.lv))})`}</button>
     </div>
+    ${(() => {
+      const ups = S.plots.filter(q => q && q.kind === 'hab' && q.lv < HAB_MAX_LV);
+      const cost = ups.reduce((s, q) => s + habUpCost(q.lv), 0);
+      return `<div class="all-box">
+        <button class="btn small" data-act="upAllHabs" data-i="${i}" ${ups.length ? '' : 'disabled'}>⬆️ 모든 서식지 한 단계 업그레이드${ups.length ? ` (${ups.length}개 · 💰 ${fmt(cost)})` : ' (모두 최대)'}</button>
+      </div>`;
+    })()}
     <div class="grid small">${mons.length
       ? sortMons(mons).map(m => card(m, `data-act="openMon" data-uid="${m.uid}"`)).join('')
       : '<p class="muted">아직 사는 몬스터가 없어요. 교배산에서 몬스터를 만들어 보세요!</p>'}</div>
@@ -1322,7 +1329,36 @@ function openHatchery() {
     <div class="egg-row">${S.hatch.length
       ? S.hatch.map((t, i) => `<button class="egg-slot" data-act="hatchOne" data-idx="${i}"><span class="egg small lv${rIdx(t) + 1}">🥚</span><span>부화!</span></button>`).join('')
       : '<p class="muted">부화장이 비어 있어요. 교배산에서 알을 가져오세요!</p>'}</div>
+    ${S.hatch.length > 1 ? `<div class="all-box"><button class="btn green" data-act="hatchAll">🐣 모두 부화 (알맞은 서식지로 자동 이사)</button></div>` : ''}
     <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+}
+
+// 모든 알을 부화시켜 빈자리가 있는 알맞은 서식지로 자동 이사
+function hatchAll() {
+  const born = [], stuck = [];
+  const eggs = S.hatch.slice();
+  S.hatch = [];
+  eggs.forEach(type => {
+    const isNew = !S.dex[type];
+    S.dex[type] = true;
+    const h = habsFor(type)[0];
+    if (h) {
+      S.monsters.push({ uid: S.nextUid++, type, lv: 1, hab: h.i, runes: [null, null] });
+      born.push({ type, isNew, where: habName(S.plots[h.i].el) });
+    } else {
+      S.hatch.push(type);
+      stuck.push(type);
+    }
+  });
+  save();
+  render();
+  showModal(`
+    <h3>🐣 모두 부화!</h3>
+    ${born.length ? `<div class="grid small">${born.map(b => card({ type: b.type, lv: 1 }, '', 'mini',
+      b.isNew ? '<div class="found-mark">🆕</div>' : '')).join('')}</div>
+      <p class="muted">${born.length}마리가 서식지로 이사했어요.</p>` : ''}
+    ${stuck.length ? `<p class="warn">${stuck.map(t => `${CAT[t].face} ${CAT[t].name}`).join(', ')}<br>살 수 있는 빈 서식지가 없어서 부화장에 남아 있어요.</p>` : ''}
+    <div class="row"><button class="btn" data-act="close">좋아!</button></div>`);
 }
 
 function hatchOne(idx) {
@@ -1497,6 +1533,15 @@ function renderMons() {
       <h2>내 몬스터 <small>${S.monsters.length}마리</small></h2>
       <p>누르면 능력치, 스킬, 룬을 볼 수 있고 먹이를 줄 수 있어요.</p>
     </div>
+    ${(() => {
+      const once = S.monsters.filter(m => m.lv < MAX_LV).reduce((s, m) => s + feedCost(m), 0);
+      let toBreed = 0;
+      S.monsters.forEach(m => { for (let lv = m.lv; lv < BREED_LV; lv++) toBreed += lv * 20; });
+      return `<div class="all-box row">
+        <button class="btn small" data-act="feedAll" data-mode="once" ${once ? '' : 'disabled'}>🍖 모두 한 번씩 먹이 (🍖 ${fmt(once)})</button>
+        <button class="btn small green" data-act="feedAll" data-mode="breed" ${toBreed ? '' : 'disabled'}>🧬 모두 Lv.${BREED_LV}까지 키우기${toBreed ? ` (🍖 ${fmt(toBreed)})` : ' (완료)'}</button>
+      </div>`;
+    })()}
     ${S.hatch.length ? `<div class="notice" data-act="openHatch">🪺 부화장에 알이 ${S.hatch.length}개 기다리고 있어요! →</div>` : ''}
     <div class="grid">${sortMons(S.monsters).map(m => card(m, `data-act="openMon" data-uid="${m.uid}"`)).join('')}</div>`;
 }
@@ -1557,7 +1602,8 @@ function renderShop() {
         <button class="btn" data-act="buyLegend" data-id="${l.id}" ${can ? '' : 'disabled'}>구매</button>
       </div>`;
     }).join('')}</div>
-    <h3 class="sub">💠 내 룬 <small class="muted">같은 룬 3개를 합성하면 한 단계 위 룬이 돼요</small></h3>
+    <h3 class="sub">💠 내 룬 <small class="muted">같은 룬 3개를 합성하면 한 단계 위 룬이 돼요</small>
+      <button class="btn small" data-act="mergeAll" ${list.some(g => g.free >= 3 && g.lv < 3) ? '' : 'disabled'}>✨ 모두 합성</button></h3>
     <div class="rune-inv">${list.length ? list.map(g => `
       <div class="rune-row">
         <span>${runeText(g)}</span>
@@ -1636,6 +1682,62 @@ function buyGold(n) {
   toast(`💰 ${fmt(g)} 골드 구매!`);
   save();
   updateHud();
+}
+
+// ----- 모두 한 번에 -----
+function upAllHabs(i) {
+  let n = 0, broke = false;
+  S.plots.map((p, k) => ({ p, k }))
+    .filter(({ p }) => p && p.kind === 'hab' && p.lv < HAB_MAX_LV)
+    .sort((a, b) => a.p.lv - b.p.lv)
+    .forEach(({ p }) => {
+      if (broke) return;
+      if (!spend(habUpCost(p.lv))) { broke = true; return; }
+      p.lv++;
+      n++;
+    });
+  toast(n ? `⬆️ 서식지 ${n}개 업그레이드!${broke ? ' (골드가 모자라서 일부만)' : ''}` : '업그레이드할 수 있는 서식지가 없어요');
+  save();
+  if (i != null && S.plots[Number(i)]) openHab(Number(i));
+  render();
+}
+
+function feedAll(mode) {
+  const list = S.monsters.slice().sort((a, b) => a.lv - b.lv);
+  let ups = 0, food = 0, short = false;
+  const step = (m) => {
+    const c = feedCost(m);
+    if (S.food < c) { short = true; return false; }
+    S.food -= c; food += c; m.lv++; ups++;
+    return true;
+  };
+  if (mode === 'breed') {
+    list.forEach(m => { while (m.lv < BREED_LV && step(m)); });
+  } else {
+    list.forEach(m => { if (m.lv < MAX_LV) step(m); });
+  }
+  toast(ups ? `🍖 먹이 ${fmt(food)}개로 레벨 ${ups}번 올렸어요!${short ? ' (먹이가 모자라서 일부만)' : ''}` : '🍖 먹이가 부족해요. 농장에서 키워 보세요!');
+  save();
+  render();
+}
+
+function mergeAll() {
+  let n = 0;
+  for (let lv = 1; lv < 3; lv++) {
+    Object.keys(RUNE).forEach(t => {
+      let free = S.runes.filter(r => r.t === t && r.lv === lv && r.on == null);
+      while (free.length >= 3) {
+        const ids = free.slice(0, 3).map(r => r.id);
+        S.runes = S.runes.filter(r => !ids.includes(r.id));
+        S.runes.push({ id: S.nextRune++, t, lv: lv + 1, on: null });
+        n++;
+        free = free.slice(3);
+      }
+    });
+  }
+  toast(n ? `✨ 룬 ${n}번 합성 성공!` : '합성할 수 있는 룬이 없어요');
+  save();
+  render();
 }
 
 function merge(t, lv) {
@@ -2484,6 +2586,10 @@ const ACTIONS = {
   buyFood: (d) => buyFood(d.n),
   buyGold: (d) => buyGold(d.n),
   merge: (d) => merge(d.t, d.lv),
+  mergeAll: () => mergeAll(),
+  upAllHabs: (d) => upAllHabs(d.i),
+  hatchAll: () => hatchAll(),
+  feedAll: (d) => feedAll(d.mode),
   team: (d) => toggleTeam(d.uid),
   fight: () => startBattle(),
   bSkill: (d) => playerSkill(d.i),

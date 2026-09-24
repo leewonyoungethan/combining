@@ -287,6 +287,9 @@ h4.sub { margin: 16px 0 8px; font-size: 14px; text-align: left; }
 .farm-all h4 { font-size: 14px; }
 .farm-all .row { margin: 10px 0 6px; }
 .small-note { font-size: 11px; }
+.all-box { margin: 10px 0; text-align: center; }
+.all-box.row { justify-content: flex-start; margin: 0 0 14px; }
+h3.sub .btn.small { margin-left: 8px; vertical-align: middle; }
 
 /* 도감 */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
