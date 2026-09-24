@@ -1506,6 +1506,7 @@ function renderAdventure() {
       <div class="team-row">${slots}</div>
       <div class="row"><button class="btn big" data-act="fight" ${team.length ? '' : 'disabled'}>⚔️ 전투 시작</button></div>
     </div>
+    <details class="chart-box"><summary>📘 속성 상성표 보기 (무슨 속성이 무슨 속성에게 강할까?)</summary>${typeChartHTML()}</details>
     <h3 class="sub">몬스터를 눌러 팀에 넣거나 빼세요</h3>
     <div class="grid">${sortMons(S.monsters).map(m => {
       const i = S.team.indexOf(m.uid);
@@ -1530,7 +1531,8 @@ function mkUnit(m, side, idx) {
   const c = CAT[m.type], st = stats(m);
   return {
     id: side + idx, side, c, lv: m.lv,
-    maxHp: st.hp, hp: st.hp, atk: st.atk, spd: st.spd, sta: 2,
+    maxHp: st.hp, hp: st.hp, dispHp: st.hp, shownDead: false,
+    atk: st.atk, spd: st.spd, sta: 2,
     fx: { burn: 0, burnDmg: 0, poison: 0, poisonDmg: 0, stun: 0, shield: 0, buff: 0, curse: 0 },
   };
 }
@@ -1545,56 +1547,176 @@ function startBattle() {
     stage: S.stage,
     units: [...team.map((m, i) => mkUnit(m, 'me', i)), ...foes.map((m, i) => mkUnit(m, 'foe', i))],
     order: [], cur: null, target: 'foe0', log: [], round: 0,
-    waiting: false, over: false, fast: false, timer: null, result: null,
+    waiting: false, over: false, fast: false, timer: null, result: null, built: false,
   };
   $('#battle').classList.remove('hidden');
-
+  updateGuide();
   logB(`⚔️ 스테이지 ${S.stage} 전투 시작!`);
-  nextTurn();
+  drawBattle();
+  later(nextTurn, 600);
 }
 
 function logB(msg) {
   B.log.push(msg);
   if (B.log.length > 30) B.log.shift();
 }
-function later(fn, ms = 800) { B.timer = setTimeout(fn, B.fast ? 150 : ms); }
+function later(fn, ms = 800) { B.timer = setTimeout(fn, B.fast ? ms * 0.25 : ms); }
 
-function nextTurn() {
-  if (!B || B.over) return;
-  if (checkEnd()) return;
-  while (B.order.length && B.order[0].hp <= 0) B.order.shift();
-  if (!B.order.length) {
-    B.round++;
-    B.order = B.units.filter(u => u.hp > 0).sort((a, b) => b.spd - a.spd || Math.random() - 0.5);
+// ----- 애니메이션 도우미 -----
+const dur = (ms) => (B && B.fast ? ms * 0.35 : ms);
+const wait = (ms) => new Promise(r => setTimeout(r, dur(ms)));
+const unitEl = (u) => document.getElementById('u-' + u.id);
+function centerOf(u) {
+  const el = unitEl(u), arena = $('#arena');
+  if (!el || !arena) return { x: 0, y: 0 };
+  const r = el.querySelector('.u-face').getBoundingClientRect(), a = arena.getBoundingClientRect();
+  return { x: r.left - a.left + r.width / 2, y: r.top - a.top + r.height / 2 };
+}
+function fxSpan(cls, html, x, y) {
+  const s = document.createElement('div');
+  s.className = cls;
+  s.innerHTML = html;
+  s.style.left = `${x}px`;
+  s.style.top = `${y}px`;
+  $('#fxLayer').appendChild(s);
+  return s;
+}
+function floatText(u, html, kind) {
+  if (!$('#fxLayer')) return;
+  const { x, y } = centerOf(u);
+  const s = fxSpan(`float-num ${kind}`, html, x, y - 20);
+  s.animate([
+    { transform: 'translate(-50%, -50%) scale(.6)', opacity: 0 },
+    { transform: 'translate(-50%, -110%) scale(1.15)', opacity: 1, offset: 0.2 },
+    { transform: 'translate(-50%, -260%) scale(1)', opacity: 0 },
+  ], { duration: dur(1100), easing: 'ease-out' });
+  setTimeout(() => s.remove(), dur(1100) + 50);
+}
+async function lunge(att, tgt) {
+  const el = unitEl(att);
+  if (!el) return;
+  const p = centerOf(att), q = tgt ? centerOf(tgt) : { x: p.x, y: p.y + (att.side === 'me' ? -200 : 200) };
+  const dx = (q.x - p.x) * 0.4, dy = (q.y - p.y) * 0.4;
+  el.animate([
+    { transform: 'translate(0, 0)' },
+    { transform: 'translate(0, 0) scale(.95)', offset: 0.2 },
+    { transform: `translate(${dx}px, ${dy}px) scale(1.12)`, offset: 0.55 },
+    { transform: 'translate(0, 0)' },
+  ], { duration: dur(520), easing: 'ease-in-out' });
+  await wait(520);
+}
+async function projectile(from, to, icon, big) {
+  if (!$('#fxLayer')) return;
+  const p = centerOf(from), q = centerOf(to);
+  const s = fxSpan(`proj ${big ? 'big' : ''}`, icon, p.x, p.y);
+  s.animate([
+    { transform: 'translate(-50%, -50%) scale(.5) rotate(0deg)', opacity: 0.6 },
+    { transform: `translate(calc(-50% + ${q.x - p.x}px), calc(-50% + ${q.y - p.y}px)) scale(1.4) rotate(540deg)`, opacity: 1 },
+  ], { duration: dur(380), easing: 'ease-in' });
+  await wait(380);
+  s.remove();
+  const boom = fxSpan('proj boom', '💥', q.x, q.y);
+  boom.animate([
+    { transform: 'translate(-50%, -50%) scale(.4)', opacity: 1 },
+    { transform: 'translate(-50%, -50%) scale(1.8)', opacity: 0 },
+  ], { duration: dur(380), easing: 'ease-out' });
+  setTimeout(() => boom.remove(), dur(380) + 50);
+}
+function shake(u, strong) {
+  const el = unitEl(u);
+  if (!el) return;
+  const k = strong ? 14 : 8;
+  el.animate([
+    { transform: 'translateX(0)' }, { transform: `translateX(-${k}px) rotate(-3deg)` },
+    { transform: `translateX(${k}px) rotate(3deg)` }, { transform: `translateX(-${k / 2}px)` },
+    { transform: 'translateX(0)' },
+  ], { duration: dur(360) });
+  el.querySelector('.u-face').animate([
+    { filter: 'none' }, { filter: 'brightness(2.2) sepia(1) hue-rotate(-40deg) saturate(4)' }, { filter: 'none' },
+  ], { duration: dur(320) });
+}
+function glow(u, color) {
+  const el = unitEl(u);
+  if (!el) return Promise.resolve();
+  el.querySelector('.u-face').animate([
+    { boxShadow: '0 0 0 0 transparent', transform: 'scale(1)' },
+    { boxShadow: `0 0 26px 10px ${color}`, transform: 'scale(1.12)' },
+    { boxShadow: '0 0 0 0 transparent', transform: 'scale(1)' },
+  ], { duration: dur(600) });
+  return wait(600);
+}
+async function die(u) {
+  const el = unitEl(u);
+  floatText(u, '💀 쓰러졌다!', 'kill');
+  if (el) {
+    el.animate([
+      { transform: 'none', opacity: 1, filter: 'none' },
+      { transform: 'translateY(-12px) rotate(-10deg)', opacity: 1, filter: 'brightness(2)', offset: 0.25 },
+      { transform: 'translateY(26px) rotate(80deg) scale(.7)', opacity: 0.15, filter: 'grayscale(1)' },
+    ], { duration: dur(800), easing: 'ease-in' });
   }
-  const u = B.order.shift();
-  B.cur = u;
-  u.sta = Math.min(MAX_STA, u.sta + 2);
+  await wait(800);
+  u.shownDead = true;
+  updateUnit(u);
+}
+function damageHtml(d, adv, icon = '') {
+  const note = adv > 1 ? '<small>효과가 굉장했다!</small>' : adv < 1 ? '<small>효과가 별로다…</small>' : '';
+  return `${icon}-${fmt(d)}${note}`;
+}
 
-  for (const [k, label] of [['burn', '🔥 화상'], ['poison', '🧪 중독']]) {
+// ----- 턴 진행 -----
+async function nextTurn() {
+  const b = B;
+  if (!b || b.over) return;
+  if (checkEnd()) return;
+  while (b.order.length && b.order[0].hp <= 0) b.order.shift();
+  if (!b.order.length) {
+    b.round++;
+    b.order = b.units.filter(u => u.hp > 0).sort((x, y) => y.spd - x.spd || Math.random() - 0.5);
+  }
+  const u = b.order.shift();
+  b.cur = u;
+  u.sta = Math.min(MAX_STA, u.sta + 2);
+  drawBattle();
+
+  // 화상 / 중독: 자기 차례가 올 때마다 에너지가 깎인다
+  for (const [k, label, icon] of [['burn', '화상', '🔥'], ['poison', '중독', '🧪']]) {
     if (u.fx[k] > 0 && u.hp > 0) {
-      u.hp = Math.max(0, u.hp - u.fx[k + 'Dmg']);
+      const d = u.fx[k + 'Dmg'];
+      u.hp = Math.max(0, u.hp - d);
+      u.dispHp = u.hp;
       u.fx[k]--;
-      logB(`${label} 피해! ${u.c.name} -${fmt(u.fx[k + 'Dmg'])}${u.hp <= 0 ? ' 💀 쓰러졌다!' : ''}`);
+      logB(`${icon} ${label} 피해! ${u.c.name} -${fmt(d)}${u.hp <= 0 ? ' 💀 쓰러졌다!' : ''}`);
+      updateLog();
+      updateUnit(u);
+      shake(u);
+      floatText(u, damageHtml(d, 1, icon), 'dmg');
+      await wait(550);
+      if (B !== b) return;
     }
   }
-  if (u.hp <= 0) { drawBattle(); later(nextTurn); return; }
+  if (u.hp <= 0) {
+    await die(u);
+    if (B !== b) return;
+    later(nextTurn, 250);
+    return;
+  }
   if (u.fx.stun > 0) {
     u.fx.stun--;
     tickFx(u);
     logB(`💫 ${u.c.name}은(는) 기절해서 움직일 수 없다!`);
+    floatText(u, '💫 기절!', 'status');
     drawBattle();
-    later(nextTurn);
+    later(nextTurn, 800);
     return;
   }
   if (u.side === 'me') {
-    const t = unitById(B.target);
-    if (!t || t.hp <= 0) B.target = aliveOf('foe')[0].id;
-    B.waiting = true;
+    const t = unitById(b.target);
+    if (!t || t.hp <= 0) b.target = aliveOf('foe')[0].id;
+    b.waiting = true;
     drawBattle();
   } else {
-    drawBattle();
-    later(() => aiAct(u), 700);
+    later(() => aiAct(u), 650);
   }
 }
 
@@ -1613,58 +1735,109 @@ function calcDmg(u, t, sk, mult) {
 function useSkill(u, sk, tgt) {
   tickFx(u);
   u.sta -= sk.cost;
+  B.waiting = false;
   const foes = aliveOf(u.side === 'me' ? 'foe' : 'me');
   const allies = aliveOf(u.side);
+  const events = [];
   let msg = `${u.c.face} ${u.c.name}의 ${sk.name}!`;
   const hit = (t, mult) => {
     const { d, adv } = calcDmg(u, t, sk, mult);
     t.hp = Math.max(0, t.hp - d);
-    t.flash = true;
+    events.push({ kind: 'dmg', t, d, adv, hp: t.hp });
     msg += ` → ${t.c.name} -${fmt(d)}${adv > 1 ? ' (효과가 굉장했다!)' : adv < 1 ? ' (효과가 별로다…)' : ''}${t.hp <= 0 ? ' 💀' : ''}`;
     return t.hp > 0;
+  };
+  const status = (t, text) => events.push({ kind: 'status', t, text });
+  const heal = (t, amount) => {
+    t.hp = Math.min(t.maxHp, t.hp + amount);
+    events.push({ kind: 'heal', t, amount, hp: t.hp });
   };
   switch (sk.type) {
     case 'dmg':
       if (sk.aoe) foes.forEach(t => hit(t, sk.mult)); else hit(tgt, sk.mult);
       break;
     case 'burn':
-      if (hit(tgt, sk.mult)) { tgt.fx.burn = 3; tgt.fx.burnDmg = Math.round(u.atk * 0.3); msg += ' 🔥화상!'; }
+      if (hit(tgt, sk.mult)) { tgt.fx.burn = 3; tgt.fx.burnDmg = Math.round(u.atk * 0.3); msg += ' 🔥화상!'; status(tgt, '🔥 화상!'); }
       break;
     case 'poison':
-      if (hit(tgt, sk.mult)) { tgt.fx.poison = 4; tgt.fx.poisonDmg = Math.round(u.atk * 0.25); msg += ' 🧪중독!'; }
+      if (hit(tgt, sk.mult)) { tgt.fx.poison = 4; tgt.fx.poisonDmg = Math.round(u.atk * 0.25); msg += ' 🧪중독!'; status(tgt, '🧪 중독!'); }
       break;
     case 'stun':
-      if (hit(tgt, sk.mult) && Math.random() < 0.6) { tgt.fx.stun = 1; msg += ' 💫기절!'; }
+      if (hit(tgt, sk.mult) && Math.random() < 0.6) { tgt.fx.stun = 1; msg += ' 💫기절!'; status(tgt, '💫 기절!'); }
       break;
     case 'curse':
-      if (hit(tgt, sk.mult)) { tgt.fx.curse = 2; msg += ' 💀공격력 감소!'; }
+      if (hit(tgt, sk.mult)) { tgt.fx.curse = 2; msg += ' 💀공격력 감소!'; status(tgt, '💀 공격력 ↓'); }
       break;
     case 'healTeam':
-      allies.forEach(a => { a.hp = Math.min(a.maxHp, a.hp + Math.round(a.maxHp * sk.v)); });
+      allies.forEach(a => heal(a, Math.round(a.maxHp * sk.v)));
       msg += ' 💚 아군 전체 회복!';
       break;
     case 'healSelf':
-      u.hp = Math.min(u.maxHp, u.hp + Math.round(u.maxHp * sk.v));
+      heal(u, Math.round(u.maxHp * sk.v));
       msg += ' 💚 체력 회복!';
       break;
     case 'shield':
       u.fx.shield = 2;
       msg += ' 🛡️ 받는 피해 절반!';
+      status(u, '🛡️ 방패!');
       break;
     case 'buffSelf':
       u.fx.buff = 3;
       msg += ' 💪 공격력 증가!';
+      status(u, '💪 공격력 ↑');
       break;
     case 'buffTeam':
-      allies.forEach(a => { a.fx.buff = a === u ? 3 : 2; });
+      allies.forEach(a => { a.fx.buff = a === u ? 3 : 2; status(a, '💪 공격력 ↑'); });
       msg += ' 💪 아군 전체 공격력 증가!';
       break;
   }
   logB(msg);
-  B.waiting = false;
+  const b = B;
   drawBattle();
-  B.units.forEach(x => { x.flash = false; });
-  later(nextTurn);
+  playSkill(u, sk, events).then(() => {
+    if (B !== b) return;
+    drawBattle();
+    later(nextTurn, 300);
+  });
+}
+
+// 공격 모습: 달려들기 → 속성 이모지가 날아감 → 맞은 쪽이 흔들리고 에너지가 줄어듦 → 에너지 0이면 쓰러짐
+async function playSkill(u, sk, events) {
+  const b = B;
+  const dmgs = events.filter(e => e.kind === 'dmg');
+  if (dmgs.length) {
+    const icon = sk.cost === 0 ? '👊' : sk.aoe && sk.cost >= 7 ? '🌟' : EL[ELI[sk.el]].emoji;
+    const lungeDone = lunge(u, dmgs.length === 1 ? dmgs[0].t : null);
+    await wait(200);
+    if (B !== b) return;
+    await Promise.all(dmgs.map(e => projectile(u, e.t, icon, sk.cost >= 7)));
+    if (B !== b) return;
+    dmgs.forEach(e => {
+      e.t.dispHp = e.hp;
+      updateUnit(e.t);
+      shake(e.t, e.adv > 1);
+      floatText(e.t, damageHtml(e.d, e.adv), e.adv > 1 ? 'dmg crit' : 'dmg');
+    });
+    await lungeDone;
+  } else {
+    await glow(u, EL[ELI[sk.el]].color);
+  }
+  if (B !== b) return;
+  events.filter(e => e.kind === 'heal').forEach(e => {
+    e.t.dispHp = e.hp;
+    updateUnit(e.t);
+    glow(e.t, '#4cd964');
+    floatText(e.t, `💚+${fmt(e.amount)}`, 'heal');
+  });
+  const st = events.filter(e => e.kind === 'status');
+  if (st.length) {
+    await wait(dmgs.length ? 250 : 0);
+    st.forEach(e => floatText(e.t, e.text, 'status'));
+  }
+  await wait(450);
+  if (B !== b) return;
+  const dead = dmgs.filter(e => e.hp <= 0 && !e.t.shownDead);
+  if (dead.length) await Promise.all(dead.map(e => die(e.t)));
 }
 
 function aiAct(u) {
@@ -1737,34 +1910,80 @@ function quitBattle() {
   clearTimeout(B.timer);
   B = null;
   $('#battle').classList.add('hidden');
-
   render();
 }
 
+// ----- 전투 화면 그리기 -----
 function unitHTML(u) {
-  const isCur = B.cur === u && !B.over;
-  const isTgt = u.side === 'foe' && B.target === u.id && B.waiting;
-  const fx = [
+  return `<div class="unit ${u.side}" id="u-${u.id}" ${u.side === 'foe' ? `data-act="bTarget" data-id="${u.id}"` : ''}>
+    <div class="tgt-mark">🎯</div>
+    <div class="u-face" style="background:${grad(u.c)}"><span>${u.c.face}</span></div>
+    <div class="u-nm">${u.c.name}</div>
+    <div class="u-lv">Lv.${u.lv} ${elBadges(u.c.els)}</div>
+    <div class="hp-label"><span>⚡ 에너지</span><span class="u-hp"></span></div>
+    <div class="hp ${u.side === 'foe' ? 'enemy' : ''}"><div class="hp-fill"></div></div>
+    <div class="u-sta" title="스태미나"></div>
+    <div class="u-fx"></div>
+    <div class="u-grave">🪦</div>
+  </div>`;
+}
+
+function updateUnit(u) {
+  const el = unitEl(u);
+  if (!el) return;
+  const isCur = B.cur === u && !B.over && !u.shownDead;
+  el.classList.toggle('cur', isCur);
+  el.classList.toggle('tgt', u.side === 'foe' && B.target === u.id && B.waiting && u.hp > 0);
+  el.classList.toggle('dead', u.shownDead);
+  const ratio = Math.max(0, u.dispHp / u.maxHp);
+  const fill = el.querySelector('.hp-fill');
+  fill.style.width = `${ratio * 100}%`;
+  fill.classList.toggle('mid', ratio <= 0.6 && ratio > 0.3);
+  fill.classList.toggle('low', ratio <= 0.3);
+  el.querySelector('.u-hp').textContent = `${fmt(u.dispHp)} / ${fmt(u.maxHp)}`;
+  el.querySelector('.u-sta').innerHTML = `${'<i class="on"></i>'.repeat(u.sta)}${'<i></i>'.repeat(MAX_STA - u.sta)}`;
+  el.querySelector('.u-fx').textContent = u.shownDead ? '' : [
     u.fx.burn ? '🔥' : '', u.fx.poison ? '🧪' : '', u.fx.stun ? '💫' : '', u.fx.shield ? '🛡️' : '',
     u.fx.buff ? '💪' : '', u.fx.curse ? '💀' : '',
   ].join('');
-  return `<div class="unit ${u.side} ${isCur ? 'cur' : ''} ${isTgt ? 'tgt' : ''} ${u.hp <= 0 ? 'dead' : ''} ${u.flash ? 'hit' : ''}"
-      ${u.side === 'foe' ? `data-act="bTarget" data-id="${u.id}"` : ''}>
-    ${isTgt ? '<div class="tgt-mark">🎯</div>' : ''}
-    <div class="u-face" style="background:${grad(u.c)}">${u.c.face}</div>
-    <div class="u-nm">${u.c.name}</div>
-    <div class="u-lv">Lv.${u.lv} ${elBadges(u.c.els)}</div>
-    <div class="hp ${u.side === 'foe' ? 'enemy' : ''}"><div style="width:${u.hp / u.maxHp * 100}%"></div></div>
-    <div class="u-hp">${fmt(u.hp)} / ${fmt(u.maxHp)}</div>
-    <div class="u-sta">${'<i class="on"></i>'.repeat(u.sta)}${'<i></i>'.repeat(MAX_STA - u.sta)}</div>
-    <div class="u-fx">${fx}</div>
-  </div>`;
+}
+
+function updateLog() {
+  const log = $('#blog');
+  if (!log) return;
+  log.innerHTML = B.log.slice(-4).map((l, i, a) => `<div class="${i === a.length - 1 ? 'last' : ''}">${l}</div>`).join('');
 }
 
 function drawBattle() {
   if (!B) return;
-  const me = B.units.filter(u => u.side === 'me');
-  const foes = B.units.filter(u => u.side === 'foe');
+  if (!B.built || !$('#arena')) {
+    const me = B.units.filter(u => u.side === 'me');
+    const foes = B.units.filter(u => u.side === 'foe');
+    $('#battle').innerHTML = `
+      <div class="b-inner">
+        <div class="b-top">
+          <b>스테이지 ${B.stage}</b><span class="muted" id="bRound"></span>
+          <span class="spacer"></span>
+          <button class="btn ghost small" data-act="typeChart">📘 상성표</button>
+          <button class="btn ghost small" data-act="bFast" id="bFast"></button>
+          <button class="btn ghost small" data-act="bQuit" id="bQuitTop">🏳️ 포기</button>
+        </div>
+        <div class="b-arena" id="arena">
+          <div class="b-side foe">${foes.map(unitHTML).join('')}</div>
+          <div class="b-log" id="blog"></div>
+          <div class="b-side me">${me.map(unitHTML).join('')}</div>
+          <div class="fx-layer" id="fxLayer"></div>
+        </div>
+        <div id="bBottom"></div>
+      </div>`;
+    B.built = true;
+  }
+  $('#bRound').textContent = `라운드 ${B.round}`;
+  $('#bFast').textContent = B.fast ? '▶️ 보통 속도' : '⏩ 빠르게';
+  $('#bQuitTop').style.display = B.over ? 'none' : '';
+  B.units.forEach(updateUnit);
+  updateLog();
+
   let bottom = '';
   if (B.over) {
     const r = B.result;
@@ -1774,30 +1993,39 @@ function drawBattle() {
       <button class="btn big" data-act="bQuit">확인</button>
     </div>`;
   } else if (B.waiting) {
-    const u = B.cur;
+    const u = B.cur, t = unitById(B.target);
     bottom = `<div class="b-turn">${u.c.face} <b>${u.c.name}</b>의 차례! 스킬을 고르세요 <span class="muted">(적을 눌러 타겟 변경)</span></div>
-      <div class="skills">${u.c.skills.map((sk, i) => `
-        <button class="skill" data-act="bSkill" data-i="${i}" ${sk.cost > u.sta ? 'disabled' : ''} style="--sc:${EL[ELI[sk.el]].color}">
-          <span class="sk-nm">${EL[ELI[sk.el]].emoji} ${sk.name}</span>
+      <div class="skills">${u.c.skills.map((sk, i) => {
+        const adv = needsTarget(sk) || sk.aoe ? advantage([sk.el], t.c.els) : 1;
+        const tag = adv > 1 ? '<span class="adv up">▲ 강함</span>' : adv < 1 ? '<span class="adv down">▼ 약함</span>' : '';
+        return `<button class="skill" data-act="bSkill" data-i="${i}" ${sk.cost > u.sta ? 'disabled' : ''} style="--sc:${EL[ELI[sk.el]].color}">
+          <span class="sk-nm">${EL[ELI[sk.el]].emoji} ${sk.name} ${tag}</span>
           <span class="sk-desc">${skDesc(sk)}</span>
           <span class="sk-cost">⚡${sk.cost}</span>
-        </button>`).join('')}</div>`;
+        </button>`;
+      }).join('')}</div>`;
   } else {
-    bottom = `<div class="b-turn muted">${B.cur ? `${B.cur.c.face} ${B.cur.c.name}의 차례…` : ''}</div>`;
+    bottom = `<div class="b-turn muted">${B.cur ? `${B.cur.c.face} ${B.cur.c.name}의 차례…` : '전투 준비!'}</div>`;
   }
-  $('#battle').innerHTML = `
-    <div class="b-inner">
-      <div class="b-top">
-        <b>스테이지 ${B.stage}</b><span class="muted">라운드 ${B.round}</span>
-        <span class="spacer"></span>
-        <button class="btn ghost small" data-act="bFast">${B.fast ? '▶️ 보통 속도' : '⏩ 빠르게'}</button>
-        ${B.over ? '' : '<button class="btn ghost small" data-act="bQuit">🏳️ 포기</button>'}
-      </div>
-      <div class="b-side foe">${foes.map(unitHTML).join('')}</div>
-      <div class="b-log">${B.log.slice(-4).map((l, i, a) => `<div class="${i === a.length - 1 ? 'last' : ''}">${l}</div>`).join('')}</div>
-      <div class="b-side me">${me.map(unitHTML).join('')}</div>
-      ${bottom}
-    </div>`;
+  $('#bBottom').innerHTML = bottom;
+}
+
+// ===================== 속성 상성표 =====================
+const weakTo = (e) => EL.filter(x => BEATS[x.id].includes(e)).map(x => x.id);
+function typeChartHTML() {
+  return `<div class="type-chart">
+    <p class="muted">강한 속성 스킬로 공격하면 <b class="up">피해 1.5배</b>, 약한 속성이면 <b class="down">0.7배</b>예요.</p>
+    <div class="tc-head"><span>속성</span><span>이 속성에게 강해요 ▲</span><span>이 속성에게 약해요 ▼</span></div>
+    ${EL.map(e => `<div class="tc-row">
+      <span class="tc-el" style="--ec:${e.color}">${e.emoji} ${e.name}${BASE.includes(e.id) ? '' : ' <small>특수</small>'}</span>
+      <span class="tc-list up">${BEATS[e.id].map(x => `${EL[ELI[x]].emoji}${EL[ELI[x]].name}`).join(' ')}</span>
+      <span class="tc-list down">${weakTo(e.id).map(x => `${EL[ELI[x]].emoji}${EL[ELI[x]].name}`).join(' ') || '-'}</span>
+    </div>`).join('')}
+  </div>`;
+}
+function openTypeChart() {
+  showModal(`<h3>📘 속성 상성표</h3>${typeChartHTML()}
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
 }
 
 // ===================== 화면: 도감 =====================
@@ -1954,6 +2182,7 @@ const ACTIONS = {
   bSkill: (d) => playerSkill(d.i),
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; drawBattle(); },
+  typeChart: () => openTypeChart(),
   bQuit: () => quitBattle(),
   back: () => { const fn = modalStack; modalStack = null; if (fn) fn(); else closeModal(); },
   close: () => closeModal(),

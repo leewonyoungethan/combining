@@ -338,19 +338,65 @@ h4.sub { margin: 16px 0 8px; font-size: 14px; text-align: left; }
   border-radius: 14px; padding: 8px 6px; text-align: center; transition: transform .15s, opacity .3s;
 }
 .unit.foe { cursor: pointer; }
-.unit.cur { border-color: #ffe066; box-shadow: 0 0 16px rgba(255, 224, 102, .5); transform: translateY(-3px); }
-.unit.tgt { border-color: var(--bad); }
-.unit.dead { opacity: .3; filter: grayscale(1); }
-.unit.hit .u-face { animation: shake .35s; }
-@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
-.tgt-mark { position: absolute; top: -10px; right: -6px; font-size: 20px; }
-.u-face { font-size: 36px; height: 56px; border-radius: 10px; display: grid; place-items: center; }
+.unit.cur { border-color: #ffe066; box-shadow: 0 0 18px rgba(255, 224, 102, .6); }
+.unit.cur .u-face { animation: ready 1s ease-in-out infinite; }
+@keyframes ready { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.unit.tgt { border-color: var(--bad); box-shadow: 0 0 14px rgba(255, 77, 109, .5); }
+.unit.dead { border-style: dashed; background: rgba(20, 20, 40, .7); }
+.unit.dead > :not(.u-grave) { opacity: .3; filter: grayscale(1); }
+.unit.dead .u-face span { opacity: .3; }
+.u-grave { display: none; position: absolute; left: 50%; top: 32px; transform: translateX(-50%); font-size: 44px; }
+.unit.dead .u-grave { display: block; animation: grave .5s ease-out; }
+@keyframes grave { from { transform: translate(-50%, -30px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+.tgt-mark { display: none; position: absolute; top: -12px; right: -6px; font-size: 22px; z-index: 2; animation: ready .8s ease-in-out infinite; }
+.unit.tgt .tgt-mark { display: block; }
+.u-face { font-size: 40px; height: 62px; border-radius: 12px; display: grid; place-items: center; }
 .u-nm { font-size: 12px; font-weight: 700; margin-top: 4px; line-height: 1.2; min-height: 2.4em; display: grid; place-items: center; }
 .u-lv { font-size: 11px; color: var(--muted); }
-.hp { height: 10px; background: #11122a; border-radius: 999px; overflow: hidden; border: 1px solid var(--line); margin-top: 5px; }
-.hp > div { height: 100%; background: linear-gradient(90deg, #2fb344, #9be15d); transition: width .3s; }
-.hp.enemy > div { background: linear-gradient(90deg, #ff4d6d, #ff9a6b); }
-.u-hp { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.hp-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 5px; }
+.hp { height: 12px; background: #11122a; border-radius: 999px; overflow: hidden; border: 1px solid var(--line); margin-top: 2px; }
+.hp-fill { height: 100%; background: linear-gradient(90deg, #2fb344, #9be15d); transition: width .55s ease-out, background .3s; }
+.hp-fill.mid { background: linear-gradient(90deg, #e0a800, #ffe066); }
+.hp-fill.low { background: linear-gradient(90deg, #d62839, #ff6b6b); animation: lowHp .6s ease-in-out infinite; }
+@keyframes lowHp { 50% { opacity: .55; } }
+.u-hp { font-variant-numeric: tabular-nums; }
+
+/* 전투 이펙트 */
+.b-arena { position: relative; display: flex; flex-direction: column; gap: 12px; }
+.fx-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5; overflow: visible; }
+.proj { position: absolute; font-size: 34px; transform: translate(-50%, -50%); filter: drop-shadow(0 0 8px rgba(255, 255, 255, .8)); }
+.proj.big { font-size: 52px; }
+.proj.boom { font-size: 46px; }
+.float-num {
+  position: absolute; transform: translate(-50%, -50%); white-space: nowrap; text-align: center;
+  font-weight: 900; font-size: 24px; line-height: 1.05;
+  text-shadow: 0 2px 0 #000, 0 0 6px #000, 2px 0 0 #000, -2px 0 0 #000;
+}
+.float-num small { display: block; font-size: 12px; }
+.float-num.dmg { color: #fff; }
+.float-num.crit { color: #ffe066; font-size: 30px; }
+.float-num.heal { color: #7dff8f; }
+.float-num.status { color: #ffc2ff; font-size: 17px; }
+.float-num.kill { color: #ff6b6b; font-size: 20px; }
+.adv { font-size: 10px; font-weight: 900; padding: 1px 5px; border-radius: 6px; margin-left: 2px; vertical-align: middle; }
+.adv.up { background: #1f7a2e; color: #b8ffc4; }
+.adv.down { background: #7a1f2e; color: #ffc2cf; }
+
+/* 속성 상성표 */
+.type-chart { text-align: left; font-size: 13px; }
+.type-chart > p { margin-bottom: 10px; }
+.type-chart b.up { color: #7dff8f; }
+.type-chart b.down { color: #ff8fa3; }
+.tc-head, .tc-row { display: grid; grid-template-columns: 86px 1fr 1fr; gap: 8px; align-items: center; }
+.tc-head { font-size: 11px; color: var(--muted); padding: 0 8px 6px; }
+.tc-row { background: var(--panel); border-radius: 10px; padding: 7px 8px; margin-bottom: 5px; }
+.tc-el { font-weight: 800; border-left: 4px solid var(--ec); padding-left: 6px; }
+.tc-el small { font-size: 10px; color: var(--muted); font-weight: 400; }
+.tc-list.up { color: #b8ffc4; }
+.tc-list.down { color: #ffc2cf; }
+.chart-box { background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; margin: 14px 0; }
+.chart-box summary { cursor: pointer; font-weight: 800; }
+.chart-box .type-chart { margin-top: 12px; }
 .u-sta { display: flex; gap: 2px; justify-content: center; margin-top: 4px; }
 .u-sta i { width: 7px; height: 7px; border-radius: 2px; background: #2a2d55; }
 .u-sta i.on { background: #ffe066; }
