@@ -58,6 +58,9 @@ const LEGENDS = [
   { id: 'L:dragon',  name: '그림자 용',     face: '🐉', els: ['dark', 'fire', 'magic'],   ult: '암흑 브레스' },
   { id: 'L:yeti',    name: '서리 거인',     face: '🧊', els: ['ice', 'metal', 'water'],   ult: '절대 영도' },
   { id: 'L:basil',   name: '독룡 바실리스크', face: '🐍', els: ['poison', 'dark', 'nature'], ult: '맹독 폭풍' },
+  { id: 'L:swan',    name: '빛의 백조 오데트', face: '🦢', els: ['light', 'water', 'ice'],  ult: '백조의 호수' },
+  { id: 'L:scorpion', name: '사막의 전갈왕',  face: '🦂', els: ['poison', 'earth', 'fire'], ult: '사막 폭풍' },
+  { id: 'L:megalo',  name: '폭풍 메갈로돈',   face: '🦈', els: ['water', 'thunder', 'dark'], ult: '폭풍 해일' },
 ];
 const MYTHIC = { id: 'M:arche', name: '태초의 신수 아르케', face: '🌌', els: ['magic', 'light', 'dark'], ult: '태초의 빛' };
 // 전설 상점 전용: 골드로 살 수는 있지만… 절대 모을 수 없는 가격
@@ -123,22 +126,93 @@ function skDesc(sk) {
 }
 const needsTarget = (sk) => ['dmg', 'burn', 'poison', 'stun', 'curse'].includes(sk.type) && !sk.aoe;
 
-// ===================== 몬스터 카탈로그 =====================
+// ===================== 몬스터 카탈로그 (500마리) =====================
+// 속성마다 9마리(순수), 두 속성 조합마다 7마리(혼합) + 레전더리 10 + 신화 1 + 초월 5 = 500
+const PURE_VARIANTS = 9;
+const HYB_VARIANTS = 7;
+const ADJ = {
+  fire:    ['화염', '불꽃', '용암', '이글', '잿불', '태양', '폭염', '화산', '봉화'],
+  water:   ['물결', '파도', '심해', '이슬', '빗방울', '소용돌이', '산호', '해류', '호수'],
+  thunder: ['번개', '천둥', '전류', '섬광', '뇌운', '스파크', '폭풍', '전격', '뇌전'],
+  nature:  ['숲', '덩굴', '꽃잎', '이끼', '새싹', '고목', '들풀', '정글', '꽃밭'],
+  earth:   ['바위', '모래', '대지', '암석', '진흙', '협곡', '수정', '화강', '지진'],
+  dark:    ['그림자', '심연', '암흑', '한밤', '칠흑', '망령', '악몽', '그믐', '혼령'],
+  light:   ['광휘', '빛살', '새벽', '찬란', '여명', '성광', '햇살', '무지개', '은빛'],
+  poison:  ['맹독', '독침', '늪지', '산성', '독안개', '독버섯', '부식', '독니', '역병'],
+  ice:     ['서리', '빙하', '눈꽃', '얼음', '한파', '설원', '냉기', '빙결', '눈보라'],
+  metal:   ['강철', '무쇠', '크롬', '기계', '톱니', '합금', '철갑', '황동', '티타늄'],
+  magic:   ['비전', '마력', '신비', '주문', '환상', '룬', '요술', '별빛', '마법'],
+};
+const CREATURES = [
+  ['🐺', '늑대'], ['🦊', '여우'], ['🐻', '곰'], ['🐯', '호랑이'], ['🐗', '멧돼지'], ['🐍', '뱀'],
+  ['🦂', '전갈'], ['🕷️', '거미'], ['🦋', '나비'], ['🐝', '벌'], ['🦉', '올빼미'], ['🦜', '앵무새'],
+  ['🐬', '돌고래'], ['🦈', '상어'], ['🐙', '문어'], ['🦀', '게'], ['🐊', '악어'], ['🦖', '티라노'],
+  ['🦕', '용각룡'], ['🐲', '드레이크'], ['🦏', '코뿔소'], ['🐘', '코끼리'], ['🦍', '고릴라'], ['🐒', '원숭이'],
+  ['🐇', '토끼'], ['🦔', '고슴도치'], ['🦡', '오소리'], ['🐿️', '다람쥐'], ['🦥', '나무늘보'], ['🦦', '수달'],
+  ['🐌', '달팽이'], ['🐛', '애벌레'], ['🦗', '귀뚜라미'], ['🦩', '플라밍고'], ['🦚', '공작'], ['🐓', '수탉'],
+  ['🐑', '양'], ['🐐', '염소'], ['🦬', '들소'], ['🐫', '낙타'], ['🦒', '기린'], ['👻', '유령'],
+  ['🧚', '요정'], ['🧞', '지니'], ['🧜', '인어'], ['👹', '도깨비'], ['💀', '해골'], ['🎃', '호박귀신'],
+  ['🌵', '선인장'], ['🍄', '버섯'], ['🌻', '해바라기'], ['⛄', '눈사람'], ['🐡', '복어'], ['🦑', '오징어'],
+  ['🐳', '고래'], ['🦭', '물범'], ['🐆', '표범'], ['🐎', '말'], ['🦘', '캥거루'], ['🐼', '판다'],
+  ['🐨', '코알라'], ['🦝', '너구리'], ['🐁', '생쥐'], ['🐞', '무당벌레'], ['🦟', '모기'], ['🪲', '딱정벌레'],
+  ['🦞', '가재'], ['🦐', '새우'], ['🐠', '열대어'], ['🦢', '백조'], ['🕊️', '비둘기'], ['🦃', '칠면조'],
+  ['🐈', '고양이'], ['🐕', '강아지'], ['🐄', '황소'], ['🐖', '돼지'], ['🦙', '라마'], ['🦌', '엘크'],
+];
+const hashStr = (s) => { let h = 5381; for (const ch of s) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0; return h; };
+const frac = (s) => (hashStr(s) % 1000) / 1000;
+const VW = { common: 6, rare: 3, epic: 1 };   // 같은 그룹 안에서 변종이 나올 가중치
+
 const CAT = {};
 const CAT_LIST = [];
-function addMon(m) { CAT[m.id] = m; CAT_LIST.push(m); }
+const GROUPS = {};
+const usedNames = new Set();
+function addMon(m) {
+  CAT[m.id] = m;
+  CAT_LIST.push(m);
+  usedNames.add(m.name);
+  if (m.group) (GROUPS[m.group] = GROUPS[m.group] || []).push(m.id);
+}
+function variantMod(key) {
+  return { hp: 0.88 + frac(key + 'h') * 0.24, atk: 0.88 + frac(key + 'a') * 0.24, spd: 0.93 + frac(key + 's') * 0.14 };
+}
+function freshCreature(adj, seedKey) {
+  let k = hashStr(seedKey) % CREATURES.length;
+  for (let tries = 0; tries < CREATURES.length; tries++, k = (k + 1) % CREATURES.length) {
+    const [face, noun] = CREATURES[k];
+    if (!usedNames.has(`${adj} ${noun}`)) return { face, name: `${adj} ${noun}` };
+  }
+  return { face: '❓', name: `${adj} 몬스터 ${seedKey}` };
+}
 
-EL.forEach((e, i) => addMon({
-  id: 'p:' + e.id, name: `${e.adj} ${e.noun}`, face: e.face, els: [e.id],
-  rarity: i < BASE.length ? 'common' : 'epic',
-}));
+// 순수 속성
+EL.forEach((e, i) => {
+  const base = i < BASE.length;
+  for (let k = 0; k < PURE_VARIANTS; k++) {
+    const group = 'p:' + e.id;
+    const id = k === 0 ? group : `${group}:${k}`;
+    const look = k === 0 ? { face: e.face, name: `${e.adj} ${e.noun}` } : freshCreature(ADJ[e.id][k], id);
+    addMon({
+      id, group, variant: k, ...look, els: [e.id],
+      rarity: !base ? 'epic' : k <= 3 ? 'common' : k <= 6 ? 'rare' : 'epic',
+      mod: k === 0 ? null : variantMod(id),
+    });
+  }
+});
+// 두 속성 혼합
 for (let i = 0; i < EL.length; i++) {
   for (let j = i + 1; j < EL.length; j++) {
     const a = EL[i], b = EL[j];
-    addMon({
-      id: `h:${a.id}+${b.id}`, name: `${a.adj} ${b.noun}`, face: b.face, els: [a.id, b.id],
-      rarity: i < BASE.length && j < BASE.length ? 'rare' : 'epic',
-    });
+    const group = `h:${a.id}+${b.id}`;
+    for (let v = 0; v < HYB_VARIANTS; v++) {
+      const id = v === 0 ? group : `${group}:${v}`;
+      const adj = v % 2 ? ADJ[a.id][v] : ADJ[b.id][v];
+      const look = v === 0 ? { face: b.face, name: `${a.adj} ${b.noun}` } : freshCreature(adj, id);
+      addMon({
+        id, group, variant: v, ...look, els: [a.id, b.id],
+        rarity: i < BASE.length && j < BASE.length ? (v <= 3 ? 'rare' : 'epic') : 'epic',
+        mod: v === 0 ? null : variantMod(id),
+      });
+    }
   }
 }
 LEGENDS.forEach(l => addMon({ ...l, rarity: 'legendary' }));
@@ -163,21 +237,47 @@ const shuffle = (arr) => {
   return a;
 };
 
-function breedResult(ta, tb) {
+// 두 부모로 교배했을 때 각 몬스터가 나올 확률 { type: 확률 }
+function breedDist(ta, tb) {
+  const d = {};
+  const add = (t, p) => { if (p > 0) d[t] = (d[t] || 0) + p; };
+  const addGroup = (g, p) => {
+    const list = GROUPS[g];
+    const tot = list.reduce((s, t) => s + VW[CAT[t].rarity], 0);
+    list.forEach(t => add(t, p * VW[CAT[t].rarity] / tot));
+  };
   if (isLegend(ta) && isLegend(tb)) {
-    if (Math.random() < 0.35) return MYTHIC.id;
-    const r = pick([ta, tb]);
-    return CAT[r].shop ? MYTHIC.id : r;   // 상점 전용 몬스터는 교배로 복제할 수 없다
+    add(MYTHIC.id, 0.35);
+    [ta, tb].forEach(t => add(CAT[t].shop ? MYTHIC.id : t, 0.325));   // 상점 전용은 복제 불가
+    return d;
   }
   const pool = [...new Set([...CAT[ta].els, ...CAT[tb].els])];
   const has = (need) => need.every(e => pool.includes(e));
-  for (const l of shuffle(LEGENDS)) if (has(l.els) && Math.random() < 0.25) return l.id;
-  for (const r of shuffle(ADV_RECIPES)) if (has(r.need) && Math.random() < 0.3) return 'p:' + r.el;
-  if (pool.length === 1 || Math.random() < 0.25) return 'p:' + pick(pool);
-  const [x, y] = shuffle(pool);
-  return hybridId(x, y);
+  const legs = LEGENDS.filter(l => has(l.els));
+  const pLeg = 1 - Math.pow(0.75, legs.length);
+  legs.forEach(l => add(l.id, pLeg / legs.length));
+  let rest = 1 - pLeg;
+  const advs = ADV_RECIPES.filter(r => has(r.need));
+  const pAdv = 1 - Math.pow(0.7, advs.length);
+  advs.forEach(r => addGroup('p:' + r.el, rest * pAdv / advs.length));
+  rest *= 1 - pAdv;
+  const pPure = pool.length === 1 ? 1 : 0.25;
+  pool.forEach(e => addGroup('p:' + e, rest * pPure / pool.length));
+  if (pool.length > 1) {
+    const pairs = [];
+    for (let i = 0; i < pool.length; i++) for (let j = i + 1; j < pool.length; j++) pairs.push(hybridId(pool[i], pool[j]));
+    pairs.forEach(g => addGroup(g, rest * (1 - pPure) / pairs.length));
+  }
+  return d;
 }
 
+function breedResult(ta, tb) {
+  const d = breedDist(ta, tb);
+  let r = Math.random();
+  const entries = Object.entries(d);
+  for (const [t, p] of entries) { r -= p; if (r <= 0) return t; }
+  return entries[entries.length - 1][0];
+}
 // ===================== 건물 / 농장 / 룬 =====================
 const PLOTS = 25;
 const HATCH_CAP = 3;
@@ -274,10 +374,11 @@ function runeBonus(m) {
 function stats(m) {
   const c = CAT[m.type], r = RAR[c.rarity], rb = runeBonus(m);
   const sp = c.els.reduce((s, e) => s + EL[ELI[e]].sp, 0) / c.els.length;
+  const md = c.mod || { hp: 1, atk: 1, spd: 1 };
   return {
-    hp: Math.round(r.hp * (1 + 0.12 * (m.lv - 1)) * (1 + rb.hp / 100)),
-    atk: Math.round(r.atk * (1 + 0.1 * (m.lv - 1)) * (1 + rb.atk / 100)),
-    spd: Math.round((r.spd + sp) * (1 + 0.01 * (m.lv - 1)) * (1 + rb.spd / 100)),
+    hp: Math.round(r.hp * md.hp * (1 + 0.12 * (m.lv - 1)) * (1 + rb.hp / 100)),
+    atk: Math.round(r.atk * md.atk * (1 + 0.1 * (m.lv - 1)) * (1 + rb.atk / 100)),
+    spd: Math.round((r.spd + sp) * md.spd * (1 + 0.01 * (m.lv - 1)) * (1 + rb.spd / 100)),
   };
 }
 
@@ -1101,6 +1202,7 @@ function pickBreed(uid) {
 function startBreed() {
   const [a, b] = sel.map(byUid);
   if (!a || !b || S.breed) return;
+  if (a.lv < BREED_LV || b.lv < BREED_LV) { toast(`두 마리 모두 Lv.${BREED_LV} 이상이어야 해요`); return; }
   if (!spend(breedCost(a, b))) return;
   const type = breedResult(a.type, b.type);
   const total = RAR[CAT[type].rarity].time;
@@ -2029,32 +2131,157 @@ function openTypeChart() {
 }
 
 // ===================== 화면: 도감 =====================
+let dexFilter = { el: 'all', rar: 'all', found: 'all' };
+
 function dexHint(c) {
-  if (c.shop) return `전설 상점 💰${fmt(c.price)}`;
+  if (c.shop) return `👑 전설 상점 💰${fmt(c.price)}`;
   if (c.rarity === 'mythic') return '레전더리 + 레전더리';
-  if (c.rarity === 'legendary') return `족보: ${elBadges(c.els)}`;
-  const adv = ADV_RECIPES.find(r => 'p:' + r.el === c.id);
-  if (adv) return `족보: ${elBadges(adv.need)}`;
-  return '???';
+  if (c.rarity === 'legendary') return `족보: ${elBadges(c.els)} 세 속성을 섞기`;
+  const adv = ADV_RECIPES.find(r => 'p:' + r.el === c.group);
+  if (adv) return `족보: ${elBadges(adv.need)} 섞기`;
+  if (c.els.length === 1) return `${elBadges(c.els)} + ${elBadges(c.els)}`;
+  return `${elBadges([c.els[0]])} + ${elBadges([c.els[1]])}`;
+}
+
+function dexMatches(c) {
+  if (dexFilter.el !== 'all') {
+    if (dexFilter.el === 'legend' ? rIdx(c.id) < 3 : !c.els.includes(dexFilter.el)) return false;
+  }
+  if (dexFilter.rar !== 'all' && c.rarity !== dexFilter.rar) return false;
+  if (dexFilter.found === 'yes' && !S.dex[c.id]) return false;
+  if (dexFilter.found === 'no' && S.dex[c.id]) return false;
+  return true;
 }
 
 function renderDex() {
   const found = CAT_LIST.filter(c => S.dex[c.id]).length;
+  const list = CAT_LIST.filter(dexMatches);
+  const chip = (key, val, label) =>
+    `<button class="chip ${dexFilter[key] === val ? 'on' : ''}" data-act="dexFilter" data-k="${key}" data-v="${val}">${label}</button>`;
   view.innerHTML = `
     <div class="sec-head">
-      <h2>도감 <small>${found} / ${CAT_LIST.length}</small></h2>
-      <p>아직 못 만난 몬스터는 ??? 로 보여요. 레전더리는 세 속성을 한 번에 섞어야 태어나요!</p>
+      <h2>도감 <small>발견 ${found} / ${CAT_LIST.length}</small></h2>
+      <p>몬스터를 누르면 정보와 <b>추천 교배 조합</b>을 볼 수 있어요. 추천 버튼을 누르면 바로 교배산으로 가요!</p>
     </div>
-    <div class="grid">${CAT_LIST.map(c => {
-      const r = RAR[c.rarity];
-      if (S.dex[c.id]) return card({ type: c.id, lv: 1 }, '', 'mini');
-      return `<div class="card unknown r-${c.rarity}">
-        <div class="face">?</div>
-        <div class="nm">${dexHint(c)}</div>
-        <div class="meta"><span class="rar" style="color:${r.color}">${r.name}</span></div>
-      </div>`;
-    }).join('')}</div>
+    <div class="chips">${chip('el', 'all', '전체')}${EL.map(e => chip('el', e.id, `${e.emoji}${e.name}`)).join('')}${chip('el', 'legend', '🏛️전설')}</div>
+    <div class="chips">${chip('rar', 'all', '모든 등급')}${RAR_ORDER.map(r => chip('rar', r, RAR[r].name)).join('')}
+      <span class="chip-gap"></span>${chip('found', 'all', '전부')}${chip('found', 'yes', '✅ 발견')}${chip('found', 'no', '❔ 미발견')}</div>
+    <p class="muted dex-count">${list.length}마리</p>
+    <div class="grid">${list.map(c => card({ type: c.id, lv: 1 }, `data-act="dexMon" data-type="${c.id}"`,
+      `mini ${S.dex[c.id] ? '' : 'undiscovered'}`, S.dex[c.id] ? '<div class="found-mark">✅</div>' : '')).join('')}</div>
     <div class="footer-actions"><button class="btn ghost small" data-act="reset">🔄 처음부터 다시 하기</button></div>`;
+}
+
+// ----- 교배 추천 -----
+// 가진 몬스터 중에서 target이 나올 확률이 가장 높은 두 마리
+function bestOwnedPair(target, needLv) {
+  const list = S.monsters.filter(m => !needLv || m.lv >= BREED_LV);
+  let best = null;
+  const cache = {};
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      const a = list[i], b = list[j];
+      const key = [a.type, b.type].sort().join('|');
+      const p = key in cache ? cache[key] : (cache[key] = breedDist(a.type, b.type)[target] || 0);
+      if (p > 0 && (!best || p > best.p || (p === best.p && a.lv + b.lv > best.a.lv + best.b.lv))) best = { a, b, p };
+    }
+  }
+  return best;
+}
+
+// 이론상 최고의 부모 (도감 기준)
+function idealParents(target) {
+  const c = CAT[target];
+  if (c.shop) return null;
+  let pa, pb;
+  if (c.rarity === 'mythic') { pa = LEGENDS[0].id; pb = LEGENDS[1].id; }
+  else if (c.rarity === 'legendary') { pa = hybridId(c.els[0], c.els[1]); pb = 'p:' + c.els[2]; }
+  else if (c.els.length === 1) {
+    const adv = ADV_RECIPES.find(r => r.el === c.els[0]);
+    if (adv) { pa = 'p:' + adv.need[0]; pb = 'p:' + adv.need[1]; }
+    else { pa = pb = 'p:' + c.els[0]; }
+  } else { pa = 'p:' + c.els[0]; pb = 'p:' + c.els[1]; }
+  return { pa, pb, p: breedDist(pa, pb)[target] || 0 };
+}
+
+const pctText = (p) => p >= 0.1 ? `${Math.round(p * 100)}%` : p >= 0.01 ? `${(p * 100).toFixed(1)}%` : `${(p * 100).toFixed(2)}%`;
+
+function openDexMon(type) {
+  const c = CAT[type];
+  if (!c) return;
+  const r = RAR[c.rarity], st = stats({ type, lv: 1 });
+  const found = S.dex[type];
+  let how = '';
+  if (c.shop) {
+    how = `<div class="rec-box">
+      <p>교배로는 얻을 수 없어요. <b>👑 전설 상점</b>에서만 살 수 있어요.</p>
+      <p class="li-price">💰 ${fmt(c.price)}</p>
+      <div class="row"><button class="btn" data-act="tab" data-tab="shop">🛒 상점으로 가기</button></div>
+    </div>`;
+  } else {
+    const best = bestOwnedPair(type, true);
+    const bestAny = best ? null : bestOwnedPair(type, false);
+    const ideal = idealParents(type);
+    const pairHTML = (a, b, p, note = '') => `
+      <div class="pair">
+        ${card(a, '', 'mini')}<div class="plus">+</div>${card(b, '', 'mini')}
+      </div>
+      <p class="rec-prob">나올 확률 <b>${pctText(p)}</b> · 교배 비용 💰${fmt(breedCost(a, b))}${note}</p>`;
+    if (best) {
+      how += `<div class="rec-box good">
+        <h4>🧬 추천 교배 조합 <small class="muted">내 몬스터 중 최고</small></h4>
+        ${pairHTML(best.a, best.b, best.p)}
+        <div class="row"><button class="btn big" data-act="goBreed" data-a="${best.a.uid}" data-b="${best.b.uid}">⛰️ 이 조합으로 교배하러 가기</button></div>
+      </div>`;
+    } else if (bestAny) {
+      how += `<div class="rec-box">
+        <h4>🧬 추천 교배 조합</h4>
+        ${pairHTML(bestAny.a, bestAny.b, bestAny.p)}
+        <p class="warn">두 마리 모두 Lv.${BREED_LV} 이상이어야 교배할 수 있어요. 먹이를 줘서 키워 주세요!</p>
+      </div>`;
+    } else {
+      how += `<div class="rec-box"><h4>🧬 추천 교배 조합</h4>
+        <p class="warn">지금 가진 몬스터로는 만들 수 없어요. 아래 부모를 먼저 모아 보세요!</p></div>`;
+    }
+    if (ideal) {
+      const shopHint = [ideal.pa, ideal.pb].some(t => CAT[t].variant === 0 && rIdx(t) === 0)
+        ? '<p class="muted">💡 커먼 부모는 상점의 🥚 몬스터 알 상점에서 살 수 있어요.</p>' : '';
+      how += `<div class="rec-box">
+        <h4>📖 최고의 부모 <small class="muted">도감 기준</small></h4>
+        <div class="pair">${card({ type: ideal.pa, lv: 1 }, `data-act="dexMon" data-type="${ideal.pa}"`, 'mini')}<div class="plus">+</div>${card({ type: ideal.pb, lv: 1 }, `data-act="dexMon" data-type="${ideal.pb}"`, 'mini')}</div>
+        <p class="rec-prob">나올 확률 <b>${pctText(ideal.p)}</b> · ${dexHint(c)}</p>
+        ${shopHint}
+      </div>`;
+    }
+  }
+  showModal(`
+    ${found ? '<div class="new-badge found">✅ 발견함</div>' : '<div class="new-badge unfound">❔ 아직 못 만났어요</div>'}
+    <div class="face big" style="background:${grad(c)}">${c.face}</div>
+    <h3>${c.name}</h3>
+    <div class="rar" style="color:${r.color}">${r.name} · 부화 ${mmss(r.time)}</div>
+    <div class="els">${elNames(c.els)}</div>
+    <div class="statbox">
+      <div>❤️ 체력<b>${fmt(st.hp)}</b></div>
+      <div>⚔️ 공격<b>${fmt(st.atk)}</b></div>
+      <div>👟 속도<b>${fmt(st.spd)}</b></div>
+      <div>💰 초당<b>${fmt(r.income)}</b></div>
+    </div>
+    <h4 class="sub">스킬</h4>
+    <div class="skill-list">${c.skills.map(sk => `
+      <div class="skill-info"><span>${EL[ELI[sk.el]].emoji} <b>${sk.name}</b></span><span class="muted">${skDesc(sk)}</span><span class="sta">⚡${sk.cost}</span></div>`).join('')}</div>
+    <h4 class="sub">얻는 방법</h4>
+    ${how}
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+}
+
+function goBreed(a, b) {
+  closeModal();
+  tab = 'island';
+  render();
+  if (S.breed) { toast('교배산에서 이미 알이 자라고 있어요! 먼저 알을 가져가세요'); openBreed(); return; }
+  sel = [Number(a), Number(b)];
+  openBreed();
+  toast('⛰️ 추천 조합을 골라 뒀어요. 교배 시작을 누르세요!');
 }
 
 // ===================== 비밀코드 =====================
@@ -2183,6 +2410,9 @@ const ACTIONS = {
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; drawBattle(); },
   typeChart: () => openTypeChart(),
+  dexMon: (d) => openDexMon(d.type),
+  dexFilter: (d) => { dexFilter[d.k] = d.v; renderDex(); },
+  goBreed: (d) => goBreed(d.a, d.b),
   bQuit: () => quitBattle(),
   back: () => { const fn = modalStack; modalStack = null; if (fn) fn(); else closeModal(); },
   close: () => closeModal(),
