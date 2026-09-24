@@ -1,32 +1,35 @@
 'use strict';
 
 // ===================== 속성 =====================
+// 앞의 8개는 기본 속성(처음부터 가진 몬스터), 뒤의 3개는 교배로만 얻는 특수 속성
 const EL = [
   { id: 'fire',    name: '불',   emoji: '🔥', color: '#ff6b3d', adj: '화염',   noun: '살라맨더', face: '🦎', sp: 8 },
   { id: 'water',   name: '물',   emoji: '💧', color: '#3da5ff', adj: '물결',   noun: '거북',     face: '🐢', sp: 0 },
-  { id: 'nature',  name: '자연', emoji: '🌿', color: '#4cd964', adj: '숲',     noun: '사슴',     face: '🦌', sp: -2 },
+  { id: 'thunder', name: '전기', emoji: '⚡', color: '#ffd93d', adj: '번개',   noun: '매',       face: '🦅', sp: 15 },
+  { id: 'nature',  name: '풀',   emoji: '🌿', color: '#4cd964', adj: '숲',     noun: '사슴',     face: '🦌', sp: -2 },
   { id: 'earth',   name: '땅',   emoji: '⛰️', color: '#b8864b', adj: '바위',   noun: '골렘',     face: '🗿', sp: -10 },
-  { id: 'thunder', name: '번개', emoji: '⚡', color: '#ffd93d', adj: '번개',   noun: '매',       face: '🦅', sp: 15 },
-  { id: 'ice',     name: '얼음', emoji: '❄️', color: '#9be7ff', adj: '서리',   noun: '펭귄',     face: '🐧', sp: 2 },
   { id: 'dark',    name: '어둠', emoji: '🌑', color: '#7b5cff', adj: '그림자', noun: '박쥐',     face: '🦇', sp: 6 },
   { id: 'light',   name: '빛',   emoji: '✨', color: '#ffe98a', adj: '광휘',   noun: '유니콘',   face: '🦄', sp: 4 },
+  { id: 'poison',  name: '독',   emoji: '🧪', color: '#a3e635', adj: '맹독',   noun: '두꺼비',   face: '🐸', sp: 3 },
+  { id: 'ice',     name: '얼음', emoji: '❄️', color: '#9be7ff', adj: '서리',   noun: '펭귄',     face: '🐧', sp: 2 },
   { id: 'metal',   name: '금속', emoji: '⚙️', color: '#a8b2c1', adj: '강철',   noun: '로봇',     face: '🤖', sp: -8 },
   { id: 'magic',   name: '마법', emoji: '🔮', color: '#ff5ce1', adj: '비전',   noun: '고블린',   face: '👺', sp: 5 },
 ];
 const ELI = Object.fromEntries(EL.map((e, i) => [e.id, i]));
-const BASE = ['fire', 'water', 'nature', 'earth'];
+const BASE = ['fire', 'water', 'thunder', 'nature', 'earth', 'dark', 'light', 'poison'];
 
 // 상성: 키 속성이 배열 속성에게 강하다
 const BEATS = {
   fire: ['nature', 'ice', 'metal'],
   water: ['fire', 'earth'],
-  nature: ['water', 'earth'],
-  earth: ['thunder', 'fire'],
   thunder: ['water', 'metal'],
-  ice: ['nature', 'earth'],
+  nature: ['water', 'earth'],
+  earth: ['thunder', 'fire', 'poison'],
   dark: ['light', 'magic'],
-  light: ['dark', 'magic'],
-  metal: ['ice', 'magic'],
+  light: ['dark', 'poison'],
+  poison: ['nature', 'water'],
+  ice: ['nature', 'earth'],
+  metal: ['ice', 'magic', 'poison'],
   magic: ['nature', 'thunder'],
 };
 
@@ -43,12 +46,9 @@ const RAR = {
 
 // ===================== 족보 =====================
 const ADV_RECIPES = [
-  { el: 'thunder', need: ['fire', 'water'] },
-  { el: 'ice',     need: ['water', 'earth'] },
-  { el: 'metal',   need: ['fire', 'earth'] },
-  { el: 'light',   need: ['fire', 'nature'] },
-  { el: 'dark',    need: ['earth', 'nature'] },
-  { el: 'magic',   need: ['water', 'nature'] },
+  { el: 'ice',   need: ['water', 'thunder'] },
+  { el: 'metal', need: ['fire', 'earth'] },
+  { el: 'magic', need: ['light', 'dark'] },
 ];
 const LEGENDS = [
   { id: 'L:phoenix', name: '피닉스 킹',     face: '🦚', els: ['fire', 'light', 'magic'],  ult: '불사조의 비상' },
@@ -57,6 +57,7 @@ const LEGENDS = [
   { id: 'L:titan',   name: '강철 타이탄',   face: '🦾', els: ['metal', 'thunder', 'earth'], ult: '타이탄 강타' },
   { id: 'L:dragon',  name: '그림자 용',     face: '🐉', els: ['dark', 'fire', 'magic'],   ult: '암흑 브레스' },
   { id: 'L:yeti',    name: '서리 거인',     face: '🧊', els: ['ice', 'metal', 'water'],   ult: '절대 영도' },
+  { id: 'L:basil',   name: '독룡 바실리스크', face: '🐍', els: ['poison', 'dark', 'nature'], ult: '맹독 폭풍' },
 ];
 const MYTHIC = { id: 'M:arche', name: '태초의 신수 아르케', face: '🌌', els: ['magic', 'light', 'dark'], ult: '태초의 빛' };
 // 전설 상점 전용: 골드로 살 수는 있지만… 절대 모을 수 없는 가격
@@ -80,8 +81,9 @@ const SK = {
   light:   { atk: { n: '빛의 창', m: 1.6 },            eff: { n: '축복', type: 'healTeam', v: 0.2 } },
   metal:   { atk: { n: '강철 주먹', m: 1.7 },          eff: { n: '강화', type: 'buffSelf' } },
   magic:   { atk: { n: '비전 폭발', m: 0.9, aoe: true }, eff: { n: '마력 증폭', type: 'buffTeam' } },
+  poison:  { atk: { n: '독침', m: 1.6 },               eff: { n: '맹독 안개', type: 'poison', m: 0.6 } },
 };
-const EFF_COST = { burn: 4, healTeam: 5, healSelf: 4, shield: 3, stun: 5, curse: 4, buffSelf: 3, buffTeam: 5 };
+const EFF_COST = { burn: 4, poison: 4, healTeam: 5, healSelf: 4, shield: 3, stun: 5, curse: 4, buffSelf: 3, buffTeam: 5 };
 const MAX_STA = 10;
 
 const basicSkill = (e) => ({ name: '할퀴기', el: e, type: 'dmg', mult: 1, cost: 0 });
@@ -108,6 +110,7 @@ function skDesc(sk) {
   switch (sk.type) {
     case 'dmg': return sk.aoe ? `적 전체에게 ${pct(sk.mult)} 피해` : `${pct(sk.mult)} 피해`;
     case 'burn': return `${pct(sk.mult)} 피해 + 3턴 화상`;
+    case 'poison': return `${pct(sk.mult)} 피해 + 4턴 중독`;
     case 'stun': return `${pct(sk.mult)} 피해 + 60% 확률 기절`;
     case 'curse': return `${pct(sk.mult)} 피해 + 공격력 30% 감소`;
     case 'healTeam': return `아군 전체 체력 ${pct(sk.v)} 회복`;
@@ -118,7 +121,7 @@ function skDesc(sk) {
   }
   return '';
 }
-const needsTarget = (sk) => ['dmg', 'burn', 'stun', 'curse'].includes(sk.type) && !sk.aoe;
+const needsTarget = (sk) => ['dmg', 'burn', 'poison', 'stun', 'curse'].includes(sk.type) && !sk.aoe;
 
 // ===================== 몬스터 카탈로그 =====================
 const CAT = {};
@@ -127,14 +130,14 @@ function addMon(m) { CAT[m.id] = m; CAT_LIST.push(m); }
 
 EL.forEach((e, i) => addMon({
   id: 'p:' + e.id, name: `${e.adj} ${e.noun}`, face: e.face, els: [e.id],
-  rarity: i < 4 ? 'common' : 'epic',
+  rarity: i < BASE.length ? 'common' : 'epic',
 }));
 for (let i = 0; i < EL.length; i++) {
   for (let j = i + 1; j < EL.length; j++) {
     const a = EL[i], b = EL[j];
     addMon({
       id: `h:${a.id}+${b.id}`, name: `${a.adj} ${b.noun}`, face: b.face, els: [a.id, b.id],
-      rarity: i < 4 && j < 4 ? 'rare' : 'epic',
+      rarity: i < BASE.length && j < BASE.length ? 'rare' : 'epic',
     });
   }
 }
@@ -176,7 +179,7 @@ function breedResult(ta, tb) {
 }
 
 // ===================== 건물 / 농장 / 룬 =====================
-const PLOTS = 16;
+const PLOTS = 25;
 const HATCH_CAP = 3;
 const BREED_LV = 4;
 const MAX_LV = 20;
@@ -201,7 +204,7 @@ const RUNE = {
 const runeText = (r) => `${RUNE[r.t].emoji} ${RUNE[r.t].name} +${RUNE[r.t].vals[r.lv - 1]}% ${'★'.repeat(r.lv)}`;
 
 // ===================== 상태 / 저장 =====================
-const KEY = 'combining-save-v2';
+const KEY = 'combining-save-v3';
 const SECRET_CODE = '방탄유리';
 
 function newState() {
@@ -215,10 +218,11 @@ function newState() {
   };
   s.plots[0] = { kind: 'mountain' };
   s.plots[1] = { kind: 'hatchery' };
-  s.plots[2] = { kind: 'farm', crop: null, end: 0 };
+  s.plots[5] = { kind: 'farm', crop: null, end: 0 };
+  const HOME = [6, 7, 8, 11, 12, 13, 16, 17];   // 기본 서식지 8개 자리
   BASE.forEach((e, i) => {
-    s.plots[4 + i] = { kind: 'hab', el: e, lv: 1, gold: 0 };
-    s.monsters.push({ uid: s.nextUid++, type: 'p:' + e, lv: 1, hab: 4 + i, runes: [null, null] });
+    s.plots[HOME[i]] = { kind: 'hab', el: e, lv: 1, gold: 0 };
+    s.monsters.push({ uid: s.nextUid++, type: 'p:' + e, lv: 1, hab: HOME[i], runes: [null, null] });
     s.dex['p:' + e] = true;
   });
   return s;
@@ -417,20 +421,21 @@ function refreshLive() {
 // ===================== 섬 장면 (캔버스) =====================
 const cv = $('#world');
 const ctx = cv.getContext('2d');
-const TW = 230, TH = 130, GRID = 4;       // 아이소메트릭 타일 크기
-const ISLAND = { x: 0, y: TH * 1.5 };      // 섬 중심 (월드 좌표)
+const TW = 230, TH = 130, GRID = 5;       // 아이소메트릭 타일 크기
+const ISLAND = { x: 0, y: TH * 2 };      // 섬 중심 (월드 좌표)
 const cam = { x: ISLAND.x, y: ISLAND.y + 30, z: 1 };
 const EMOJI_FONT = '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
 const TEXT_FONT = '"Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
 const DECOR = [
-  { x: -545, y: 195, e: '🌴', s: 72 }, { x: 545, y: 195, e: '🌴', s: 72 },
-  { x: -330, y: 20, e: '🌳', s: 54 },  { x: 330, y: 20, e: '🌳', s: 54 },
-  { x: -330, y: 385, e: '🌳', s: 50 }, { x: 330, y: 385, e: '🌲', s: 52 },
-  { x: 0, y: -115, e: '🌲', s: 50 },   { x: -210, y: 500, e: '🪨', s: 34 },
-  { x: 210, y: 500, e: '🌼', s: 28 },  { x: -470, y: 300, e: '🌼', s: 26 },
-  { x: 470, y: 90, e: '🍄', s: 26 },   { x: 0, y: 520, e: '🌷', s: 28 },
+  { x: -690, y: 260, e: '🌴', s: 80 }, { x: 690, y: 260, e: '🌴', s: 80 },
+  { x: -420, y: 40, e: '🌳', s: 56 },  { x: 420, y: 40, e: '🌳', s: 56 },
+  { x: -420, y: 500, e: '🌳', s: 54 }, { x: 420, y: 500, e: '🌲', s: 56 },
+  { x: 0, y: -140, e: '🌲', s: 52 },   { x: -250, y: 640, e: '🪨', s: 36 },
+  { x: 250, y: 640, e: '🌼', s: 30 },  { x: -600, y: 390, e: '🌼', s: 28 },
+  { x: 600, y: 130, e: '🍄', s: 28 },  { x: 0, y: 670, e: '🌷', s: 30 },
+  { x: -570, y: 130, e: '🌲', s: 44 }, { x: 570, y: 400, e: '🌳', s: 46 },
 ];
-const BOATS = [{ x: -800, y: 60, v: 18 }, { x: 500, y: 560, v: -12 }];
+const BOATS = [{ x: -900, y: -40, v: 18 }, { x: 600, y: 760, v: -12 }];
 let W = 0, H = 0, DPR = 1;
 const walkers = {};
 const floaters = [];
@@ -448,7 +453,7 @@ function resize() {
   H = window.innerHeight;
   cv.width = Math.round(W * DPR);
   cv.height = Math.round(H * DPR);
-  cam.z = clamp(Math.min(W / 1000, (H - 190) / 700), 0.3, 1.2);
+  cam.z = clamp(Math.min(W / 1150, (H - 190) / 860), 0.26, 1.2);
 }
 
 function diamond(x, y, hw, hh) {
@@ -569,22 +574,22 @@ function drawIsland(t) {
   const { x, y } = ISLAND;
   const foam = 0.5 + Math.sin(t * 2) * 0.5;
   ctx.beginPath();
-  ctx.ellipse(x, y + 16, 660 + foam * 8, 392 + foam * 6, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y + 16, 800 + foam * 8, 482 + foam * 6, 0, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(255,255,255,.25)';
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(x, y + 14, 640, 378, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y + 14, 780, 468, 0, 0, Math.PI * 2);
   ctx.fillStyle = '#c9a85a';
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(x, y, 630, 365, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y, 770, 455, 0, 0, Math.PI * 2);
   ctx.fillStyle = '#ecd592';
   ctx.fill();
-  const g = ctx.createRadialGradient(x, y - 60, 60, x, y, 620);
+  const g = ctx.createRadialGradient(x, y - 60, 60, x, y, 760);
   g.addColorStop(0, '#6fd35e');
   g.addColorStop(1, '#3b9a3c');
   ctx.beginPath();
-  ctx.ellipse(x, y - 6, 595, 338, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y - 6, 735, 428, 0, 0, Math.PI * 2);
   ctx.fillStyle = g;
   ctx.fill();
 }
@@ -730,8 +735,8 @@ function drawWorld(now) {
     ctx.setTransform(DPR * z, 0, 0, DPR * z, DPR * (W / 2 - cam.x * z), DPR * (H / 2 + 10 - cam.y * z));
     BOATS.forEach(b => {
       b.x += b.v * dt;
-      if (b.x > 1100) b.x = -1100;
-      if (b.x < -1100) b.x = 1100;
+      if (b.x > 1300) b.x = -1300;
+      if (b.x < -1300) b.x = 1300;
       emoji('⛵', b.x, b.y + Math.sin(t * 1.5 + b.y) * 4, 48, Math.sin(t * 1.2) * 0.06, b.v < 0 ? 1 : -1);
     });
     drawIsland(t);
@@ -775,8 +780,8 @@ cv.addEventListener('pointermove', (e) => {
   const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
   if (Math.hypot(dx, dy) > 8) drag.moved = true;
   if (drag.moved) {
-    cam.x = clamp(drag.cx - dx / cam.z, -520, 520);
-    cam.y = clamp(drag.cy - dy / cam.z, -120, 520);
+    cam.x = clamp(drag.cx - dx / cam.z, -650, 650);
+    cam.y = clamp(drag.cy - dy / cam.z, -150, 680);
   }
 });
 cv.addEventListener('pointerup', (e) => {
@@ -1273,7 +1278,10 @@ function renderShop() {
       <button class="shop-item" data-act="buyGold" data-n="5"><span class="si-ico">💰</span><span class="si-nm">골드 500</span><span class="si-cost">💎 5</span></button>
       <button class="shop-item" data-act="buyGold" data-n="50"><span class="si-ico">💰</span><span class="si-nm">골드 6,000</span><span class="si-cost">💎 50</span></button>
     </div>
-    <h3 class="sub">👑 전설 상점 <small class="muted">골드로 살 수 있어요… 모을 수만 있다면요</small></h3>
+    <h3 class="sub">🥚 몬스터 상점 <small class="muted">기본 몬스터 알을 살 수 있어요 (부화장으로 가요)</small></h3>
+    <div class="grid small">${BASE.map(e => card({ type: 'p:' + e, lv: 1 }, `data-act="buyMon" data-type="p:${e}"`, 'mini',
+      `<div class="price-tag">💰 ${fmt(MON_PRICE)}</div>`)).join('')}</div>
+    <h3 class="sub">👑 전설 상점<small class="muted">골드로 살 수 있어요… 모을 수만 있다면요</small></h3>
     <div class="legend-shop">${SHOP_LEGENDS.map(l => {
       const c = CAT[l.id];
       const owned = S.monsters.filter(m => m.type === l.id).length + S.hatch.filter(t => t === l.id).length;
@@ -1307,6 +1315,18 @@ function waitText(price) {
   const years = left / inc / 31536000;
   if (years < 1) return `지금 수입으로 약 ${fmt(left / inc / 86400)}일`;
   return `지금 수입으로 약 ${fmt(years)}년 😱`;
+}
+
+const MON_PRICE = 500;
+function buyMon(type) {
+  if (!CAT[type]) return;
+  if (S.hatch.length >= HATCH_CAP) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
+  if (!spend(MON_PRICE)) return;
+  S.hatch.push(type);
+  save();
+  toast(`🥚 ${CAT[type].name} 알을 샀어요!`);
+  render();
+  openHatchery();
 }
 
 function buyLegend(id) {
@@ -1421,7 +1441,7 @@ function mkUnit(m, side, idx) {
   return {
     id: side + idx, side, c, lv: m.lv,
     maxHp: st.hp, hp: st.hp, atk: st.atk, spd: st.spd, sta: 2,
-    fx: { burn: 0, burnDmg: 0, stun: 0, shield: 0, buff: 0, curse: 0 },
+    fx: { burn: 0, burnDmg: 0, poison: 0, poisonDmg: 0, stun: 0, shield: 0, buff: 0, curse: 0 },
   };
 }
 const aliveOf = (side) => B.units.filter(u => u.side === side && u.hp > 0);
@@ -1461,12 +1481,14 @@ function nextTurn() {
   B.cur = u;
   u.sta = Math.min(MAX_STA, u.sta + 2);
 
-  if (u.fx.burn > 0) {
-    u.hp = Math.max(0, u.hp - u.fx.burnDmg);
-    u.fx.burn--;
-    logB(`🔥 ${u.c.name} 화상 피해 -${fmt(u.fx.burnDmg)}${u.hp <= 0 ? ' 💀 쓰러졌다!' : ''}`);
-    if (u.hp <= 0) { drawBattle(); later(nextTurn); return; }
+  for (const [k, label] of [['burn', '🔥 화상'], ['poison', '🧪 중독']]) {
+    if (u.fx[k] > 0 && u.hp > 0) {
+      u.hp = Math.max(0, u.hp - u.fx[k + 'Dmg']);
+      u.fx[k]--;
+      logB(`${label} 피해! ${u.c.name} -${fmt(u.fx[k + 'Dmg'])}${u.hp <= 0 ? ' 💀 쓰러졌다!' : ''}`);
+    }
   }
+  if (u.hp <= 0) { drawBattle(); later(nextTurn); return; }
   if (u.fx.stun > 0) {
     u.fx.stun--;
     tickFx(u);
@@ -1517,6 +1539,9 @@ function useSkill(u, sk, tgt) {
       break;
     case 'burn':
       if (hit(tgt, sk.mult)) { tgt.fx.burn = 3; tgt.fx.burnDmg = Math.round(u.atk * 0.3); msg += ' 🔥화상!'; }
+      break;
+    case 'poison':
+      if (hit(tgt, sk.mult)) { tgt.fx.poison = 4; tgt.fx.poisonDmg = Math.round(u.atk * 0.25); msg += ' 🧪중독!'; }
       break;
     case 'stun':
       if (hit(tgt, sk.mult) && Math.random() < 0.6) { tgt.fx.stun = 1; msg += ' 💫기절!'; }
@@ -1630,7 +1655,7 @@ function unitHTML(u) {
   const isCur = B.cur === u && !B.over;
   const isTgt = u.side === 'foe' && B.target === u.id && B.waiting;
   const fx = [
-    u.fx.burn ? '🔥' : '', u.fx.stun ? '💫' : '', u.fx.shield ? '🛡️' : '',
+    u.fx.burn ? '🔥' : '', u.fx.poison ? '🧪' : '', u.fx.stun ? '💫' : '', u.fx.shield ? '🛡️' : '',
     u.fx.buff ? '💪' : '', u.fx.curse ? '💀' : '',
   ].join('');
   return `<div class="unit ${u.side} ${isCur ? 'cur' : ''} ${isTgt ? 'tgt' : ''} ${u.hp <= 0 ? 'dead' : ''} ${u.flash ? 'hit' : ''}"
@@ -1807,6 +1832,7 @@ const ACTIONS = {
   unequip: (d) => unequip(d.uid, Number(d.slot)),
   buyRune: (d) => buyRune(d.kind),
   buyLegend: (d) => buyLegend(d.id),
+  buyMon: (d) => buyMon(d.type),
   buyFood: (d) => buyFood(d.n),
   buyGold: (d) => buyGold(d.n),
   merge: (d) => merge(d.t, d.lv),

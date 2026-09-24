@@ -266,6 +266,11 @@ h4.sub { margin: 16px 0 8px; font-size: 14px; text-align: left; }
 .si-nm { flex: 1; font-weight: 700; display: flex; flex-direction: column; }
 .si-nm small { color: var(--muted); font-weight: 400; font-size: 11px; }
 .si-cost { font-weight: 800; white-space: nowrap; }
+.price-tag {
+  position: absolute; top: 6px; left: 50%; transform: translateX(-50%); z-index: 1;
+  background: #000b; color: #ffe066; font-size: 11px; font-weight: 800;
+  padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+}
 .legend-shop { display: grid; gap: 10px; }
 .legend-item {
   display: grid; grid-template-columns: 76px 1fr auto; gap: 12px; align-items: center;
