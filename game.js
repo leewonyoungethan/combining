@@ -261,6 +261,7 @@ const shuffle = (arr) => {
   return a;
 };
 
+const SHOP_BREED_CHANCE = [0.15, 0.08, 0.02];   // 전설 상점 몬스터: 약한 부모와 같은 등급 / 한 단계 위 / 두 단계 위
 const LEGEND_RECIPE_CHANCE = 0.4;               // 족보를 맞췄을 때 레전더리 한 마리당 확률
 const LUCKY_LEGEND = { rare: 0.04, epic: 0.1 }; // 두 부모가 모두 레어 이상 / 에픽 이상일 때 행운의 레전더리
 
@@ -274,8 +275,20 @@ function breedDist(ta, tb) {
     list.forEach(t => add(t, p * vw(t) / tot));
   };
   if (isLegend(ta) && isLegend(tb)) {
-    add(MYTHIC.id, 0.35);
-    [ta, tb].forEach(t => add(CAT[t].shop ? MYTHIC.id : t, 0.325));   // 상점 전용은 복제 불가
+    // 약한 쪽 부모 등급 기준: 같은 등급 15%, 한 단계 위 8%, 두 단계 위 2% (같은 등급 몬스터끼리는 나눠 갖는다)
+    const lo = Math.min(rIdx(ta), rIdx(tb));
+    let shopTotal = 0;
+    RAR_ORDER.forEach((key, R) => {
+      const list = SHOP_LEGENDS.filter(l => CAT[l.id].rarity === key);
+      if (!list.length) return;
+      const p = R >= lo ? (SHOP_BREED_CHANCE[R - lo] || 0) : 0;   // 부모보다 낮은 등급은 안 나온다
+      list.forEach(l => add(l.id, p / list.length));
+      shopTotal += p;
+    });
+    const rest = 1 - shopTotal;
+    add(MYTHIC.id, 0.35 * rest);
+    // 부모를 그대로 물려받는 몫: 상점 몬스터는 위 확률로만 나오게 하고 이 몫은 신화로
+    [ta, tb].forEach(t => add(CAT[t].shop ? MYTHIC.id : t, 0.325 * rest));
     return d;
   }
   const pool = [...new Set([...CAT[ta].els, ...CAT[tb].els])];
@@ -3089,7 +3102,7 @@ function claimDaily() {
 let dexFilter = { el: 'all', rar: 'all', found: 'all' };
 
 function dexHint(c) {
-  if (c.shop) return `👑 전설 상점 💰${fmt(c.price)}`;
+  if (c.shop) return `👑 전설 상점 💰${fmt(c.price)} 또는 전설 이상끼리 교배 (아주 드물게)`;
   if (c.rarity === 'mythic') return '전설 + 전설';
   if (c.rarity === 'legendary') return `족보: ${elBadges(c.els)} 세 속성을 섞기 (서사끼리 교배해도 가끔 나와요)`;
   const adv = ADV_RECIPES.find(r => 'p:' + r.el === c.group);
@@ -3147,7 +3160,13 @@ function bestOwnedPair(target, needLv) {
 // 이론상 최고의 부모 (도감 기준)
 function idealParents(target) {
   const c = CAT[target];
-  if (c.shop) return null;
+  if (c.shop) {
+    // 한 단계 아래 등급 둘을 섞는 게 가장 좋다: 초월 ← 신화+신화, 신성 ← 초월+초월 ...
+    const below = RAR_ORDER[rIdx(target) - 1];
+    const par = below === 'mythic' ? MYTHIC.id : (SHOP_LEGENDS.find(l => CAT[l.id].rarity === below) || {}).id;
+    if (!par) return null;
+    return { pa: par, pb: par, p: breedDist(par, par)[target] || 0 };
+  }
   let pa, pb;
   if (c.rarity === 'mythic') { pa = LEGENDS[0].id; pb = LEGENDS[1].id; }
   else if (c.rarity === 'legendary') { pa = hybridId(c.els[0], c.els[1]); pb = 'p:' + c.els[2]; }
@@ -3169,11 +3188,12 @@ function openDexMon(type) {
   let how = '';
   if (c.shop) {
     how = `<div class="rec-box">
-      <p>교배로는 얻을 수 없어요. <b>👑 전설 상점</b>에서만 살 수 있어요.</p>
+      <p><b>👑 전설 상점</b>에서 살 수 있어요. 전설 이상 몬스터끼리 교배해도 <b>아주 드물게</b> 태어나요!</p>
       <p class="li-price">💰 ${fmt(c.price)}</p>
       <div class="row"><button class="btn" data-act="tab" data-tab="shop">🛒 상점으로 가기</button></div>
     </div>`;
-  } else {
+  }
+  {
     const best = bestOwnedPair(type, true);
     const bestAny = best ? null : bestOwnedPair(type, false);
     const ideal = idealParents(type);
