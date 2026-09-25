@@ -2543,10 +2543,54 @@ function renderAdventure() {
     ${renderBossList()}
     <details class="chart-box"><summary>📘 속성 상성표 보기 (무슨 속성이 무슨 속성에게 강할까?)</summary>${typeChartHTML()}</details>
     <h3 class="sub">몬스터를 눌러 팀에 넣거나 빼세요</h3>
-    <div class="grid">${sortMons(S.monsters).map(m => {
-      const i = S.team.indexOf(m.uid);
-      return card(m, `data-act="team" data-uid="${m.uid}"`, i >= 0 ? 'sel' : '', i >= 0 ? `<div class="check">${i + 1}</div>` : '');
-    }).join('')}</div>`;
+    ${teamPickHTML(foeEls)}`;
+}
+
+// ----- 모험 팀 고르기: 등급/속성별로 나눠 보기 + 상대에게 강한 몬스터 표시 -----
+const teamView = () => (S.teamView = { group: 'rar', el: 'all', sort: 'power', strong: false, ...(S.teamView || {}) });
+function teamPickHTML(foeEls) {
+  const v = teamView();
+  const chip = (key, val, label) =>
+    `<button class="chip ${String(v[key]) === String(val) ? 'on' : ''}" data-act="teamView" data-k="${key}" data-v="${val}">${label}</button>`;
+  const owned = new Set(S.monsters.flatMap(m => CAT[m.type].els));
+  // 이 몬스터의 속성 중 하나라도 상대 팀 속성에게 강하면 ▲
+  const strongVs = (m) => CAT[m.type].els.some(e => BEATS[e].some(x => foeEls.includes(x)));
+  const powerOf = (m) => { const st = stats(m); return Math.round(st.atk * 3 + st.hp / 4 + st.spd); };
+  const sorter = v.sort === 'lv' ? (a, b) => b.lv - a.lv || rIdx(b.type) - rIdx(a.type)
+    : v.sort === 'rar' ? (a, b) => rIdx(b.type) - rIdx(a.type) || b.lv - a.lv
+    : (a, b) => powerOf(b) - powerOf(a);
+  const list = S.monsters
+    .filter(m => v.el === 'all' || CAT[m.type].els.includes(v.el))
+    .filter(m => !v.strong || strongVs(m))
+    .sort(sorter);
+  const cardOf = (m) => {
+    const i = S.team.indexOf(m.uid);
+    const tag = `${i >= 0 ? `<div class="check">${i + 1}</div>` : ''}${strongVs(m) ? '<div class="strong-tag">▲ 강함</div>' : ''}<div class="power-tag">⚔️${fmt(powerOf(m))}</div>`;
+    return card(m, `data-act="team" data-uid="${m.uid}"`, i >= 0 ? 'sel' : '', tag);
+  };
+  const groups = new Map();
+  list.forEach(m => {
+    const c = CAT[m.type];
+    let key, label, order;
+    if (v.group === 'rar') { key = c.rarity; label = `<span style="color:${RAR[c.rarity].color}">⭐ ${RAR[c.rarity].name}</span>`; order = -rIdx(m.type); }
+    else if (v.group === 'el') { key = c.els.join('+'); label = `${elBadges(c.els)} ${c.els.map(e => EL[ELI[e]].name).join(' + ')}`; order = c.els.length * 100 + ELI[c.els[0]] * 10 + (ELI[c.els[1]] || 0); }
+    else { key = 'all'; label = '📋 전체'; order = 0; }
+    if (!groups.has(key)) groups.set(key, { label, order, items: [] });
+    groups.get(key).items.push(m);
+  });
+  const body = list.length
+    ? [...groups.values()].sort((a, b) => a.order - b.order).map(g => `
+        <div class="bp-group">
+          <div class="bp-head">${g.label} <span class="muted">${g.items.length}마리 · ▲ 강함 ${g.items.filter(strongVs).length}</span></div>
+          <div class="grid">${g.items.map(cardOf).join('')}</div>
+        </div>`).join('')
+    : '<p class="muted">조건에 맞는 몬스터가 없어요.</p>';
+  return `<div class="team-pick">
+    <div class="chips"><span class="chip-label">묶어 보기</span>${chip('group', 'rar', '⭐ 등급')}${chip('group', 'el', '🔥 속성')}${chip('group', 'none', '📋 전체')}${chip('strong', !v.strong, v.strong ? '✅ ▲ 상대에게 강한 것만' : '☐ ▲ 상대에게 강한 것만')}</div>
+    <div class="chips"><span class="chip-label">정렬</span>${chip('sort', 'power', '⚔️ 전투력')}${chip('sort', 'lv', '⬆️ 레벨')}${chip('sort', 'rar', '⭐ 등급')}</div>
+    <div class="chips"><span class="chip-label">속성</span>${chip('el', 'all', '전체')}${EL.filter(e => owned.has(e.id)).map(e => chip('el', e.id, e.emoji + e.name)).join('')}</div>
+    ${body}
+  </div>`;
 }
 
 function toggleTeam(uid) {
@@ -2556,7 +2600,9 @@ function toggleTeam(uid) {
   else if (S.team.length < 3) S.team.push(uid);
   else { toast('팀은 최대 3마리예요'); return; }
   save();
+  const p = $('#panel'), y = p.scrollTop;
   renderAdventure();
+  p.scrollTop = y;
 }
 
 // ===================== 턴제 전투 =====================
@@ -3720,6 +3766,7 @@ const ACTIONS = {
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; drawBattle(); },
   typeChart: () => openTypeChart(),
+  teamView: (d) => { const v = teamView(); v[d.k] = d.k === 'strong' ? d.v === 'true' : d.v; save(); const p = $('#panel'), y = p.scrollTop; renderAdventure(); p.scrollTop = y; },
   breedView: (d) => { const v = breedView(); v[d.k] = d.k === 'ready' ? d.v === 'true' : d.v; save(); const box = $('#modalBox'); const y = box.scrollTop; openBreed(curMtn); box.scrollTop = y; },
   sellDups: (d) => openSellDups(d.type),
   sellDupsOk: (d) => sellDups(d.type),
