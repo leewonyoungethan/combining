@@ -702,3 +702,6 @@ body.ui-hidden .zoom-btns { opacity: .55; }
 .slot-btn.busy { border-color: #7a44b8; }
 .slot-btn.done { border-color: #ffe066; }
 .slot-btn.on { background: linear-gradient(180deg, #54489a, #332c6e); border-color: var(--accent); box-shadow: 0 0 10px rgba(255, 176, 32, .45); }
+
+.inc-empty { margin: 14px 0; }
+.egg-slot small { font-size: 10px; }

@@ -641,7 +641,7 @@ function plotReady(i) {
   const p = S.plots[i];
   if (!p) return false;
   if (p.kind === 'mountain') return mtnBusy(p).some(b => Date.now() >= b.end);
-  if (p.kind === 'hatchery') return S.hatch.length > 0;
+  if (p.kind === 'hatchery') { const incs = hatchIncs(p); return incs.some(b => b && Date.now() >= b.end) || (S.hatch.length > 0 && incs.some(b => !b)); }
   if (p.kind === 'farm') return p.crop != null && Date.now() >= p.end;
   if (p.kind === 'hab') return p.gold >= 1;
   return false;
@@ -659,12 +659,24 @@ function liveText(key) {
       if (busy.some(b => now >= b.end)) return `🥚 완료!${cnt}`;
       return `⏳ ${mmss(Math.min(...busy.map(b => b.end - now)) / 1000)}${cnt}`;
     }
-    if (p.kind === 'hatchery') return `🥚 ${S.hatch.length}/${hatchCap()}`;
+    if (p.kind === 'hatchery') {
+      const incs = hatchIncs(p), busy = incs.filter(Boolean);
+      if (busy.some(b => now >= b.end)) return `🐣 완료! ${busy.length}/${incs.length}`;
+      if (busy.length) return `⏳ ${mmss(Math.min(...busy.map(b => b.end - now)) / 1000)}${incs.length > 1 ? ` ${busy.length}/${incs.length}` : ''}`;
+      return `🥚 ${S.hatch.length}/${hatchCap()}`;
+    }
     if (p.kind === 'farm') {
       if (p.crop == null) return '비어 있음';
       return now >= p.end ? `${CROPS[p.crop].emoji} 수확!` : `⏳ ${mmss((p.end - now) / 1000)}`;
     }
     if (p.kind === 'hab') return `💰 ${fmt(p.gold)}`;
+  }
+  if (k === 'inc' || k === 'incGem') {
+    const [pi, si] = arg.split('|').map(Number);
+    const b = S.plots[pi] && S.plots[pi].kind === 'hatchery' ? hatchIncs(S.plots[pi])[si] : null;
+    if (!b) return k === 'inc' ? '' : '0';
+    if (k === 'incGem') return fmt(gemCost((b.end - now) / 1000, 10));
+    return now >= b.end ? '완료!' : mmss((b.end - now) / 1000);
   }
   if (k === 'breed' || k === 'breedGem') {
     const [pi, si] = arg.split('|').map(Number);
@@ -691,6 +703,7 @@ function liveText(key) {
 function liveBar(key) {
   const [k, arg] = key.split(':');
   const now = Date.now();
+  if (k === 'inc') { const [pi, si] = arg.split('|').map(Number); const b = S.plots[pi] && S.plots[pi].kind === 'hatchery' ? hatchIncs(S.plots[pi])[si] : null; if (b) return Math.min(1, 1 - (b.end - now) / 1000 / b.total); }
   if (k === 'breed') { const [pi, si] = arg.split('|').map(Number); const b = S.plots[pi] && S.plots[pi].kind === 'mountain' ? mtnSlots(S.plots[pi])[si || 0] : null; if (b) return Math.min(1, 1 - (b.end - now) / 1000 / b.total); }
   if (k === 'farm') {
     const p = S.plots[Number(arg)];
@@ -929,6 +942,10 @@ function drawPlot(p, i, x, y, t, dt) {
     emoji('🪺', x, y - 18 - big / 3, 86 + big);
     if (!S.hideUI && (p.cap || HATCH_CAP) > HATCH_CAP) emoji('⭐', x + 44, y - 58, 24);
     const hk = hatcheries().indexOf(i), per = Math.ceil(S.hatch.length / Math.max(1, hatcheries().length));
+    hatchIncs(p).filter(Boolean).slice(0, 3).forEach((b, bi) => {
+      const done = Date.now() >= b.end;
+      emoji('🥚', x - 30 + bi * 30, y - 40 + (done ? Math.abs(Math.sin(t * 6 + bi)) * -10 : 0), 34, done ? 0 : Math.sin(t * 7 + bi) * 0.3);
+    });
     S.hatch.slice(hk * per, hk * per + per).slice(0, 4).forEach((type, k) => emoji('🥚', x - 51 + k * 34, y + 26 + Math.sin(t * 6 + k) * 2, 30, Math.sin(t * 5 + k) * 0.2));
   } else if (p.kind === 'farm') {
     block(x, y, hw, hh, '#8c5a2c', '#56361a');
@@ -1126,7 +1143,7 @@ function dropResult(from, to) {
   const p = S.plots[from], q = to >= 0 ? S.plots[to] : undefined;
   if (to < 0 || to === from) return { ok: false };
   if (!q) return { ok: true, kind: 'move', text: '🚚 여기로 옮기기' };
-  if (p.kind === 'hatchery' && q.kind === 'hatchery') return { ok: true, kind: 'merge', text: `🔗 합치기 → ${(p.cap || HATCH_CAP) + (q.cap || HATCH_CAP) + 1}칸` };
+  if (p.kind === 'hatchery' && q.kind === 'hatchery') return { ok: true, kind: 'merge', text: `🔗 합치기 → 동시에 ${(p.lv || 1) + (q.lv || 1)}개 부화` };
   if (p.kind === 'mountain' && q.kind === 'mountain') {
     return { ok: true, kind: 'merge', text: `🔗 합치기 → 큰 교배산 Lv.${(p.lv || 1) + (q.lv || 1)} (동시에 ${(p.lv || 1) + (q.lv || 1)}쌍)` };
   }
@@ -1416,6 +1433,7 @@ function demolish(i) {
   if (!p || !['hab', 'farm', 'mountain', 'hatchery', 'deco'].includes(p.kind)) return;
   if (p.kind === 'hatchery') {
     if (hatcheries().length <= 1) { toast('하나뿐인 부화장은 철거할 수 없어요'); return; }
+    if (hatchIncs(p).some(Boolean)) { toast('부화 중인 알이 있는 부화장은 철거할 수 없어요'); return; }
     if (S.hatch.length > hatchCap() - (p.cap || HATCH_CAP)) { toast('알이 너무 많아서 철거할 수 없어요. 먼저 부화시켜 주세요'); return; }
   }
   if (p.kind === 'mountain' && (mtnBusy(p).length || mountains().length <= 1)) { toast('교배 중이거나 하나뿐인 교배산은 철거할 수 없어요'); return; }
@@ -1749,6 +1767,7 @@ function openBreed(i = curMtn, slot) {
         <button class="btn green" data-act="takeEgg" data-i="${i}" data-s="${curSlot}">🥚 알 가져가기</button>
         <button class="btn ghost" data-act="breedGem" data-i="${i}" data-s="${curSlot}">💎 <span data-live="breedGem:${key}"></span> 즉시 완성</button>
       </div>
+      ${done ? '' : `<div class="row"><button class="btn ghost small danger" data-act="breedCancel" data-i="${i}" data-s="${curSlot}">❌ 교배 취소${b.cost ? ` (+💰 ${fmt(b.cost)} 돌려받기)` : ''}</button></div>`}
       ${mountainFooter(i)}`);
     return;
   }
@@ -1875,12 +1894,13 @@ function startBreed(i = curMtn) {
   const [a, b] = sel.map(byUid);
   if (!p || p.kind !== 'mountain' || !a || !b || mtnSlots(p)[curSlot]) return;
   if (a.lv < BREED_LV || b.lv < BREED_LV) { toast(`두 마리 모두 Lv.${BREED_LV} 이상이어야 해요`); return; }
-  if (!spend(breedCost(a, b))) return;
+  const paid = breedCost(a, b);
+  if (!spend(paid)) return;
   const type = breedResult(a.type, b.type);
   const base = RAR[CAT[type].rarity].time;
   const total = base;
   const logId = S.nextLog = (S.nextLog || 0) + 1;
-  mtnSlots(p)[curSlot] = { type, total, base, end: Date.now() + total * 1000, parents: [CAT[a.type].name, CAT[b.type].name], logId };
+  mtnSlots(p)[curSlot] = { type, total, base, end: Date.now() + total * 1000, parents: [CAT[a.type].name, CAT[b.type].name], logId, cost: S.infinite ? 0 : paid };
   // 다음에 창을 열면 비어 있는 다음 칸으로
   const nextFree = mtnFreeSlot(p);
   S.breedLog = [{ id: logId, a: a.uid, b: b.uid, at: a.type, bt: b.type, rt: type, t: Date.now() }, ...(S.breedLog || [])].slice(0, BREED_LOG_MAX);
@@ -1890,6 +1910,23 @@ function startBreed(i = curMtn) {
   if (nextFree >= 0 && mtnSlots(p).length > 1) toast(`⛰️ 칸 ${curSlot + 1}에서 교배를 시작했어요! 비어 있는 칸이 더 있어요`);
   refreshLive();
   updateHud();
+}
+
+// 교배 취소: 알은 사라지고 교배 비용을 돌려받는다
+function breedCancel(i, sl) {
+  const p = S.plots[Number(i)];
+  const slots = p && p.kind === 'mountain' ? mtnSlots(p) : null;
+  const br = slots ? slots[Number(sl)] : null;
+  if (!br || Date.now() >= br.end) return;
+  if (!confirm('교배를 취소할까요? 태어날 알은 사라지고 교배 비용은 돌려받아요.')) return;
+  slots[Number(sl)] = null;
+  if (br.cost) earn(br.cost);
+  S.breedLog = (S.breedLog || []).filter(e => e.id !== br.logId);
+  save();
+  toast(`❌ 교배를 취소했어요${br.cost ? ` (💰 ${fmt(br.cost)} 돌려받음)` : ''}`);
+  updateHud();
+  render();
+  openBreed(Number(i), Number(sl));
 }
 
 function breedGem(i = curMtn, sl = curSlot) {
@@ -1920,25 +1957,212 @@ function takeEgg(i = curMtn, sl = curSlot) {
 }
 
 // ----- 부화장 -----
-let curHatch = null;
-function openHatchery(i = curHatch) {
-  if (i != null && (!S.plots[i] || S.plots[i].kind !== 'hatchery')) i = null;
+// ----- 부화: 대기 중인 알(S.hatch) → 부화 칸(p.incs)에 넣으면 시간이 흐르고, 다 되면 깨워서 서식지로 -----
+// 큰 부화장은 합친 개수(레벨)만큼 동시에 부화한다
+const hatchTime = (t) => Math.max(3, Math.round(RAR[CAT[t].rarity].time / 2));
+const hatchIncs = (p) => { if (!Array.isArray(p.incs)) p.incs = []; while (p.incs.length < (p.lv || 1)) p.incs.push(null); return p.incs; };
+const allIncs = () => hatcheries().flatMap(k => hatchIncs(S.plots[k]).map((b, s) => ({ k, s, b })));
+let curHatch = null, curInc = 0;
+
+function incSlotBarHTML(i) {
+  const incs = hatchIncs(S.plots[i]);
+  if (incs.length < 2) return '';
+  const now = Date.now();
+  return `<div class="slot-bar">${incs.map((b, s) => {
+    const st = !b ? '비어 있음' : now >= b.end ? '🐣 완료!' : `⏳ <span data-live="inc:${i}|${s}"></span>`;
+    return `<button class="slot-btn ${s === curInc ? 'on' : ''} ${b ? (now >= b.end ? 'done' : 'busy') : 'free'}" data-act="incSlot" data-s="${s}">칸 ${s + 1}<small>${st}</small></button>`;
+  }).join('')}</div>`;
+}
+
+function openHatchery(i = curHatch, slot) {
+  if (i == null || !S.plots[i] || S.plots[i].kind !== 'hatchery') {
+    // 다 된 알이 있는 부화장 → 빈 칸이 있는 부화장 → 첫 부화장
+    const ready = allIncs().find(x => x.b && Date.now() >= x.b.end);
+    const free = allIncs().find(x => !x.b);
+    i = ready ? ready.k : free ? free.k : hatcheries()[0];
+    if (slot == null) slot = ready ? ready.s : free ? free.s : 0;
+  }
+  if (i !== curHatch && slot == null) { const f = hatchIncs(S.plots[i]).findIndex(x => !x); slot = f >= 0 ? f : 0; }
   curHatch = i;
+  const p = S.plots[i], incs = hatchIncs(p);
+  if (slot != null) curInc = Number(slot);
+  if (curInc >= incs.length) curInc = 0;
   const n = hatcheries().length;
+  const now = Date.now();
+  const b = incs[curInc];
+  const key = `${i}|${curInc}`;
+  let view;
+  if (b && now < b.end) {
+    view = `<div class="egg ${eggLv(b.type)}">🥚</div>
+      <div class="timer" data-live="inc:${key}"></div>
+      <div class="bar green"><div data-bar="inc:${key}"></div></div>
+      <div class="row">
+        <button class="btn ghost" data-act="incGem" data-i="${i}" data-s="${curInc}">💎 <span data-live="incGem:${key}"></span> 즉시 부화</button>
+        <button class="btn ghost small danger" data-act="incCancel" data-i="${i}" data-s="${curInc}">❌ 부화 취소</button>
+      </div>`;
+  } else if (b) {
+    view = `<div class="egg ready">🥚</div>
+      <div class="hint">알이 흔들려요! 깨어날 준비가 됐어요</div>
+      <div class="row"><button class="btn big green" data-act="crack" data-i="${i}" data-s="${curInc}">🐣 깨우기!</button></div>`;
+  } else {
+    view = `<p class="muted inc-empty">${incs.length > 1 ? `칸 ${curInc + 1}이(가) ` : '부화 칸이 '}비어 있어요. 아래 알을 눌러 부화를 시작해요 🔥</p>`;
+  }
+  const busy = incs.filter(Boolean).length;
+  const anyFree = allIncs().some(x => !x.b), anyDone = allIncs().some(x => x.b && now >= x.b.end);
   showModal(`
-    <h3>🪺 부화장 <small class="muted">${S.hatch.length}/${hatchCap()}</small></h3>
-    <p class="muted">알을 부화시켜 알맞은 서식지로 보내 주세요.</p>
+    <h3>🪺 부화장${incs.length > 1 ? ` <small class="muted">큰 부화장 Lv.${p.lv} · 동시에 ${incs.length}개</small>` : ''}</h3>
+    ${incSlotBarHTML(i)}
+    ${view}
+    <h4 class="sub">🥚 대기 중인 알 <small class="muted">${S.hatch.length}/${hatchCap()} · 부화 중 ${busy}/${incs.length}</small></h4>
     <div class="egg-row">${S.hatch.length
-      ? S.hatch.map((t, i) => `<button class="egg-slot" data-act="hatchOne" data-idx="${i}"><span class="egg small ${eggLv(t)}">🥚</span><span>부화!</span></button>`).join('')
-      : '<p class="muted">부화장이 비어 있어요. 교배산에서 알을 가져오세요!</p>'}</div>
-    ${S.hatch.length > 1 ? `<div class="all-box"><button class="btn green" data-act="hatchAll">🐣 모두 부화 (알맞은 서식지로 자동 이사)</button></div>` : ''}
-    <p class="muted small-note">부화장 ${n}개가 알을 같이 보관해요 (${hatcheries().map(k => (S.plots[k].cap || HATCH_CAP) + '칸').join(' + ')}${mountains().length > 1 ? ` + 교배산 추가분 ${2 * (mountains().length - 1)}칸` : ''})</p>
-    ${n > 1 ? '<p class="muted small-note">💡 섬에서 부화장을 꾹 눌러 다른 부화장 위로 끌어도 합쳐져요</p>' : ''}
-    ${i != null && n > 1 ? `<div class="all-box"><button class="btn small" data-act="mergePick" data-i="${i}">🔗 다른 부화장과 합쳐서 큰 부화장 만들기 (+1칸 보너스)</button></div>` : ''}
+      ? S.hatch.map((t, k) => `<button class="egg-slot" data-act="incubate" data-idx="${k}"><span class="egg small ${eggLv(t)}">🥚</span><span>🔥 부화 시작</span><small class="muted">${mmss(hatchTime(t))}</small></button>`).join('')
+      : '<p class="muted">대기 중인 알이 없어요. 교배산이나 상점에서 알을 가져오세요!</p>'}</div>
+    <div class="all-box row">
+      ${S.hatch.length && anyFree ? '<button class="btn small" data-act="incubateAll">🔥 빈 칸 모두 부화 시작</button>' : ''}
+      ${anyDone ? '<button class="btn small green" data-act="crackAll">🐣 다 된 알 모두 꺼내기 (자동 이사)</button>' : ''}
+    </div>
+    <p class="muted small-note">부화장 ${n}개가 대기 알을 같이 보관해요 (${hatcheries().map(k => (S.plots[k].cap || HATCH_CAP) + '칸').join(' + ')}${mtnPower() > 1 ? ` + 교배산 추가분 ${2 * (mtnPower() - 1)}칸` : ''})</p>
+    ${n > 1 ? '<p class="muted small-note">💡 부화장을 합치면 합친 개수만큼 동시에 부화해요. 섬에서 꾹 눌러 다른 부화장 위로 끌어도 합쳐져요</p>' : ''}
+    ${n > 1 ? `<div class="all-box"><button class="btn small" data-act="mergePick" data-i="${i}">🔗 다른 부화장과 합쳐서 큰 부화장 만들기</button></div>` : ''}
     <div class="row">
-      ${i != null && n > 1 ? `<button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 이 부화장 철거 (+💰 ${fmt(demolishRefund(S.plots[i]))})</button>` : ''}
+      ${n > 1 && !busy ? `<button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 이 부화장 철거 (+💰 ${fmt(demolishRefund(p))})</button>` : ''}
       <button class="btn ghost small" data-act="close">닫기</button>
     </div>`);
+}
+
+function startInc(k, s, type) {
+  const total = hatchTime(type);
+  hatchIncs(S.plots[k])[s] = { type, total, end: Date.now() + total * 1000 };
+}
+function incubate(idx, i = curHatch) {
+  idx = Number(idx);
+  if (i == null || !S.plots[i]) i = hatcheries()[0];
+  const incs = hatchIncs(S.plots[i]);
+  let s = incs[curInc] ? incs.findIndex(x => !x) : curInc;
+  if (s < 0) {
+    // 이 부화장이 꽉 찼으면 빈 칸이 있는 다른 부화장으로
+    const other = allIncs().find(x => !x.b);
+    if (!other) { toast('모든 부화 칸이 쓰이고 있어요. 다 된 알을 먼저 꺼내 주세요'); return; }
+    i = other.k; s = other.s;
+  }
+  const type = S.hatch[idx];
+  if (!type) return;
+  S.hatch.splice(idx, 1);
+  startInc(i, s, type);
+  save();
+  render();
+  const next = hatchIncs(S.plots[i]).findIndex(x => !x);
+  openHatchery(i, next >= 0 && S.hatch.length ? next : s);
+}
+function incubateAll() {
+  let n = 0;
+  allIncs().forEach(({ k, s, b }) => { if (!b && S.hatch.length) { startInc(k, s, S.hatch.shift()); n++; } });
+  toast(n ? `🔥 알 ${n}개 부화를 시작했어요!` : '부화를 시작할 빈 칸이나 알이 없어요');
+  save();
+  render();
+  openHatchery(curHatch);
+}
+function incGem(i, sl) {
+  const b = hatchIncs(S.plots[Number(i)])[Number(sl)];
+  if (!b) return;
+  const left = (b.end - Date.now()) / 1000;
+  if (left <= 0) return;
+  if (!spend(gemCost(left, 10), 'gems')) return;
+  b.end = Date.now();
+  save();
+  updateHud();
+  openHatchery(Number(i), Number(sl));
+}
+// 부화 취소: 알을 대기 중인 알로 되돌린다
+function incCancel(i, sl) {
+  const incs = hatchIncs(S.plots[Number(i)]), b = incs[Number(sl)];
+  if (!b) return;
+  if (S.hatch.length >= hatchCap()) { toast('대기 칸이 가득 차서 되돌릴 수 없어요'); return; }
+  incs[Number(sl)] = null;
+  S.hatch.unshift(b.type);
+  save();
+  toast('❌ 부화를 취소했어요. 알은 대기 중인 알로 돌아갔어요');
+  render();
+  openHatchery(Number(i), Number(sl));
+}
+
+// 다 된 알 깨우기: 새 몬스터를 보여 주고 살 서식지를 고른다
+function crack(i, sl) {
+  i = Number(i); sl = Number(sl);
+  const b = hatchIncs(S.plots[i])[sl];
+  if (!b || Date.now() < b.end) return;
+  const type = b.type;
+  const isNew = !S.dex[type];
+  S.dex[type] = true;
+  save();
+  const c = CAT[type], r = RAR[c.rarity];
+  const habs = habsFor(type);
+  const need = isLegend(type) ? `${habEmoji('legend')} 전설의 서식지` : c.els.map(e => `${habEmoji(e)} ${habName(e)}`).join(' 또는 ');
+  showModal(`
+    <div class="reveal">
+      ${isNew ? '<div class="new-badge">NEW! 도감 등록</div>' : ''}
+      <div class="face big" style="background:${grad(c)}">${c.face}</div>
+      <h3>${c.name}</h3>
+      <div class="rar" style="color:${r.color}; font-size:18px">${r.name}</div>
+      <div class="els">${elNames(c.els)}</div>
+      <h4 class="sub">어디서 살까요?</h4>
+      ${habs.length
+        ? `<div class="build-list">${habs.map(({ p, i: h }) => `
+            <button class="build-opt" data-act="placeInc" data-i="${i}" data-s="${sl}" data-h="${h}" style="--hc:${habColor(p.el)}">
+              <span class="bo-ico">${habEmoji(p.el)}</span>
+              <span class="bo-nm">${habName(p.el)} Lv.${p.lv} <small>${islandLabel(h)}</small></span>
+              <span class="bo-cost">${habMons(h).length}/${habCap(h)}</span>
+            </button>`).join('')}</div>`
+        : `<p class="warn">살 수 있는 빈 서식지가 없어요!<br>필요한 곳: ${need}<br>서식지를 짓거나 업그레이드한 뒤 다시 깨워 주세요. (알은 칸에 그대로 있어요)</p>`}
+      <div class="row">
+        <button class="btn ghost small" data-act="sellInc" data-i="${i}" data-s="${sl}">팔기 (+💰 ${fmt(r.cost / 2)})</button>
+        <button class="btn ghost small" data-act="openHatch">나중에</button>
+      </div>
+    </div>`);
+}
+function placeInc(i, sl, h) {
+  i = Number(i); sl = Number(sl); h = Number(h);
+  const incs = hatchIncs(S.plots[i]), b = incs[sl];
+  if (!b || Date.now() < b.end || !habsFor(b.type).some(x => x.i === h)) return;
+  incs[sl] = null;
+  S.monsters.push({ uid: S.nextUid++, type: b.type, lv: 1, hab: h, runes: [null, null] });
+  toast(`${CAT[b.type].face} ${CAT[b.type].name}이(가) ${habName(S.plots[h].el)}으로 이사했어요!`);
+  save();
+  closeModal();
+  render();
+}
+function sellInc(i, sl) {
+  const incs = hatchIncs(S.plots[Number(i)]), b = incs[Number(sl)];
+  if (!b) return;
+  incs[Number(sl)] = null;
+  earn(RAR[CAT[b.type].rarity].cost / 2);
+  save();
+  closeModal();
+  render();
+}
+// 다 된 알을 모두 깨워서 빈자리가 있는 알맞은 서식지로 자동 이사
+function crackAll() {
+  const born = [], stuck = [];
+  const now = Date.now();
+  allIncs().forEach(({ k, s, b }) => {
+    if (!b || now < b.end) return;
+    const isNew = !S.dex[b.type];
+    S.dex[b.type] = true;
+    const h = habsFor(b.type)[0];
+    if (h) {
+      hatchIncs(S.plots[k])[s] = null;
+      S.monsters.push({ uid: S.nextUid++, type: b.type, lv: 1, hab: h.i, runes: [null, null] });
+      born.push({ type: b.type, isNew });
+    } else stuck.push(b.type);
+  });
+  save();
+  render();
+  showModal(`
+    <h3>🐣 다 된 알 꺼내기</h3>
+    ${born.length ? `<div class="grid small">${born.map(x => card({ type: x.type, lv: 1 }, '', 'mini', x.isNew ? '<div class="found-mark">🆕</div>' : '')).join('')}</div>
+      <p class="muted">${born.length}마리가 서식지로 이사했어요.</p>` : ''}
+    ${stuck.length ? `<p class="warn">${stuck.map(t => `${CAT[t].face} ${CAT[t].name}`).join(', ')}<br>살 수 있는 빈 서식지가 없어서 부화 칸에 남아 있어요.</p>` : ''}
+    <div class="row"><button class="btn" data-act="openHatch">부화장으로</button><button class="btn ghost" data-act="close">닫기</button></div>`);
 }
 
 // 교배산 두 개를 합쳐 큰 교배산으로: 레벨이 합쳐지고 교배 시간이 빨라진다
@@ -1973,15 +2197,21 @@ function mergeHatch(i, k) {
   const a = S.plots[i], b = S.plots[k];
   if (!a || !b || a.kind !== 'hatchery' || b.kind !== 'hatchery' || i === k) return;
   a.cap = (a.cap || HATCH_CAP) + (b.cap || HATCH_CAP) + 1;
+  const incs = hatchIncs(a).concat(hatchIncs(b));   // 부화 중이던 알도 그대로
+  a.lv = (a.lv || 1) + (b.lv || 1);
+  a.incs = incs;
   S.plots[k] = null;
   save();
-  toast(`🔗 큰 부화장 완성! ${a.cap}칸이 됐어요 (보너스 +1칸)`);
+  toast(`🔗 큰 부화장 완성! 대기 ${a.cap}칸 · 동시에 ${a.lv}개 부화`);
   render();
   openHatchery(i);
 }
 
 // 모든 알을 부화시켜 빈자리가 있는 알맞은 서식지로 자동 이사
 function hatchAll() {
+  return incubateAll();
+}
+function oldHatchAll() {
   const born = [], stuck = [];
   const eggs = S.hatch.slice();
   S.hatch = [];
@@ -2009,6 +2239,9 @@ function hatchAll() {
 }
 
 function hatchOne(idx) {
+  return incubate(idx);
+}
+function oldHatchReveal(idx) {
   idx = Number(idx);
   const type = S.hatch[idx];
   if (!type) return;
@@ -3592,9 +3825,9 @@ function goPlot(i) {
 }
 const TUT = [
   { text: '🏠 서식지를 지어요! 몬스터가 사는 집이에요', done: () => S.plots.some(p => p && p.kind === 'hab'), go: () => goShop('shopHab') },
-  { text: '🥚 몬스터 알을 사요 (지은 서식지와 같은 속성으로!)', done: () => S.monsters.length > 0 || S.hatch.length > 0, go: () => goShop('shopEgg') },
-  { text: '🐣 부화장에서 알을 깨요', done: () => S.monsters.length > 0, go: () => goPlot(hatcheries()[0]) },
-  { text: '🥚 몬스터를 한 마리 더 모아요 (교배하려면 2마리!)', done: () => S.monsters.length >= 2, go: () => (S.hatch.length ? goPlot(hatcheries()[0]) : goShop('shopEgg')) },
+  { text: '🥚 몬스터 알을 사요 (지은 서식지와 같은 속성으로!)', done: () => S.monsters.length > 0 || S.hatch.length > 0 || allIncs().some(x => x.b), go: () => goShop('shopEgg') },
+  { text: '🐣 부화장에서 알을 부화시키고 깨워요', done: () => S.monsters.length > 0, go: () => goPlot(hatcheries()[0]) },
+  { text: '🥚 몬스터를 한 마리 더 모아요 (교배하려면 2마리!)', done: () => S.monsters.length >= 2, go: () => (S.hatch.length || allIncs().some(x => x.b) ? goPlot(hatcheries()[0]) : goShop('shopEgg')) },
   { text: '🌾 농장을 지어요. 먹이 🍖를 키우는 곳이에요', done: () => farmIdx().length > 0, go: () => goShop('shopHab') },
   { text: '🌱 농장을 눌러 작물을 심어요', done: () => farmIdx().some(k => S.plots[k].crop != null || S.plots[k].lastCrop != null), go: () => goPlot(farmIdx()[0]) },
   { text: `🍖 먹이를 줘서 두 마리를 Lv.${BREED_LV}까지 키워요`, done: () => S.monsters.filter(m => m.lv >= BREED_LV).length >= 2, go: () => { closeModal(); tab = 'mons'; render(); } },
@@ -3615,13 +3848,13 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=build][data-what^="hab:"]', '#modalBox [data-act=close]'];
       return need('shop') || ['[data-act=buyHab][data-el="fire"]'];
     case 1: case 3: { // 알 사기 (4단계는 알이 있으면 부화)
-      if (k === 3 && S.hatch.length) return tutPoint(2);
+      if (k === 3 && (S.hatch.length || allIncs().some(x => x.b))) return tutPoint(2);
       if (inModal) return ['#modalBox [data-act=close]'];
       const el = firstHabEl();
       return need('shop') || [el ? `[data-act=buyMon][data-type="p:${el}"]` : '#shopEgg', '[data-act=buyMon]'];
     }
     case 2: // 부화
-      if (inModal) return ['#modalBox [data-act=place]', '#modalBox [data-act=hatchOne]', '#modalBox [data-act=close]'];
+      if (inModal) return ['#modalBox [data-act=placeInc]', '#modalBox [data-act=crack]', '#modalBox [data-act=incubate]', '#modalBox [data-act=incSlot].done', '#modalBox [data-act=close]'];
       return onIsland ? { plot: hatcheries()[0] } : [bottomBtn('island')];
     case 4: // 농장 짓기
       if (inModal) return ['#modalBox [data-act=build][data-what="farm"]', '#modalBox [data-act=close]'];
@@ -3845,7 +4078,17 @@ const ACTIONS = {
   takeEgg: (d) => takeEgg(d.i, d.s),
   mtnSlot: (d) => { const box = $('#modalBox'), y = box.scrollTop; openBreed(curMtn, Number(d.s)); box.scrollTop = y; },
   openHatch: () => openHatchery(),
-  hatchOne: (d) => hatchOne(d.idx),
+  hatchOne: (d) => incubate(d.idx),
+  incubate: (d) => incubate(d.idx),
+  incubateAll: () => incubateAll(),
+  incGem: (d) => incGem(d.i, d.s),
+  crack: (d) => crack(d.i, d.s),
+  placeInc: (d) => placeInc(d.i, d.s, d.h),
+  sellInc: (d) => sellInc(d.i, d.s),
+  crackAll: () => crackAll(),
+  incCancel: (d) => incCancel(d.i, d.s),
+  breedCancel: (d) => breedCancel(d.i, d.s),
+  incSlot: (d) => { const box = $('#modalBox'), y = box.scrollTop; openHatchery(curHatch, Number(d.s)); box.scrollTop = y; },
   place: (d) => place(d.idx, d.i),
   sellEgg: (d) => sellEgg(d.idx),
   openMon: (d) => openMon(d.uid),
@@ -3863,7 +4106,7 @@ const ACTIONS = {
   merge: (d) => merge(d.t, d.lv),
   mergeAll: () => mergeAll(),
   upAllHabs: (d) => upAllHabs(d.i),
-  hatchAll: () => hatchAll(),
+  hatchAll: () => incubateAll(),
   feedAll: (d) => feedAll(d.mode),
   team: (d) => toggleTeam(d.uid),
   fight: () => startBattle(),
