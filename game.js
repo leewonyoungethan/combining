@@ -1726,6 +1726,7 @@ function mountainFooter(i) {
     ${n > 1 ? `<span class="muted small-note">교배산 ${mountains().indexOf(i) + 1}/${n} ${islandLabel(i)}</span>` : ''}
     ${(S.plots[i].lv || 1) > 1 ? `<span class="muted small-note">⭐ 큰 교배산 Lv.${S.plots[i].lv} · 동시에 ${mtnSlots(S.plots[i]).length}쌍 교배</span>` : ''}
     ${n > 1 ? '<span class="muted small-note">💡 섬에서 교배산을 꾹 눌러 다른 교배산 위로 끌면 합쳐져요</span>' : ''}
+    ${(S.plots[i].lv || 1) > 1 ? `<button class="btn ghost small" data-act="splitMtn" data-i="${i}">🔓 합치기 취소 (${S.plots[i].lv}개로 나누기)</button>` : ''}
     ${canDemolish ? `<button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 철거 (+💰 ${fmt(MOUNTAIN_COST / 2)})</button>` : ''}
     <button class="btn ghost small" data-act="close">닫기</button>
   </div>`;
@@ -2025,6 +2026,7 @@ function openHatchery(i = curHatch, slot) {
     ${n > 1 ? '<p class="muted small-note">💡 부화장을 합치면 합친 개수만큼 동시에 부화해요. 섬에서 꾹 눌러 다른 부화장 위로 끌어도 합쳐져요</p>' : ''}
     ${n > 1 ? `<div class="all-box"><button class="btn small" data-act="mergePick" data-i="${i}">🔗 다른 부화장과 합쳐서 큰 부화장 만들기</button></div>` : ''}
     <div class="row">
+      ${(p.lv || 1) > 1 ? `<button class="btn ghost small" data-act="splitHatch" data-i="${i}">🔓 합치기 취소 (${p.lv}개로 나누기)</button>` : ''}
       ${n > 1 && !busy ? `<button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 이 부화장 철거 (+💰 ${fmt(demolishRefund(p))})</button>` : ''}
       <button class="btn ghost small" data-act="close">닫기</button>
     </div>`);
@@ -2163,6 +2165,55 @@ function crackAll() {
       <p class="muted">${born.length}마리가 서식지로 이사했어요.</p>` : ''}
     ${stuck.length ? `<p class="warn">${stuck.map(t => `${CAT[t].face} ${CAT[t].name}`).join(', ')}<br>살 수 있는 빈 서식지가 없어서 부화 칸에 남아 있어요.</p>` : ''}
     <div class="row"><button class="btn" data-act="openHatch">부화장으로</button><button class="btn ghost" data-act="close">닫기</button></div>`);
+}
+
+// ----- 합치기 취소: 큰 건물을 원래 개수로 다시 나눈다 -----
+// 같은 섬에서 이 건물과 가까운 빈 땅 n칸
+function freePlotsNear(i, n) {
+  const k = islandOf(i), n0 = i % ISLAND_PLOTS;
+  const d = (j) => { const m = j % ISLAND_PLOTS; return Math.abs(m % GRID - n0 % GRID) + Math.abs(Math.floor(m / GRID) - Math.floor(n0 / GRID)); };
+  return islandRange(k).filter(j => !S.plots[j]).sort((a, b) => d(a) - d(b) || a - b).slice(0, n);
+}
+function splitMountain(i) {
+  i = Number(i);
+  const p = S.plots[i];
+  const N = p && p.kind === 'mountain' ? (p.lv || 1) : 1;
+  if (N < 2) return;
+  const spots = freePlotsNear(i, N - 1);
+  if (spots.length < N - 1) { toast(`나누려면 이 섬에 빈 땅이 ${N - 1}칸 필요해요`); return; }
+  if (!confirm(`큰 교배산 Lv.${N}을 교배산 ${N}개로 나눌까요? 교배 중인 알은 칸마다 그대로 옮겨 가요.`)) return;
+  const slots = mtnSlots(p).slice();
+  p.lv = 1;
+  p.breeds = [slots[0] || null];
+  spots.forEach((j, k) => { S.plots[j] = { kind: 'mountain', lv: 1, breeds: [slots[k + 1] || null] }; });
+  curSlot = 0;
+  save();
+  closeModal();
+  render();
+  toast(`🔓 교배산 ${N}개로 나눴어요`);
+}
+function splitHatchery(i) {
+  i = Number(i);
+  const p = S.plots[i];
+  const N = p && p.kind === 'hatchery' ? (p.lv || 1) : 1;
+  if (N < 2) return;
+  const spots = freePlotsNear(i, N - 1);
+  if (spots.length < N - 1) { toast(`나누려면 이 섬에 빈 땅이 ${N - 1}칸 필요해요`); return; }
+  // 합칠 때 받은 보너스 칸(합친 횟수만큼)을 빼고 똑같이 나눈다
+  const base = Math.max(N * HATCH_CAP, (p.cap || HATCH_CAP) - (N - 1));
+  const each = Math.floor(base / N), extra = base - each * N;
+  if (S.hatch.length > hatchCap() - ((p.cap || HATCH_CAP) - base)) { toast('대기 중인 알이 너무 많아서 나눌 수 없어요. 먼저 부화시켜 주세요'); return; }
+  if (!confirm(`큰 부화장(Lv.${N})을 부화장 ${N}개로 나눌까요? 부화 중인 알은 칸마다 그대로 옮겨 가요.`)) return;
+  const incs = hatchIncs(p).slice();
+  p.lv = 1;
+  p.cap = each + extra;
+  p.incs = [incs[0] || null];
+  spots.forEach((j, k) => { S.plots[j] = { kind: 'hatchery', lv: 1, cap: each, incs: [incs[k + 1] || null] }; });
+  curInc = 0;
+  save();
+  closeModal();
+  render();
+  toast(`🔓 부화장 ${N}개로 나눴어요`);
 }
 
 // 교배산 두 개를 합쳐 큰 교배산으로: 레벨이 합쳐지고 교배 시간이 빨라진다
@@ -4087,6 +4138,8 @@ const ACTIONS = {
   sellInc: (d) => sellInc(d.i, d.s),
   crackAll: () => crackAll(),
   incCancel: (d) => incCancel(d.i, d.s),
+  splitMtn: (d) => splitMountain(d.i),
+  splitHatch: (d) => splitHatchery(d.i),
   breedCancel: (d) => breedCancel(d.i, d.s),
   incSlot: (d) => { const box = $('#modalBox'), y = box.scrollTop; openHatchery(curHatch, Number(d.s)); box.scrollTop = y; },
   place: (d) => place(d.idx, d.i),
