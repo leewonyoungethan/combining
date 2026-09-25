@@ -337,6 +337,37 @@ const CROPS = [
   { name: '별빛 과일',   emoji: '🌟', food: 40000, time: 7200, cost: 12000 },
 ];
 const CROP_ORDER = CROPS.map((c, ci) => ci).sort((a, b) => CROPS[a].time - CROPS[b].time);
+
+// 섬 꾸미기 장식: 빈 땅에 놓으면 그 섬 서식지의 골드 수입이 조금 오른다 (섬마다 최대 +30%)
+const DECOS = [
+  { id: 'pot',      name: '화분',           emoji: '🪴', cost: 150,   bonus: 1 },
+  { id: 'flower',   name: '꽃밭',           emoji: '🌷', cost: 200,   bonus: 1 },
+  { id: 'tree',     name: '큰 나무',        emoji: '🌳', cost: 300,   bonus: 1 },
+  { id: 'lamp',     name: '등불',           emoji: '🏮', cost: 400,   bonus: 1 },
+  { id: 'cherry',   name: '벚꽃나무',       emoji: '🌸', cost: 500,   bonus: 2 },
+  { id: 'tent',     name: '텐트',           emoji: '⛺', cost: 600,   bonus: 2 },
+  { id: 'hut',      name: '오두막',         emoji: '🛖', cost: 1200,  bonus: 2 },
+  { id: 'fountain', name: '분수',           emoji: '⛲', cost: 1500,  bonus: 3 },
+  { id: 'statue',   name: '석상',           emoji: '🗿', cost: 2000,  bonus: 3 },
+  { id: 'rainbow',  name: '무지개 아치',    emoji: '🌈', cost: 3000,  bonus: 3 },
+  { id: 'carousel', name: '회전목마',       emoji: '🎠', cost: 4000,  bonus: 4 },
+  { id: 'wheel',    name: '관람차',         emoji: '🎡', cost: 5000,  bonus: 4 },
+  { id: 'circus',   name: '서커스 천막',    emoji: '🎪', cost: 6000,  bonus: 4 },
+  { id: 'tower',    name: '탑',             emoji: '🗼', cost: 8000,  bonus: 5 },
+  { id: 'castle',   name: '성',             emoji: '🏰', cost: 20000, bonus: 6 },
+  { id: 'crown',    name: '황금 왕관 동상', emoji: '👑', gems: 50,    bonus: 8 },
+];
+const DECO_CAP = 30;
+const decoById = (id) => DECOS.find(d => d.id === id);
+const decoPrice = (d) => d.gems ? `💎 ${d.gems}` : `💰 ${fmt(d.cost)}`;
+function decoPercent(k) {
+  let sum = 0;
+  for (let n = 0; n < ISLAND_PLOTS; n++) {
+    const p = S.plots[k * ISLAND_PLOTS + n];
+    if (p && p.kind === 'deco' && decoById(p.id)) sum += decoById(p.id).bonus;
+  }
+  return Math.min(DECO_CAP, sum);
+}
 const habName = (el) => el === 'legend' ? '전설의 서식지' : `${EL[ELI[el]].name} 서식지`;
 const habEmoji = (el) => el === 'legend' ? '🏛️' : EL[ELI[el]].emoji;
 const habColor = (el) => el === 'legend' ? '#ffb020' : EL[ELI[el]].color;
@@ -405,7 +436,7 @@ const byUid = (uid) => S.monsters.find(m => m.uid === Number(uid));
 const monIncome = (m) => RAR[CAT[m.type].rarity].income * m.lv;
 const habMons = (i) => S.monsters.filter(m => m.hab === i);
 const habCap = (i) => S.plots[i].lv + 1;
-const habIncome = (i) => habMons(i).reduce((s, m) => s + monIncome(m), 0);
+const habIncome = (i) => habMons(i).reduce((s, m) => s + monIncome(m), 0) * (1 + decoPercent(islandOf(i)) / 100);
 const habGoldCap = (i) => Math.max(300, habIncome(i) * 240 * S.plots[i].lv);
 const feedCost = (m) => m.lv * 20;
 const sellPrice = (m) => Math.round(RAR[CAT[m.type].rarity].cost * 0.5 * (1 + m.lv * 0.2));
@@ -771,6 +802,15 @@ function drawPlot(p, i, x, y, t, dt) {
     return;
   }
   const ready = plotReady(i);
+  if (p.kind === 'deco') {
+    const d = decoById(p.id);
+    diamond(x, y, hw, hh);
+    ctx.fillStyle = 'rgba(255,255,255,.12)';
+    ctx.fill();
+    shadow(x, y + 10, 46);
+    if (d) emoji(d.emoji, x, y - 22 + Math.sin(t * 1.5 + i) * 2, 78);
+    return;
+  }
   if (p.kind === 'mountain') {
     block(x, y, hw, hh, '#8d82d8', '#51479b');
     shadow(x, y + 8, 80);
@@ -782,7 +822,9 @@ function drawPlot(p, i, x, y, t, dt) {
   } else if (p.kind === 'hatchery') {
     block(x, y, hw, hh, '#e2bd78', '#9e7434');
     shadow(x, y + 10, 60);
-    emoji('🪺', x, y - 18, 86);
+    const big = Math.min(40, ((p.cap || HATCH_CAP) - HATCH_CAP) * 4);
+    emoji('🪺', x, y - 18 - big / 3, 86 + big);
+    if ((p.cap || HATCH_CAP) > HATCH_CAP) emoji('⭐', x + 44, y - 58, 24);
     const hk = hatcheries().indexOf(i), per = Math.ceil(S.hatch.length / Math.max(1, hatcheries().length));
     S.hatch.slice(hk * per, hk * per + per).slice(0, 4).forEach((type, k) => emoji('🥚', x - 51 + k * 34, y + 26 + Math.sin(t * 6 + k) * 2, 30, Math.sin(t * 5 + k) * 0.2));
   } else if (p.kind === 'farm') {
@@ -831,9 +873,9 @@ function drawPlot(p, i, x, y, t, dt) {
 }
 
 function drawLabel(p, i, x, y, t) {
-  if (!p) return;
+  if (!p || p.kind === 'deco') return;
   const ready = plotReady(i);
-  const name = p.kind === 'mountain' ? '교배산' : p.kind === 'hatchery' ? '부화장' : p.kind === 'farm' ? '농장' : `${habName(p.el)} Lv.${p.lv}`;
+  const name = p.kind === 'mountain' ? '교배산' : p.kind === 'hatchery' ? ((p.cap || HATCH_CAP) > HATCH_CAP ? `큰 부화장 ${p.cap}칸` : '부화장') : p.kind === 'farm' ? '농장' : `${habName(p.el)} Lv.${p.lv}`;
   const ly = y + TH / 2 + 10;
   label(name, x, ly, 17);
   if (p.kind === 'hab') {
@@ -963,7 +1005,7 @@ function renderIslandBar() {
   const used = islandRange(k).filter(i => S.plots[i]).length;
   const bar = $('#islandBar');
   bar.innerHTML = '<button class="ib-arrow" data-act="isl" data-d="-1">◀</button>' +
-    '<button class="ib-name" data-act="islList">' + th.emoji + ' ' + (k + 1) + '. ' + th.name + ' <small>' + used + '/' + ISLAND_PLOTS + '칸 · 🗺️</small></button>' +
+    '<button class="ib-name" data-act="islList">' + th.emoji + ' ' + (k + 1) + '. ' + th.name + ' <small>' + used + '/' + ISLAND_PLOTS + '칸' + (decoPercent(k) ? ' · 🎨+' + decoPercent(k) + '%' : '') + ' · 🗺️</small></button>' +
     '<button class="ib-arrow" data-act="isl" data-d="1">▶</button>';
   bar.classList.toggle('hidden', tab !== 'island');
 }
@@ -1011,6 +1053,7 @@ function openPlot(i) {
   if (!p) return openBuild(i);
   if (p.kind === 'mountain') return openBreed(i);
   if (p.kind === 'hatchery') return openHatchery(i);
+  if (p.kind === 'deco') return openDeco(i);
   if (p.kind === 'farm') return openFarm(i);
   if (p.kind === 'hab') return openHab(i);
 }
@@ -1028,6 +1071,9 @@ function openBuild(i) {
     <h3>🏗️ 건설하기</h3>
     <p class="muted">몬스터는 자기 속성과 같은 서식지에서만 살 수 있어요.</p>
     <div class="build-list">
+      <button class="build-opt" data-act="decoPick" data-i="${i}" style="--hc:#ff5ce1">
+        <span class="bo-ico">🎨</span><span class="bo-nm">섬 꾸미기 장식 <small>(골드 수입 보너스)</small></span><span class="bo-cost">▶</span>
+      </button>
       <button class="build-opt" data-act="build" data-i="${i}" data-what="farm" style="--hc:#8b5a2b">
         <span class="bo-ico">🌾</span><span class="bo-nm">농장</span><span class="bo-cost">💰 ${fmt(FARM_COST)}</span>
       </button>
@@ -1046,9 +1092,14 @@ function openBuild(i) {
 function build(i, what) {
   i = Number(i);
   if (S.plots[i]) return;
-  if (what === 'hatchery') {
+  if (what.startsWith('deco:')) {
+    const d = decoById(what.slice(5));
+    if (!d || !(d.gems ? spend(d.gems, 'gems') : spend(d.cost))) return;
+    S.plots[i] = { kind: 'deco', id: d.id };
+    toast(`${d.emoji} ${d.name}을(를) 놓았어요! 이 섬 골드 +${decoPercent(islandOf(i))}%`);
+  } else if (what === 'hatchery') {
     if (!spend(HATCHERY_COST)) return;
-    S.plots[i] = { kind: 'hatchery' };
+    S.plots[i] = { kind: 'hatchery', cap: HATCH_CAP };
     toast(`🪺 부화장을 하나 더 지었어요! 알을 ${hatchCap()}개까지 둘 수 있어요`);
   } else if (what === 'mountain') {
     if (!spend(MOUNTAIN_COST)) return;
@@ -1078,7 +1129,7 @@ function openHab(i) {
   showModal(`
     <div class="hab-head" style="--hc:${habColor(p.el)}">${habEmoji(p.el)}</div>
     <h3>${habName(p.el)} <small class="muted">Lv.${p.lv}</small></h3>
-    <p class="muted">몬스터 ${mons.length}/${habCap(i)} · 초당 💰 ${fmt(habIncome(i))}</p>
+    <p class="muted">몬스터 ${mons.length}/${habCap(i)} · 초당 💰 ${fmt(habIncome(i))}${decoPercent(islandOf(i)) ? ` <span class="deco-bonus">🎨 +${decoPercent(islandOf(i))}%</span>` : ''}</p>
     <div class="bar gold"><div data-bar="hab:${i}"></div></div>
     <div class="store" data-live="hab:${i}"></div>
     <div class="row">
@@ -1105,7 +1156,8 @@ function openHab(i) {
 function demolishRefund(p) {
   if (p.kind === 'farm') return FARM_COST / 2;
   if (p.kind === 'mountain') return MOUNTAIN_COST / 2;
-  if (p.kind === 'hatchery') return HATCHERY_COST / 2;
+  if (p.kind === 'hatchery') return Math.floor(HATCHERY_COST / 2 * (p.cap || HATCH_CAP) / HATCH_CAP);
+  if (p.kind === 'deco') { const d = decoById(p.id); return d && d.cost ? Math.floor(d.cost / 2) : 0; }
   let spent = habBuildCost(p.el);
   for (let lv = 1; lv < p.lv; lv++) spent += habUpCost(lv);
   return Math.floor(spent / 2);
@@ -1114,21 +1166,22 @@ function demolishRefund(p) {
 function demolish(i) {
   i = Number(i);
   const p = S.plots[i];
-  if (!p || !['hab', 'farm', 'mountain', 'hatchery'].includes(p.kind)) return;
+  if (!p || !['hab', 'farm', 'mountain', 'hatchery', 'deco'].includes(p.kind)) return;
   if (p.kind === 'hatchery') {
     if (hatcheries().length <= 1) { toast('하나뿐인 부화장은 철거할 수 없어요'); return; }
-    if (S.hatch.length > hatchCap() - HATCH_CAP) { toast('알이 너무 많아서 철거할 수 없어요. 먼저 부화시켜 주세요'); return; }
+    if (S.hatch.length > hatchCap() - (p.cap || HATCH_CAP)) { toast('알이 너무 많아서 철거할 수 없어요. 먼저 부화시켜 주세요'); return; }
   }
   if (p.kind === 'mountain' && (p.breed || mountains().length <= 1)) { toast('교배 중이거나 하나뿐인 교배산은 철거할 수 없어요'); return; }
   if (p.kind === 'hab' && habMons(i).length) {
     toast('안에 사는 몬스터를 먼저 다른 서식지로 이사시키거나 팔아 주세요');
     return;
   }
-  const name = p.kind === 'farm' ? '농장' : p.kind === 'mountain' ? '교배산' : p.kind === 'hatchery' ? '부화장' : habName(p.el);
+  const name = p.kind === 'farm' ? '농장' : p.kind === 'mountain' ? '교배산' : p.kind === 'hatchery' ? '부화장' : p.kind === 'deco' ? (decoById(p.id) || { name: '장식' }).name : habName(p.el);
   const lost = p.kind === 'farm' && p.crop != null ? '\n심어 둔 작물도 사라져요.' : '';
   if (!confirm(`${name}을(를) 철거할까요?\n지을 때 쓴 골드의 절반(💰${fmt(demolishRefund(p))})을 돌려받아요.${lost}`)) return;
   const refund = demolishRefund(p) + (p.kind === 'hab' ? Math.floor(p.gold) : 0);
   earn(refund);
+  if (p.kind === 'deco' && decoById(p.id) && decoById(p.id).gems) earn(Math.floor(decoById(p.id).gems / 2), 'gems');
   S.plots[i] = null;
   save();
   closeModal();
@@ -1391,7 +1444,7 @@ const MOUNTAIN_COST = 3000;
 const HATCHERY_COST = 2000;
 const hatcheries = () => S.plots.map((p, i) => (p && p.kind === 'hatchery' ? i : -1)).filter(i => i >= 0);
 // 부화장 하나에 3칸, 교배산이 하나 늘 때마다 2칸 더
-const hatchCap = () => HATCH_CAP * Math.max(1, hatcheries().length) + 2 * Math.max(0, mountains().length - 1);
+const hatchCap = () => Math.max(HATCH_CAP, hatcheries().reduce((s, k) => s + (S.plots[k].cap || HATCH_CAP), 0)) + 2 * Math.max(0, mountains().length - 1);
 
 function mountainFooter(i) {
   const n = mountains().length;
@@ -1556,11 +1609,38 @@ function openHatchery(i = curHatch) {
       ? S.hatch.map((t, i) => `<button class="egg-slot" data-act="hatchOne" data-idx="${i}"><span class="egg small lv${rIdx(t) + 1}">🥚</span><span>부화!</span></button>`).join('')
       : '<p class="muted">부화장이 비어 있어요. 교배산에서 알을 가져오세요!</p>'}</div>
     ${S.hatch.length > 1 ? `<div class="all-box"><button class="btn green" data-act="hatchAll">🐣 모두 부화 (알맞은 서식지로 자동 이사)</button></div>` : ''}
-    <p class="muted small-note">부화장 ${n}개가 알을 같이 보관해요 (부화장마다 ${HATCH_CAP}칸${mountains().length > 1 ? ` + 교배산 추가분 ${2 * (mountains().length - 1)}칸` : ''})</p>
+    <p class="muted small-note">부화장 ${n}개가 알을 같이 보관해요 (${hatcheries().map(k => (S.plots[k].cap || HATCH_CAP) + '칸').join(' + ')}${mountains().length > 1 ? ` + 교배산 추가분 ${2 * (mountains().length - 1)}칸` : ''})</p>
+    ${i != null && n > 1 ? `<div class="all-box"><button class="btn small" data-act="mergePick" data-i="${i}">🔗 다른 부화장과 합쳐서 큰 부화장 만들기 (+1칸 보너스)</button></div>` : ''}
     <div class="row">
-      ${i != null && n > 1 ? `<button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 이 부화장 철거 (+💰 ${fmt(HATCHERY_COST / 2)})</button>` : ''}
+      ${i != null && n > 1 ? `<button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 이 부화장 철거 (+💰 ${fmt(demolishRefund(S.plots[i]))})</button>` : ''}
       <button class="btn ghost small" data-act="close">닫기</button>
     </div>`);
+}
+
+// 부화장 두 개를 합쳐 큰 부화장 하나로: 칸은 모두 합치고 보너스 1칸, 땅 한 칸이 비워진다
+function openMergePick(i) {
+  i = Number(i);
+  const others = hatcheries().filter(k => k !== i);
+  showModal(`<h3>🔗 부화장 합치기</h3>
+    <p class="muted">이 부화장(${S.plots[i].cap || HATCH_CAP}칸)에 합칠 부화장을 골라요. 합친 부화장은 사라지고 그 자리는 빈 땅이 돼요.</p>
+    <div class="build-list">${others.map(k => `
+      <button class="build-opt" data-act="mergeHatch" data-i="${i}" data-k="${k}" style="--hc:#c9953a">
+        <span class="bo-ico">🪺</span>
+        <span class="bo-nm">${(S.plots[k].cap || HATCH_CAP) > HATCH_CAP ? '큰 ' : ''}부화장 ${S.plots[k].cap || HATCH_CAP}칸 <small>${islandLabel(k)}</small></span>
+        <span class="bo-cost">→ ${(S.plots[i].cap || HATCH_CAP) + (S.plots[k].cap || HATCH_CAP) + 1}칸</span>
+      </button>`).join('')}</div>
+    <div class="row"><button class="btn ghost small" data-act="openHatch">← 뒤로</button></div>`);
+}
+function mergeHatch(i, k) {
+  i = Number(i); k = Number(k);
+  const a = S.plots[i], b = S.plots[k];
+  if (!a || !b || a.kind !== 'hatchery' || b.kind !== 'hatchery' || i === k) return;
+  a.cap = (a.cap || HATCH_CAP) + (b.cap || HATCH_CAP) + 1;
+  S.plots[k] = null;
+  save();
+  toast(`🔗 큰 부화장 완성! ${a.cap}칸이 됐어요 (보너스 +1칸)`);
+  render();
+  openHatchery(i);
 }
 
 // 모든 알을 부화시켜 빈자리가 있는 알맞은 서식지로 자동 이사
@@ -1866,7 +1946,14 @@ function renderShop() {
       <button class="shop-item" data-act="buyGold" data-n="5"><span class="si-ico">💰</span><span class="si-nm">골드 500</span><span class="si-cost">💎 5</span></button>
       <button class="shop-item" data-act="buyGold" data-n="50"><span class="si-ico">💰</span><span class="si-nm">골드 6,000</span><span class="si-cost">💎 50</span></button>
     </div>
-    <h3 class="sub">🏠 서식지 상점 <small class="muted">사면 섬의 빈 땅에 바로 지어져요</small></h3>
+    <h3 class="sub" id="shopDeco">🎨 섬 꾸미기 <small class="muted">장식을 놓으면 그 섬 서식지 골드가 올라요 (섬마다 최대 +${DECO_CAP}%) · 지금 섬 +${decoPercent(S.isl || 0)}%</small></h3>
+    <div class="grid small">${DECOS.map(d => `<div class="card mini hab-card" data-act="buyDeco" data-id="${d.id}">
+        <div class="price-tag">${decoPrice(d)}</div>
+        <div class="face" style="background:linear-gradient(135deg, #ff9ad5, #1a1a3d)">${d.emoji}</div>
+        <div class="nm">${d.name}</div>
+        <div class="meta">골드 +${d.bonus}%</div>
+      </div>`).join('')}</div>
+    <h3 class="sub" id="shopHab">🏠 서식지 상점 <small class="muted">사면 섬의 빈 땅에 바로 지어져요</small></h3>
     <div class="grid small">${[...EL.map(e => e.id), 'legend'].map(el => {
       const n = S.plots.filter(p => p && p.kind === 'hab' && p.el === el).length;
       return `<div class="card mini hab-card" data-act="buyHab" data-el="${el}" style="--hc:${habColor(el)}">
@@ -1895,7 +1982,7 @@ function renderShop() {
         <div class="meta">보유 ${mountains().length}개</div>
       </div>
     </div>
-    <h3 class="sub">🥚 몬스터 알 상점 <small class="muted">사면 부화장으로 가요. 알맞은 서식지가 있어야 키울 수 있어요</small></h3>
+    <h3 class="sub" id="shopEgg">🥚 몬스터 알 상점 <small class="muted">사면 부화장으로 가요. 알맞은 서식지가 있어야 키울 수 있어요</small></h3>
     <div class="grid small">${EGG_SHOP.map(t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini',
       `<div class="price-tag">💰 ${fmt(eggPrice(t))}</div>`)).join('')}</div>
     <h3 class="sub">👑 전설 상점<small class="muted">골드로 살 수 있어요… 모을 수만 있다면요</small></h3>
@@ -1936,19 +2023,47 @@ function waitText(price) {
 }
 
 // 서식지/농장을 사면 섬 가운데에 가까운 빈 땅부터 채운다
-function buyHab(el) {
+function findFreePlot() {
   const center = (GRID - 1) / 2;
   const cur = S.isl || 0;
   const dist = (i) => { const n = i % ISLAND_PLOTS; return Math.abs(n % GRID - center) + Math.abs(Math.floor(n / GRID) - center); };
   // 지금 보고 있는 섬 먼저, 가득 차면 다음 섬
   const free = S.plots.map((p, i) => i).filter(i => !S.plots[i])
     .sort((a, b) => (islandOf(a) !== cur) - (islandOf(b) !== cur) || islandOf(a) - islandOf(b) || dist(a) - dist(b) || a - b);
-  if (!free.length) { toast('모든 섬에 빈 땅이 없어요!'); return; }
+  if (!free.length) { toast('모든 섬에 빈 땅이 없어요!'); return -1; }
   if (islandOf(free[0]) !== cur) {
     const th = ISLANDS[islandOf(free[0])];
     setTimeout(() => toast('지금 섬이 가득 차서 ' + th.emoji + ' ' + th.name + '에 지었어요'), 50);
   }
-  build(free[0], ['farm', 'mountain', 'hatchery'].includes(el) ? el : `hab:${el}`);
+  return free[0];
+}
+function buyHab(el) {
+  const i = findFreePlot();
+  if (i >= 0) build(i, ['farm', 'mountain', 'hatchery'].includes(el) ? el : `hab:${el}`);
+}
+function buyDeco(id) {
+  const i = findFreePlot();
+  if (i >= 0) build(i, 'deco:' + id);
+}
+function openDecoPick(i) {
+  showModal(`<h3>🎨 섬 꾸미기</h3>
+    <p class="muted">이 섬 서식지 골드 +${decoPercent(islandOf(i))}% (최대 +${DECO_CAP}%)</p>
+    <div class="build-list">${DECOS.map(d => `
+      <button class="build-opt" data-act="build" data-i="${i}" data-what="deco:${d.id}" style="--hc:#ff9ad5">
+        <span class="bo-ico">${d.emoji}</span><span class="bo-nm">${d.name} <small>골드 +${d.bonus}%</small></span><span class="bo-cost">${decoPrice(d)}</span>
+      </button>`).join('')}</div>
+    <div class="row"><button class="btn ghost small" data-act="plot" data-i="${i}">← 뒤로</button></div>`);
+}
+function openDeco(i) {
+  const p = S.plots[i], d = decoById(p.id) || { emoji: '❓', name: '장식', bonus: 0 };
+  const k = islandOf(i);
+  showModal(`<div class="egg-big">${d.emoji}</div>
+    <h3>${d.name}</h3>
+    <p class="muted">이 장식: 골드 +${d.bonus}% · ${ISLANDS[k].emoji} ${ISLANDS[k].name} 전체 <b class="deco-bonus">🎨 +${decoPercent(k)}%</b> (최대 +${DECO_CAP}%)</p>
+    <div class="row">
+      <button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 치우기 (${d.gems ? `+💎 ${Math.floor(d.gems / 2)}` : `+💰 ${fmt(demolishRefund(p))}`})</button>
+      <button class="btn ghost small" data-act="close">닫기</button>
+    </div>`);
 }
 
 const MON_PRICE = 500;
@@ -2984,22 +3099,96 @@ function render() {
   refreshLive();
 }
 
-// 처음 시작한 사람을 위한 단계별 안내
-function guideText() {
-  const habs = S.plots.filter(p => p && p.kind === 'hab').length;
-  const farm = S.plots.some(p => p && p.kind === 'farm');
-  if (!habs) return '① 상점 🛒이나 빈 땅 ➕을 눌러 서식지를 지어 보세요';
-  if (!S.monsters.length && !S.hatch.length) return '② 상점 🛒에서 몬스터 알을 사 보세요 (서식지와 같은 속성으로!)';
-  if (!S.monsters.length) return '③ 섬의 부화장 🪺을 눌러 알을 부화시켜요';
-  if (S.monsters.length < 2) return '④ 몬스터를 한 마리 더 모으면 교배할 수 있어요';
-  if (!farm) return '⑤ 농장 🌾을 지어 먹이를 키워요. Lv.4가 되면 교배할 수 있어요';
-  return '';
+// ----- 튜토리얼: 할 일을 하나씩 알려 주고, 말풍선을 누르면 그곳으로 데려간다 -----
+function goShop(id) {
+  closeModal();
+  tab = 'shop';
+  render();
+  setTimeout(() => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 2400);
+  }, 80);
+}
+function goPlot(i) {
+  closeModal();
+  if (islandOf(i) !== (S.isl || 0)) S.isl = islandOf(i);
+  tab = 'island';
+  render();
+  openPlot(i);
+}
+const TUT = [
+  { text: '🏠 서식지를 지어요! 몬스터가 사는 집이에요', done: () => S.plots.some(p => p && p.kind === 'hab'), go: () => goShop('shopHab') },
+  { text: '🥚 몬스터 알을 사요 (지은 서식지와 같은 속성으로!)', done: () => S.monsters.length > 0 || S.hatch.length > 0, go: () => goShop('shopEgg') },
+  { text: '🐣 부화장에서 알을 깨요', done: () => S.monsters.length > 0, go: () => goPlot(hatcheries()[0]) },
+  { text: '🥚 몬스터를 한 마리 더 모아요 (교배하려면 2마리!)', done: () => S.monsters.length >= 2, go: () => (S.hatch.length ? goPlot(hatcheries()[0]) : goShop('shopEgg')) },
+  { text: '🌾 농장을 지어요. 먹이 🍖를 키우는 곳이에요', done: () => farmIdx().length > 0, go: () => goShop('shopHab') },
+  { text: '🌱 농장을 눌러 작물을 심어요', done: () => farmIdx().some(k => S.plots[k].crop != null || S.plots[k].lastCrop != null), go: () => goPlot(farmIdx()[0]) },
+  { text: `🍖 먹이를 줘서 두 마리를 Lv.${BREED_LV}까지 키워요`, done: () => S.monsters.filter(m => m.lv >= BREED_LV).length >= 2, go: () => { closeModal(); tab = 'mons'; render(); } },
+  { text: '🏔️ 교배산에서 두 마리를 섞어 새 몬스터를 만들어요!', done: () => (S.breedLog || []).length > 0, go: () => goPlot(mountains().find(k => !S.plots[k].breed) ?? mountains()[0]) },
+  { text: '⚔️ 모험에서 팀을 짜고 첫 전투를 해 봐요', done: () => S.stage > 1 || Object.keys(S.bossCleared || {}).length > 0, go: () => { closeModal(); tab = 'adventure'; render(); } },
+];
+// 한 번 끝낸 단계는 다시 돌아가지 않는다
+function tutStep() {
+  S.tutStep = S.tutStep || 0;
+  while (S.tutStep < TUT.length && TUT[S.tutStep].done()) S.tutStep++;
+  return S.tutStep;
 }
 function updateGuide() {
   const g = $('#guide');
-  const text = tab === 'island' && !B ? guideText() : '';
-  g.classList.toggle('hidden', !text);
-  if (g.textContent !== text) g.textContent = text;
+  const k = tutStep();
+  if (k >= TUT.length && !S.tutCongrats) {
+    S.tutCongrats = true;
+    save();
+    toast('🎉 튜토리얼 완료! 이제 도감 500마리를 모두 모아 보세요!');
+  }
+  const show = !B && !S.tutOff && k < TUT.length;
+  g.classList.toggle('hidden', !show);
+  if (!show) return;
+  const html = `<div class="g-step">튜토리얼 ${k + 1} / ${TUT.length}</div>
+    <div class="g-text">${TUT[k].text}</div>
+    <div class="g-go">👉 여기를 누르면 바로 가요</div>
+    <button class="g-x" data-act="tutSkip" title="튜토리얼 끄기">✕</button>`;
+  if (g.dataset.k !== String(k)) { g.innerHTML = html; g.dataset.k = k; }
+}
+function tutGo() {
+  const k = tutStep();
+  if (k < TUT.length) TUT[k].go();
+}
+
+// ----- 처음 온 사람을 위한 설명 슬라이드 -----
+const WELCOME = [
+  { icon: '🧬', title: '몬스터 합치기에 온 걸 환영해요!', text: '몬스터를 <b>모으고</b>, <b>섞고</b>, <b>키워서</b> 싸우는 게임이에요.' },
+  { icon: '🏠', title: '서식지와 알', text: '몬스터는 <b>같은 속성 서식지</b>에서 살아요.<br>🔥 불 몬스터 → 🔥 불 서식지<br>서식지에서는 골드 💰가 계속 쌓여요.' },
+  { icon: '🌾', title: '농장과 먹이', text: '농장에 작물을 심으면 먹이 🍖가 생겨요.<br>몬스터에게 먹이를 주면 <b>레벨이 올라요</b>.' },
+  { icon: '🏔️', title: '교배', text: '<b>Lv.4</b> 몬스터 두 마리를 교배산에 넣으면 <b>새 몬스터</b>가 태어나요!<br>타이머가 길수록 좋은 등급이에요.' },
+  { icon: '⚔️', title: '모험', text: '몬스터 3마리로 팀을 짜서 싸워요.<br>📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!' },
+  { icon: '💡', title: '모르겠으면?', text: '화면 아래 <b>노란 말풍선</b>을 누르면 다음에 할 곳으로 바로 데려가 줘요.<br>오른쪽 위 <b>❓</b>로 이 설명을 다시 볼 수 있어요.' },
+];
+function openWelcome(n = 0) {
+  n = Math.max(0, Math.min(WELCOME.length - 1, Number(n)));
+  const w = WELCOME[n], last = n === WELCOME.length - 1;
+  showModal(`<div class="welcome">
+    <div class="w-icon">${w.icon}</div>
+    <h3>${w.title}</h3>
+    <p>${w.text}</p>
+    <div class="w-dots">${WELCOME.map((_, k) => `<i class="${k === n ? 'on' : ''}"></i>`).join('')}</div>
+    <div class="row">
+      ${n > 0 ? `<button class="btn ghost" data-act="welcome" data-n="${n - 1}">← 이전</button>` : ''}
+      ${last ? '<button class="btn big green" data-act="welcomeDone">시작하기! 🚀</button>' : `<button class="btn" data-act="welcome" data-n="${n + 1}">다음 →</button>`}
+    </div>
+    ${last ? '' : '<button class="btn ghost small" data-act="welcomeDone">건너뛰기</button>'}
+    <div class="row"><button class="btn ghost small danger" data-act="reset">🔄 처음부터 다시 하기</button>${S.tutOff ? ' <button class="btn ghost small" data-act="welcomeDone">💡 튜토리얼 다시 켜기</button>' : ''}</div>
+  </div>`);
+}
+function welcomeDone() {
+  S.welcomed = true;
+  S.tutOff = false;
+  save();
+  closeModal();
+  updateGuide();
 }
 
 function updateHud() {
@@ -3071,6 +3260,15 @@ const ACTIONS = {
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; drawBattle(); },
   typeChart: () => openTypeChart(),
+  decoPick: (d) => openDecoPick(Number(d.i)),
+  buyDeco: (d) => buyDeco(d.id),
+  mergePick: (d) => openMergePick(d.i),
+  mergeHatch: (d) => mergeHatch(d.i, d.k),
+  tutGo: () => tutGo(),
+  tutSkip: () => { S.tutOff = true; save(); updateGuide(); toast('튜토리얼을 껐어요. ❓ 버튼으로 다시 켤 수 있어요'); },
+  welcome: (d) => openWelcome(d.n),
+  welcomeDone: () => welcomeDone(),
+  help: () => openWelcome(0),
   rebreed: (d) => rebreed(d.i, d.id),
   monView: (d) => { monView()[d.k] = d.v; save(); renderMons(); },
   isl: (d) => goIsland((S.isl || 0) + Number(d.d)),
@@ -3101,7 +3299,7 @@ const ACTIONS = {
 
 document.addEventListener('click', (e) => {
   if (e.target.id === 'modal') { closeModal(); return; }
-  const t = e.target.closest('[data-act]');
+  const t = e.target.closest('[data-act]') || (e.target.closest('#guide') ? { dataset: { act: 'tutGo' }, disabled: false } : null);
   if (!t || t.disabled) return;
   const fn = ACTIONS[t.dataset.act];
   if (fn) fn(t.dataset);
@@ -3112,6 +3310,10 @@ render();
 requestAnimationFrame(drawWorld);
 setInterval(tick, 250);
 setInterval(updateHud, 30000);   // 자정이 지나면 🎁 점 다시 켜기
-setTimeout(() => { if (dailyReady() && $('#modal').classList.contains('hidden') && !B) openDaily(); }, 900);
+setTimeout(() => {
+  if (!$('#modal').classList.contains('hidden') || B) return;
+  if (!S.welcomed) openWelcome(0);
+  else if (dailyReady()) openDaily();
+}, 900);
 setInterval(save, 3000);
 window.addEventListener('beforeunload', save);
