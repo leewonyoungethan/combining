@@ -314,6 +314,7 @@ function newState() {
     monsters: [], nextUid: 1, hatch: [], breed: null, dex: {},
     runes: [], nextRune: 1,
     stage: 1, team: [],
+    daily: { last: null, streak: 0 }, bossCleared: {},
     last: Date.now(),
   };
   // 처음엔 교배산과 부화장만 있는 빈 땅. 서식지와 알은 직접 사야 한다
@@ -331,6 +332,8 @@ function load() {
     s.monsters = s.monsters.filter(m => CAT[m.type]);
     s.hatch = (s.hatch || []).filter(t => CAT[t]);
     if (s.breed && !CAT[s.breed.type]) s.breed = null;
+    s.daily = s.daily || { last: null, streak: 0 };
+    s.bossCleared = s.bossCleared || {};
     return s;
   } catch (e) {
     return null;
@@ -1788,6 +1791,8 @@ function renderAdventure() {
       <div class="team-row">${slots}</div>
       <div class="row"><button class="btn big" data-act="fight" ${team.length ? '' : 'disabled'}>⚔️ 전투 시작</button></div>
     </div>
+    <h3 class="sub">👹 보스전 <small class="muted">위의 내 팀으로 싸워요. 보스를 이기면 다음 보스가 열려요</small></h3>
+    ${renderBossList()}
     <details class="chart-box"><summary>📘 속성 상성표 보기 (무슨 속성이 무슨 속성에게 강할까?)</summary>${typeChartHTML()}</details>
     <h3 class="sub">몬스터를 눌러 팀에 넣거나 빼세요</h3>
     <div class="grid">${sortMons(S.monsters).map(m => {
@@ -1955,6 +1960,11 @@ async function nextTurn() {
   if (!b.order.length) {
     b.round++;
     b.order = b.units.filter(u => u.hp > 0).sort((x, y) => y.spd - x.spd || Math.random() - 0.5);
+    // 보스는 한 라운드에 여러 번 움직인다: 순서 중간중간에 끼워 넣기
+    b.order.filter(u => u.turns > 1).forEach(u => {
+      const len = b.order.length;
+      for (let t = 1; t < u.turns; t++) b.order.splice(Math.min(b.order.length, Math.round(len * t / u.turns) + t), 0, u);
+    });
   }
   const u = b.order.shift();
   b.cur = u;
@@ -2167,7 +2177,8 @@ function endBattle(win) {
   B.waiting = false;
   clearTimeout(B.timer);
   const rewards = [];
-  if (win) {
+  if (B.bossIdx != null) rewards.push(...bossRewards(win));
+  else if (win) {
     const gold = Math.round(120 * Math.pow(1.25, B.stage - 1));
     earn(gold);
     rewards.push(`💰 ${fmt(gold)}`);
@@ -2197,7 +2208,7 @@ function quitBattle() {
 
 // ----- 전투 화면 그리기 -----
 function unitHTML(u) {
-  return `<div class="unit ${u.side}" id="u-${u.id}" ${u.side === 'foe' ? `data-act="bTarget" data-id="${u.id}"` : ''}>
+  return `<div class="unit ${u.side} ${u.boss ? 'boss' : ''}" id="u-${u.id}" ${u.side === 'foe' ? `data-act="bTarget" data-id="${u.id}"` : ''}>
     <div class="tgt-mark">🎯</div>
     <div class="u-face" style="background:${grad(u.c)}"><span>${u.c.face}</span></div>
     <div class="u-nm">${u.c.name}</div>
@@ -2244,7 +2255,7 @@ function drawBattle() {
     $('#battle').innerHTML = `
       <div class="b-inner">
         <div class="b-top">
-          <b>스테이지 ${B.stage}</b><span class="muted" id="bRound"></span>
+          <b>${B.bossIdx != null ? `👹 보스전 · ${BOSSES[B.bossIdx].name}` : `스테이지 ${B.stage}`}</b><span class="muted" id="bRound"></span>
           <span class="spacer"></span>
           <button class="btn ghost small" data-act="typeChart">📘 상성표</button>
           <button class="btn ghost small" data-act="bFast" id="bFast"></button>
@@ -2308,6 +2319,145 @@ function typeChartHTML() {
 function openTypeChart() {
   showModal(`<h3>📘 속성 상성표</h3>${typeChartHTML()}
     <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+}
+
+// ===================== 보스전 =====================
+const BOSSES = [
+  { name: '킹크랩 대왕',   face: '🦀', els: ['water', 'earth'],          lv: 5,  hp: 1500,  atk: 55,  spd: 90,  turns: 1, ult: '대왕 집게 폭풍', gold: 2000,   gems: 20 },
+  { name: '불꽃 마왕',     face: '👹', els: ['fire', 'dark'],            lv: 10, hp: 3500,  atk: 90,  spd: 105, turns: 1, ult: '지옥불',         gold: 5000,   gems: 30 },
+  { name: '천둥 킹콩',     face: '🦍', els: ['thunder', 'earth'],        lv: 14, hp: 6000,  atk: 115, spd: 112, turns: 2, ult: '천둥 주먹',      gold: 10000,  gems: 40 },
+  { name: '독안개 여왕',   face: '🕷️', els: ['poison', 'magic'],        lv: 17, hp: 10000, atk: 145, spd: 120, turns: 2, ult: '죽음의 거미줄',  gold: 20000,  gems: 60,  rune: [0, 0.5, 0.5] },
+  { name: '얼음 용왕',     face: '🐉', els: ['ice', 'water', 'metal'],   lv: 20, hp: 16000, atk: 185, spd: 126, turns: 2, ult: '빙하기',         gold: 40000,  gems: 80,  rune: [0, 0.3, 0.7] },
+  { name: '혼돈의 군주',   face: '👿', els: ['dark', 'magic', 'fire'],   lv: 25, hp: 30000, atk: 250, spd: 140, turns: 3, ult: '혼돈의 종말',    gold: 100000, gems: 150, rune: [0, 0, 1] },
+];
+BOSSES.forEach((b, i) => {
+  const e = b.els;
+  b.id = 'boss' + i;
+  b.rarity = 'legendary';
+  b.skills = [basicSkill(e[0]), atkSkill(e[0]), effSkill(e[1]), atkSkill(e[1]),
+    { name: b.ult, el: e[0], type: 'dmg', mult: 1.3, aoe: true, cost: 6 }];
+});
+const bossUnlocked = (i) => i === 0 || !!S.bossCleared[i - 1];
+
+function renderBossList() {
+  return `<div class="boss-list">${BOSSES.map((b, i) => {
+    const open = bossUnlocked(i), cleared = !!S.bossCleared[i];
+    const weak = EL.filter(e => BEATS[e.id].some(x => b.els.includes(x)));
+    return `<div class="boss-card ${open ? '' : 'locked'} ${cleared ? 'cleared' : ''}">
+      <div class="boss-face" style="background:${grad(b)}">${open ? b.face : '🔒'}</div>
+      <div class="boss-info">
+        <div class="boss-nm">${open ? b.name : '???'} ${cleared ? '✅' : ''}</div>
+        <div class="muted">Lv.${b.lv} · ${elBadges(b.els)} · ❤️ ${fmt(b.hp)} · ${'⚡'.repeat(b.turns)} ${b.turns > 1 ? `한 턴에 ${b.turns}번 행동` : ''}</div>
+        <div class="muted">약점: ${weak.map(e => e.emoji).join('')}</div>
+        <div class="boss-reward">${cleared ? '다시 이기면' : '첫 승리'}: 💰 ${fmt(cleared ? b.gold * 0.3 : b.gold)} · 💎 ${cleared ? 5 : b.gems}${!cleared && b.rune ? ' · 💠 룬' : ''}</div>
+      </div>
+      <button class="btn ${open ? '' : 'ghost'}" data-act="bossFight" data-i="${i}" ${open && S.team.length ? '' : 'disabled'}>${open ? '⚔️ 도전' : '🔒 잠김'}</button>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function mkBossUnit(b) {
+  return {
+    id: 'foe0', side: 'foe', c: b, lv: b.lv, boss: true, turns: b.turns,
+    maxHp: b.hp, hp: b.hp, dispHp: b.hp, shownDead: false,
+    atk: b.atk, spd: b.spd, sta: 4,
+    fx: { burn: 0, burnDmg: 0, poison: 0, poisonDmg: 0, stun: 0, shield: 0, buff: 0, curse: 0 },
+  };
+}
+
+function startBossBattle(i) {
+  i = Number(i);
+  if (!bossUnlocked(i) || B) return;
+  const team = S.team.map(byUid).filter(Boolean);
+  if (!team.length) { toast('먼저 팀을 짜 주세요'); return; }
+  const b = BOSSES[i];
+  B = {
+    stage: S.stage, bossIdx: i,
+    units: [...team.map((m, k) => mkUnit(m, 'me', k)), mkBossUnit(b)],
+    order: [], cur: null, target: 'foe0', log: [], round: 0,
+    waiting: false, over: false, fast: false, timer: null, result: null, built: false,
+  };
+  $('#battle').classList.remove('hidden');
+  updateGuide();
+  logB(`👹 보스 ${b.name} 등장!${b.turns > 1 ? ` 한 턴에 ${b.turns}번 움직여요!` : ''}`);
+  drawBattle();
+  later(nextTurn, 700);
+}
+
+function bossRewards(win) {
+  const b = BOSSES[B.bossIdx], rewards = [];
+  if (!win) return rewards;
+  const first = !S.bossCleared[B.bossIdx];
+  const gold = first ? b.gold : Math.round(b.gold * 0.3);
+  const gems = first ? b.gems : 5;
+  earn(gold);
+  earn(gems, 'gems');
+  rewards.push(`💰 ${fmt(gold)}`, `💎 ${gems}`);
+  if (first && b.rune) rewards.push(runeText(giveRune(b.rune)));
+  if (first) rewards.push('🏅 보스 처치!');
+  S.bossCleared[B.bossIdx] = true;
+  return rewards;
+}
+
+// ===================== 일일 보상 =====================
+const DAILY = [
+  { icon: '💰', text: '골드 500',       give: () => { earn(500); } },
+  { icon: '🍖', text: '먹이 500',       give: () => { S.food += 500; } },
+  { icon: '💎', text: '보석 10',        give: () => { earn(10, 'gems'); } },
+  { icon: '💰', text: '골드 1,500',     give: () => { earn(1500); } },
+  { icon: '💠', text: '룬 상자',        give: () => runeText(giveRune([0.5, 0.4, 0.1])) },
+  { icon: '🥚', text: '레어 알',        give: () => {
+    const t = pick(CAT_LIST.filter(c => c.rarity === 'rare' && c.els.length === 2)).id;
+    if (S.hatch.length >= HATCH_CAP) { earn(1000); return '부화장이 가득 차서 💰1,000으로 받았어요'; }
+    S.hatch.push(t);
+    return `${CAT[t].face} ${CAT[t].name} 알 (부화장으로)`;
+  } },
+  { icon: '🎁', text: '보석 50 + ★★★ 룬', give: () => { earn(50, 'gems'); return runeText(giveRune([0, 0, 1])); }, big: true },
+];
+function dayKey(offset = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+const dailyReady = () => S.daily.last !== dayKey();
+// 오늘 받을 차례인 날 (1~7). 어제 받았으면 이어지고, 하루라도 빠지면 1일차부터
+function dailyNext() {
+  if (S.daily.last === dayKey(-1)) return S.daily.streak % 7 + 1;
+  return 1;
+}
+
+function openDaily() {
+  const ready = dailyReady();
+  const next = ready ? dailyNext() : S.daily.streak;
+  const doneUpTo = ready ? next - 1 : S.daily.streak;
+  showModal(`
+    <h3>🎁 일일 보상</h3>
+    <p class="muted">매일 접속해서 받아요. 하루라도 빠지면 1일차부터 다시 시작해요!</p>
+    <div class="daily-grid">${DAILY.map((d, k) => {
+      const day = k + 1;
+      const state = day <= doneUpTo ? 'done' : ready && day === next ? 'today' : '';
+      return `<div class="daily-day ${state} ${d.big ? 'big' : ''}">
+        <div class="dd-day">${day}일차</div>
+        <div class="dd-icon">${state === 'done' ? '✅' : d.icon}</div>
+        <div class="dd-text">${d.text}</div>
+      </div>`;
+    }).join('')}</div>
+    <div class="row">${ready
+      ? `<button class="btn big green" data-act="claimDaily">🎁 ${next}일차 보상 받기</button>`
+      : '<p class="muted">오늘 보상은 이미 받았어요. 내일 또 와요! 👋</p>'}</div>
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+}
+
+function claimDaily() {
+  if (!dailyReady()) return;
+  const day = dailyNext();
+  const extra = DAILY[day - 1].give();
+  S.daily = { last: dayKey(), streak: day };
+  save();
+  updateHud();
+  openDaily();
+  toast(`🎁 ${day}일차 보상: ${DAILY[day - 1].icon} ${DAILY[day - 1].text}${typeof extra === 'string' ? ` → ${extra}` : ''}`);
+  if (tab !== 'island') render();
 }
 
 // ===================== 화면: 도감 =====================
@@ -2532,6 +2682,8 @@ function updateGuide() {
 
 function updateHud() {
   updateGuide();
+  const dot = $('#dailyDot');
+  if (dot) dot.classList.toggle('on', dailyReady());
   [['gold', S.gold], ['gems', S.gems]].forEach(([id, v]) => {
     const el = $('#' + id);
     el.textContent = S.infinite ? '∞' : fmt(v);
@@ -2596,6 +2748,9 @@ const ACTIONS = {
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; drawBattle(); },
   typeChart: () => openTypeChart(),
+  bossFight: (d) => startBossBattle(d.i),
+  daily: () => openDaily(),
+  claimDaily: () => claimDaily(),
   dexMon: (d) => openDexMon(d.type),
   dexFilter: (d) => { dexFilter[d.k] = d.v; renderDex(); },
   goBreed: (d) => goBreed(d.a, d.b),
@@ -2628,5 +2783,7 @@ tick();
 render();
 requestAnimationFrame(drawWorld);
 setInterval(tick, 250);
+setInterval(updateHud, 30000);   // 자정이 지나면 🎁 점 다시 켜기
+setTimeout(() => { if (dailyReady() && $('#modal').classList.contains('hidden') && !B) openDaily(); }, 900);
 setInterval(save, 3000);
 window.addEventListener('beforeunload', save);
