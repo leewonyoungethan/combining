@@ -159,9 +159,14 @@ function skDesc(sk) {
 const needsTarget = (sk) => ['dmg', 'burn', 'poison', 'stun', 'curse'].includes(sk.type) && !sk.aoe;
 
 // ===================== 몬스터 카탈로그 (500마리) =====================
-// 속성마다 19마리(순수 209), 두 속성 조합마다 14마리(혼합 770) + 전설 15 + 신화 1 + 전설 상점 5 = 1000
-const PURE_VARIANTS = 19;   // 속성마다 19마리
-const HYB_VARIANTS = 14;    // 두 속성 조합마다 14마리
+// 속성마다 31마리(순수 341), 두 속성 조합마다 29마리(혼합 1595) + 전설 34 + 신화 25 + 전설 상점 5 = 2000
+const PURE_VARIANTS = 31;
+const HYB_VARIANTS = 29;
+const LEGEND_COUNT = 34;
+const MYTHIC_COUNT = 25;
+// 등급 피라미드: 일반 : 신화 ≈ 20 : 1, 한 등급 오를 때마다 같은 비율로 줄어든다
+const RANK_RATIO = 20;
+const RANK_Q = Math.pow(1 / RANK_RATIO, 1 / RANK.mythic);
 const ADJ = {
   fire:    ['화염', '불꽃', '용암', '이글', '잿불', '태양', '폭염', '화산', '봉화', '홍련', '불사', '적염'],
   water:   ['물결', '파도', '심해', '이슬', '빗방울', '소용돌이', '산호', '해류', '호수', '해일', '청류', '물보라'],
@@ -218,35 +223,62 @@ function freshCreature(adj, seedKey, start) {
   return { face: '❓', name: `${adj} 몬스터 ${seedKey}` };
 }
 
-// 1000마리를 한 번에 같은 규칙으로 만든다.
-// 대표 몬스터(변종 0번: 알 상점의 기본 몬스터, 두 속성 조합의 첫 몬스터)만 원래 이름을 유지한다.
-const SPREAD = (n, count, from, to) => from + Math.floor(n * (to - from + 1) / count);   // n번째를 from~to 등급에 고르게
+// 2000마리를 같은 규칙으로 만든다. 대표 몬스터(변종 0번)만 원래 이름을 유지한다.
+// 일반~서사 누적 비율표: 그룹 안에서 n번째 변종이 어느 등급인지 정한다 (0번은 항상 일반)
+const REG_SHARE = (() => {
+  const w = [];
+  for (let r = 0; r <= RANK.epic; r++) w.push(Math.pow(RANK_Q, r));
+  const sum = w.reduce((x, y) => x + y, 0);
+  let acc = 0;
+  return w.map(x => (acc += x / sum));
+})();
+// 그룹마다 반올림 위치(ofs)를 다르게 해서 전체 등급 수가 매끄러운 피라미드가 되게 한다
+const rankOfVariant = (n, N, ofs = 0.5) => { const t = (n + ofs) / N; const r = REG_SHARE.findIndex(c => t <= c + 1e-9); return r < 0 ? RANK.epic : r; };
 
-// 순수 속성: 기본 속성은 일반~서사 / 특수 속성은 대표만 일반, 나머지는 고급~서사
 function addPure(e, i, k) {
-  const base = i < BASE.length;
   const group = 'p:' + e.id;
   const id = k === 0 ? group : `${group}:${k}`;
   const adjs = ADJ[e.id];
   const look = k === 0 ? { face: e.face, name: `${e.adj} ${e.noun}` } : freshCreature(adjs[k % adjs.length], id, hashStr(group) + k * 7);
-  const rank = base ? SPREAD(k, PURE_VARIANTS, 0, RANK.epic)
-    : k === 0 ? (COMMON_SPECIAL.includes(e.id) ? 0 : RANK.epic)
-    : SPREAD(k - 1, PURE_VARIANTS - 1, RANK.uncommon, RANK.epic);
-  addMon({ id, group, variant: k, ...look, els: [e.id], rarity: RAR_ORDER[rank], mod: k === 0 ? null : variantMod(id) });
+  addMon({ id, group, variant: k, ...look, els: [e.id], rarity: RAR_ORDER[rankOfVariant(k, PURE_VARIANTS, frac(group))], mod: k === 0 ? null : variantMod(id) });
 }
-// 두 속성 혼합: 두 기본 속성은 고급~서사 / 특수 속성이 섞이면 희귀~서사
 function addHybrid(i, j, v) {
   const a = EL[i], b = EL[j];
   const group = `h:${a.id}+${b.id}`;
   const id = v === 0 ? group : `${group}:${v}`;
   const adjs = v % 2 ? ADJ[a.id] : ADJ[b.id];
   const look = v === 0 ? { face: b.face, name: `${a.adj} ${b.noun}` } : freshCreature(adjs[v % adjs.length], id, hashStr(group) + v * 7);
-  const rank = i < BASE.length && j < BASE.length ? SPREAD(v, HYB_VARIANTS, RANK.uncommon, RANK.epic) : SPREAD(v, HYB_VARIANTS, RANK.rare, RANK.epic);
-  addMon({ id, group, variant: v, ...look, els: [a.id, b.id], rarity: RAR_ORDER[rank], mod: v === 0 ? null : variantMod(id) });
+  addMon({ id, group, variant: v, ...look, els: [a.id, b.id], rarity: RAR_ORDER[rankOfVariant(v, HYB_VARIANTS, frac(group))], mod: v === 0 ? null : variantMod(id) });
 }
+
+// 전설/신화 늘리기: 아직 안 쓴 세 속성 조합마다 이름을 붙여 만든다
+const TRIPLES = [];
+for (let x = 0; x < EL.length; x++) for (let y = x + 1; y < EL.length; y++) for (let z = y + 1; z < EL.length; z++) TRIPLES.push([EL[x].id, EL[y].id, EL[z].id]);
+const tripleKey = (els) => els.slice().sort().join('+');
+const usedTriples = new Set([...LEGENDS, ...MYTHICS].map(m => tripleKey(m.els)));
+const LEG_TITLES = ['제왕', '군주', '수호신', '폭군', '현자', '기사', '여제', '대왕', '거인', '패왕'];
+const MYTH_TITLES = ['신', '창조신', '파괴신', '천신', '마신'];
+const ULT_WORDS = ['폭풍', '심판', '대폭발', '종말', '광풍', '붕괴', '찬가', '포효', '낙인', '파동'];
+function nextTriple(seed) {
+  for (let t = 0; t < TRIPLES.length; t++) {
+    const tr = TRIPLES[(seed * 47 + t * 13) % TRIPLES.length];
+    if (!usedTriples.has(tripleKey(tr))) { usedTriples.add(tripleKey(tr)); return tr; }
+  }
+  return TRIPLES[seed % TRIPLES.length];
+}
+function makeSpecial(prefix, k, titles) {
+  const els = nextTriple(k + (prefix === 'M' ? 101 : 7));
+  const title = `${EL[ELI[els[0]]].adj}의 ${titles[k % titles.length]}`;
+  const look = freshCreature(title, `${prefix}:g${k}`, hashStr(prefix + k) % CREATURES.length);
+  return { id: `${prefix}:g${k}`, ...look, els, ult: `${EL[ELI[els[1]]].adj} ${ULT_WORDS[k % ULT_WORDS.length]}` };
+}
+for (let k = 0; LEGENDS.length < LEGEND_COUNT; k++) LEGENDS.push(makeSpecial('L', k, LEG_TITLES));
+for (let k = 0; MYTHICS.length < MYTHIC_COUNT; k++) MYTHICS.push(makeSpecial('M', k, MYTH_TITLES));
+
 const PAIRS = [];
 for (let i = 0; i < EL.length; i++) for (let j = i + 1; j < EL.length; j++) PAIRS.push([i, j]);
-// 대표 몬스터 이름이 먼저 자리를 잡도록 변종 0번부터 만든 뒤 나머지를 만든다
+// 이름 붙은 전설/신화가 이름을 먼저 차지하고, 대표 몬스터 → 나머지 변종 순서로 만든다
+LEGENDS.concat(MYTHICS).forEach(m => usedNames.add(m.name));
 EL.forEach((e, i) => addPure(e, i, 0));
 PAIRS.forEach(([i, j]) => addHybrid(i, j, 0));
 EL.forEach((e, i) => { for (let k = 1; k < PURE_VARIANTS; k++) addPure(e, i, k); });
