@@ -817,7 +817,9 @@ function drawPlot(p, i, x, y, t, dt) {
   if (p.kind === 'mountain') {
     block(x, y, hw, hh, '#8d82d8', '#51479b');
     shadow(x, y + 8, 80);
-    emoji('🏔️', x, y - 42, 118);
+    const lvUp = Math.min(40, ((p.lv || 1) - 1) * 12);
+    emoji('🏔️', x, y - 42 - lvUp / 3, 118 + lvUp);
+    if ((p.lv || 1) > 1) emoji('⭐', x + 52, y - 92, 24);
     if (p.breed) {
       const k = ready ? Math.abs(Math.sin(t * 5)) * -10 : 0;
       emoji('🥚', x + 58, y + 6 + k, 42, ready ? 0 : Math.sin(t * (4 + rIdx(p.breed.type) * 2)) * 0.25);
@@ -878,7 +880,7 @@ function drawPlot(p, i, x, y, t, dt) {
 function drawLabel(p, i, x, y, t) {
   if (!p || p.kind === 'deco') return;
   const ready = plotReady(i);
-  const name = p.kind === 'mountain' ? '교배산' : p.kind === 'hatchery' ? ((p.cap || HATCH_CAP) > HATCH_CAP ? `큰 부화장 ${p.cap}칸` : '부화장') : p.kind === 'farm' ? '농장' : `${habName(p.el)} Lv.${p.lv}`;
+  const name = p.kind === 'mountain' ? ((p.lv || 1) > 1 ? `큰 교배산 Lv.${p.lv}` : '교배산') : p.kind === 'hatchery' ? ((p.cap || HATCH_CAP) > HATCH_CAP ? `큰 부화장 ${p.cap}칸` : '부화장') : p.kind === 'farm' ? '농장' : `${habName(p.el)} Lv.${p.lv}`;
   const ly = y + TH / 2 + 10;
   label(name, x, ly, 17);
   if (p.kind === 'hab') {
@@ -904,6 +906,34 @@ function drawLabel(p, i, x, y, t) {
   const text = liveText(`plot:${i}`);
   const bounce = ready ? Math.abs(Math.sin(t * 4)) * -6 : 0;
   pill(text, x, ly + 26 + bounce, ready ? '#ffe066' : 'rgba(0,0,0,.55)', ready ? '#3a2a00' : '#fff', 14);
+}
+
+function drawCarry(t) {
+  const p = S.plots[carry.from];
+  if (!p) { carry = null; return; }
+  // 놓을 칸 표시: 초록(가능) / 빨강(불가)
+  if (carry.over >= 0 && carry.over !== carry.from) {
+    const r = dropResult(carry.from, carry.over);
+    const { x, y } = plotPos(carry.over);
+    diamond(x, y, TW / 2 - 4, TH / 2 - 2);
+    ctx.fillStyle = r.ok ? 'rgba(125,255,143,.35)' : 'rgba(255,77,109,.35)';
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = r.ok ? '#7dff8f' : '#ff4d6d';
+    ctx.stroke();
+    if (r.text) pill(r.text, x, y - TH * 0.9, r.ok ? '#1f7a2e' : '#7a1f2e', '#fff', 15);
+  }
+  const src = plotPos(carry.from);
+  diamond(src.x, src.y, TW / 2 - 8, TH / 2 - 5);
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.fill();
+  const w = toWorld(carry.sx, carry.sy);
+  const icon = p.kind === 'mountain' ? '🏔️' : p.kind === 'hatchery' ? '🪺' : p.kind === 'farm' ? '🌾'
+    : p.kind === 'deco' ? (decoById(p.id) || { emoji: '❓' }).emoji : habEmoji(p.el);
+  ctx.globalAlpha = 0.9;
+  shadow(w.x, w.y + 30, 40);
+  emoji(icon, w.x, w.y - 20 + Math.sin(t * 8) * 3, 90);
+  ctx.globalAlpha = 1;
 }
 
 function drawFloaters(t) {
@@ -956,6 +986,7 @@ function drawWorld(now) {
     bubbles = [];
     // 👁️ 숨기기: 이름표·타이머·💰 말풍선을 그리지 않는다
     if (!S.hideUI) here.forEach(i => { const { x, y } = plotPos(i); drawLabel(S.plots[i], i, x, y, t); });
+    if (carry) drawCarry(t);
     drawFloaters(t);
   }
   requestAnimationFrame(drawWorld);
@@ -965,38 +996,101 @@ function drawWorld(now) {
 function toWorld(sx, sy) {
   return { x: (sx - W / 2) / cam.z + cam.x, y: (sy - H / 2 - 10) / cam.z + cam.y };
 }
-function tapAt(sx, sy) {
+// 화면 좌표 아래에 있는 칸 번호 (없으면 -1)
+function plotAt(sx, sy) {
   const w = toWorld(sx, sy);
-  for (const b of bubbles) {
-    if (Math.hypot(w.x - b.x, w.y - b.y) < b.r + 8) { collectHab(b.i, true); return; }
+  const order = islandRange(S.isl || 0).map(i => ({ i, ...plotPos(i) })).sort((p, q) => q.y - p.y);
+  // 땅 칸을 먼저 본다: 앞 건물의 그림이 뒤 건물 칸을 가려도 뒤 건물이 잡히게
+  for (const o of order) {
+    if (Math.abs(w.x - o.x) / (TW / 2) + Math.abs(w.y - o.y) / (TH / 2) <= 1) return o.i;
   }
-  const order = islandRange(S.isl || 0).map(i => ({ i, ...plotPos(i) })).sort((a, b) => b.y - a.y);
+  // 칸 밖이면 건물 그림(위로 솟은 부분)을 눌렀는지 본다
   for (const o of order) {
     const dx = Math.abs(w.x - o.x), dy = w.y - o.y;
-    const inTile = dx / (TW / 2) + Math.abs(dy) / (TH / 2) <= 1;
-    const inSprite = S.plots[o.i] && dx < TW * 0.3 && dy < 0 && dy > -TH * 1.1;
-    if (inTile || inSprite) { openPlot(o.i); return; }
+    if (S.plots[o.i] && dx < TW * 0.3 && dy < 0 && dy > -TH * 1.1) return o.i;
   }
+  return -1;
 }
+function tapAt(sx, sy) {
+  const w = toWorld(sx, sy);
+  for (const bb of bubbles) {
+    if (Math.hypot(w.x - bb.x, w.y - bb.y) < bb.r + 8) { collectHab(bb.i, true); return; }
+  }
+  const i = plotAt(sx, sy);
+  if (i >= 0) openPlot(i);
+}
+
+// 건물 꾹 눌러 끌기: 빈 땅에 놓으면 이사, 같은 건물 위에 놓으면 합치기
+const HOLD_MS = 320;
 let drag = null;
+let carry = null;   // { from, sx, sy, over }
+function dropResult(from, to) {
+  const p = S.plots[from], q = to >= 0 ? S.plots[to] : undefined;
+  if (to < 0 || to === from) return { ok: false };
+  if (!q) return { ok: true, kind: 'move', text: '🚚 여기로 옮기기' };
+  if (p.kind === 'hatchery' && q.kind === 'hatchery') return { ok: true, kind: 'merge', text: `🔗 합치기 → ${(p.cap || HATCH_CAP) + (q.cap || HATCH_CAP) + 1}칸` };
+  if (p.kind === 'mountain' && q.kind === 'mountain') {
+    if (p.breed || q.breed) return { ok: false, text: '교배 중인 교배산은 합칠 수 없어요' };
+    return { ok: true, kind: 'merge', text: `🔗 합치기 → 큰 교배산 Lv.${(p.lv || 1) + (q.lv || 1)}` };
+  }
+  return { ok: false, text: '같은 건물끼리만 합칠 수 있어요' };
+}
+function dropBuilding(from, to) {
+  const r = dropResult(from, to);
+  if (!r.ok) { if (r.text) toast(r.text); return; }
+  const p = S.plots[from];
+  if (r.kind === 'move') {
+    S.plots[to] = p;
+    S.plots[from] = null;
+    S.monsters.forEach(m => { if (m.hab === from) { m.hab = to; delete walkers[m.uid]; } });
+    toast('🚚 건물을 옮겼어요');
+  } else if (p.kind === 'hatchery') {
+    mergeHatch(to, from);
+    closeModal();
+  } else if (p.kind === 'mountain') {
+    mergeMountain(to, from);
+  }
+  save();
+  render();
+}
 cv.addEventListener('pointerdown', (e) => {
-  drag = { sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false };
-  cv.setPointerCapture(e.pointerId);
+  drag = { sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false, hold: null };
+  try { cv.setPointerCapture(e.pointerId); } catch (err) { /* 캡처 불가 */ }
+  const i = plotAt(e.clientX, e.clientY);
+  if (i >= 0 && S.plots[i]) {
+    drag.hold = setTimeout(() => {
+      if (!drag || drag.moved) return;
+      carry = { from: i, sx: drag.sx, sy: drag.sy, over: i };
+      if (navigator.vibrate) try { navigator.vibrate(25); } catch (err) { /* 진동 없음 */ }
+      toast('끌어서 빈 땅에 놓으면 옮기고, 같은 건물 위에 놓으면 합쳐요');
+    }, HOLD_MS);
+  }
 });
 cv.addEventListener('pointermove', (e) => {
   if (!drag) return;
+  if (carry) {
+    carry.sx = e.clientX;
+    carry.sy = e.clientY;
+    carry.over = plotAt(e.clientX, e.clientY);
+    return;
+  }
   const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
-  if (Math.hypot(dx, dy) > 8) drag.moved = true;
+  if (Math.hypot(dx, dy) > 8) { drag.moved = true; clearTimeout(drag.hold); }
   if (drag.moved) {
     cam.x = clamp(drag.cx - dx / cam.z, -650, 650);
     cam.y = clamp(drag.cy - dy / cam.z, -150, 680);
   }
 });
 cv.addEventListener('pointerup', (e) => {
-  if (drag && !drag.moved) tapAt(e.clientX, e.clientY);
+  if (drag) clearTimeout(drag.hold);
+  if (carry) {
+    const c = carry;
+    carry = null;
+    if (c.over !== c.from) dropBuilding(c.from, plotAt(e.clientX, e.clientY));
+  } else if (drag && !drag.moved) tapAt(e.clientX, e.clientY);
   drag = null;
 });
-cv.addEventListener('pointercancel', () => { drag = null; });
+cv.addEventListener('pointercancel', () => { if (drag) clearTimeout(drag.hold); drag = null; carry = null; });
 cv.addEventListener('wheel', (e) => {
   e.preventDefault();
   cam.z = clamp(cam.z * Math.exp(-e.deltaY * 0.0012), 0.28, 1.6);
@@ -1452,13 +1546,17 @@ const MOUNTAIN_COST = 3000;
 const HATCHERY_COST = 2000;
 const hatcheries = () => S.plots.map((p, i) => (p && p.kind === 'hatchery' ? i : -1)).filter(i => i >= 0);
 // 부화장 하나에 3칸, 교배산이 하나 늘 때마다 2칸 더
-const hatchCap = () => Math.max(HATCH_CAP, hatcheries().reduce((s, k) => s + (S.plots[k].cap || HATCH_CAP), 0)) + 2 * Math.max(0, mountains().length - 1);
+const mtnPower = () => mountains().reduce((s, k) => s + (S.plots[k].lv || 1), 0);   // 합친 교배산도 원래 개수만큼 센다
+const mtnSpeed = (p) => 1 + 0.25 * ((p.lv || 1) - 1);   // 교배산 레벨마다 교배 25% 빨라짐
+const hatchCap = () => Math.max(HATCH_CAP, hatcheries().reduce((s, k) => s + (S.plots[k].cap || HATCH_CAP), 0)) + 2 * Math.max(0, mtnPower() - 1);
 
 function mountainFooter(i) {
   const n = mountains().length;
   const canDemolish = n > 1 && !S.plots[i].breed;
   return `<div class="row">
     ${n > 1 ? `<span class="muted small-note">교배산 ${mountains().indexOf(i) + 1}/${n} ${islandLabel(i)}</span>` : ''}
+    ${(S.plots[i].lv || 1) > 1 ? `<span class="muted small-note">⭐ 큰 교배산 Lv.${S.plots[i].lv} · 교배 시간 -${Math.round((1 - 1 / mtnSpeed(S.plots[i])) * 100)}%</span>` : ''}
+    ${n > 1 ? '<span class="muted small-note">💡 섬에서 교배산을 꾹 눌러 다른 교배산 위로 끌면 합쳐져요</span>' : ''}
     ${canDemolish ? `<button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 철거 (+💰 ${fmt(MOUNTAIN_COST / 2)})</button>` : ''}
     <button class="btn ghost small" data-act="close">닫기</button>
   </div>`;
@@ -1476,7 +1574,7 @@ function openBreed(i = curMtn) {
       <h3>🏔️ 교배산</h3>
       <div class="egg ${done ? 'ready' : 'lv' + (rIdx(b.type) + 1)}">🥚</div>
       <div class="timer" data-live="breed:${i}"></div>
-      <div class="hint">${breedHint(b.total)}</div>
+      <div class="hint">${breedHint(b.base || b.total)}</div>
       <div class="parents">${b.parents.join(' + ')}</div>
       <div class="bar"><div data-bar="breed:${i}"></div></div>
       <div class="row">
@@ -1569,9 +1667,10 @@ function startBreed(i = curMtn) {
   if (a.lv < BREED_LV || b.lv < BREED_LV) { toast(`두 마리 모두 Lv.${BREED_LV} 이상이어야 해요`); return; }
   if (!spend(breedCost(a, b))) return;
   const type = breedResult(a.type, b.type);
-  const total = RAR[CAT[type].rarity].time;
+  const base = RAR[CAT[type].rarity].time;
+  const total = Math.max(1, Math.round(base / mtnSpeed(p)));
   const logId = S.nextLog = (S.nextLog || 0) + 1;
-  p.breed = { type, total, end: Date.now() + total * 1000, parents: [CAT[a.type].name, CAT[b.type].name], logId };
+  p.breed = { type, total, base, end: Date.now() + total * 1000, parents: [CAT[a.type].name, CAT[b.type].name], logId };
   S.breedLog = [{ id: logId, a: a.uid, b: b.uid, at: a.type, bt: b.type, rt: type, t: Date.now() }, ...(S.breedLog || [])].slice(0, BREED_LOG_MAX);
   sel = [];
   save();
@@ -1618,11 +1717,22 @@ function openHatchery(i = curHatch) {
       : '<p class="muted">부화장이 비어 있어요. 교배산에서 알을 가져오세요!</p>'}</div>
     ${S.hatch.length > 1 ? `<div class="all-box"><button class="btn green" data-act="hatchAll">🐣 모두 부화 (알맞은 서식지로 자동 이사)</button></div>` : ''}
     <p class="muted small-note">부화장 ${n}개가 알을 같이 보관해요 (${hatcheries().map(k => (S.plots[k].cap || HATCH_CAP) + '칸').join(' + ')}${mountains().length > 1 ? ` + 교배산 추가분 ${2 * (mountains().length - 1)}칸` : ''})</p>
+    ${n > 1 ? '<p class="muted small-note">💡 섬에서 부화장을 꾹 눌러 다른 부화장 위로 끌어도 합쳐져요</p>' : ''}
     ${i != null && n > 1 ? `<div class="all-box"><button class="btn small" data-act="mergePick" data-i="${i}">🔗 다른 부화장과 합쳐서 큰 부화장 만들기 (+1칸 보너스)</button></div>` : ''}
     <div class="row">
       ${i != null && n > 1 ? `<button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 이 부화장 철거 (+💰 ${fmt(demolishRefund(S.plots[i]))})</button>` : ''}
       <button class="btn ghost small" data-act="close">닫기</button>
     </div>`);
+}
+
+// 교배산 두 개를 합쳐 큰 교배산으로: 레벨이 합쳐지고 교배 시간이 빨라진다
+function mergeMountain(i, k) {
+  const a = S.plots[i], b = S.plots[k];
+  if (!a || !b || a.kind !== 'mountain' || b.kind !== 'mountain' || i === k || a.breed || b.breed) return;
+  a.lv = (a.lv || 1) + (b.lv || 1);
+  S.plots[k] = null;
+  save();
+  toast(`🔗 큰 교배산 Lv.${a.lv} 완성! 교배 시간 -${Math.round((1 - 1 / mtnSpeed(a)) * 100)}%`);
 }
 
 // 부화장 두 개를 합쳐 큰 부화장 하나로: 칸은 모두 합치고 보너스 1칸, 땅 한 칸이 비워진다
