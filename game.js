@@ -75,6 +75,11 @@ const LEGENDS = [
   { id: 'L:swan',    name: '빛의 백조 오데트', face: '🦢', els: ['light', 'water', 'ice'],  ult: '백조의 호수' },
   { id: 'L:scorpion', name: '사막의 전갈왕',  face: '🦂', els: ['poison', 'earth', 'fire'], ult: '사막 폭풍' },
   { id: 'L:megalo',  name: '폭풍 메갈로돈',   face: '🦈', els: ['water', 'thunder', 'dark'], ult: '폭풍 해일' },
+  { id: 'L:golem',   name: '고대 골렘 타이탄', face: '🗿', els: ['earth', 'metal', 'magic'],  ult: '고대의 진동' },
+  { id: 'L:storm',   name: '폭풍의 신조',     face: '🦅', els: ['thunder', 'light', 'nature'], ult: '천둥 날개' },
+  { id: 'L:lich',    name: '서리 리치 왕',    face: '💀', els: ['dark', 'ice', 'magic'],     ult: '죽음의 서리' },
+  { id: 'L:sunlion', name: '태양 사자 솔',    face: '🦁', els: ['fire', 'light', 'earth'],   ult: '태양 폭발' },
+  { id: 'L:hydra',   name: '늪의 히드라',     face: '🐲', els: ['poison', 'water', 'nature'], ult: '독 물결' },
 ];
 const MYTHIC = { id: 'M:arche', name: '태초의 신수 아르케', face: '🌌', els: ['magic', 'light', 'dark'], ult: '태초의 빛' };
 // 전설 상점 전용: 골드로 살 수는 있지만… 절대 모을 수 없는 가격
@@ -141,21 +146,22 @@ function skDesc(sk) {
 const needsTarget = (sk) => ['dmg', 'burn', 'poison', 'stun', 'curse'].includes(sk.type) && !sk.aoe;
 
 // ===================== 몬스터 카탈로그 (500마리) =====================
-// 속성마다 9마리(순수), 두 속성 조합마다 7마리(혼합) + 레전더리 10 + 신화 1 + 초월 5 = 500
-const PURE_VARIANTS = 9;
-const HYB_VARIANTS = 7;
+// 속성마다 19마리(순수 209), 두 속성 조합마다 14마리(혼합 770) + 전설 15 + 신화 1 + 전설 상점 5 = 1000
+const PURE_VARIANTS = 19;   // 속성마다 19마리 (0~8은 원래 몬스터, 9~18은 새로 추가)
+const HYB_VARIANTS = 14;    // 두 속성 조합마다 14마리 (0~6은 원래, 7~13은 새로 추가)
+const OLD_PURE = 9, OLD_HYB = 7;
 const ADJ = {
-  fire:    ['화염', '불꽃', '용암', '이글', '잿불', '태양', '폭염', '화산', '봉화'],
-  water:   ['물결', '파도', '심해', '이슬', '빗방울', '소용돌이', '산호', '해류', '호수'],
-  thunder: ['번개', '천둥', '전류', '섬광', '뇌운', '스파크', '폭풍', '전격', '뇌전'],
-  nature:  ['숲', '덩굴', '꽃잎', '이끼', '새싹', '고목', '들풀', '정글', '꽃밭'],
-  earth:   ['바위', '모래', '대지', '암석', '진흙', '협곡', '수정', '화강', '지진'],
-  dark:    ['그림자', '심연', '암흑', '한밤', '칠흑', '망령', '악몽', '그믐', '혼령'],
-  light:   ['광휘', '빛살', '새벽', '찬란', '여명', '성광', '햇살', '무지개', '은빛'],
-  poison:  ['맹독', '독침', '늪지', '산성', '독안개', '독버섯', '부식', '독니', '역병'],
-  ice:     ['서리', '빙하', '눈꽃', '얼음', '한파', '설원', '냉기', '빙결', '눈보라'],
-  metal:   ['강철', '무쇠', '크롬', '기계', '톱니', '합금', '철갑', '황동', '티타늄'],
-  magic:   ['비전', '마력', '신비', '주문', '환상', '룬', '요술', '별빛', '마법'],
+  fire:    ['화염', '불꽃', '용암', '이글', '잿불', '태양', '폭염', '화산', '봉화', '홍련', '불사', '적염'],
+  water:   ['물결', '파도', '심해', '이슬', '빗방울', '소용돌이', '산호', '해류', '호수', '해일', '청류', '물보라'],
+  thunder: ['번개', '천둥', '전류', '섬광', '뇌운', '스파크', '폭풍', '전격', '뇌전', '낙뢰', '우레', '방전'],
+  nature:  ['숲', '덩굴', '꽃잎', '이끼', '새싹', '고목', '들풀', '정글', '꽃밭', '풀잎', '수풀', '나뭇잎'],
+  earth:   ['바위', '모래', '대지', '암석', '진흙', '협곡', '수정', '화강', '지진', '황토', '바위산', '단층'],
+  dark:    ['그림자', '심연', '암흑', '한밤', '칠흑', '망령', '악몽', '그믐', '혼령', '어스름', '흑야', '공허'],
+  light:   ['광휘', '빛살', '새벽', '찬란', '여명', '성광', '햇살', '무지개', '은빛', '광채', '서광', '백광'],
+  poison:  ['맹독', '독침', '늪지', '산성', '독안개', '독버섯', '부식', '독니', '역병', '독꽃', '썩은', '독액'],
+  ice:     ['서리', '빙하', '눈꽃', '얼음', '한파', '설원', '냉기', '빙결', '눈보라', '만년설', '북풍', '서릿발'],
+  metal:   ['강철', '무쇠', '크롬', '기계', '톱니', '합금', '철갑', '황동', '티타늄', '강선', '철벽', '합성'],
+  magic:   ['비전', '마력', '신비', '주문', '환상', '룬', '요술', '별빛', '마법', '마나', '비술', '주술'],
 };
 const CREATURES = [
   ['🐺', '늑대'], ['🦊', '여우'], ['🐻', '곰'], ['🐯', '호랑이'], ['🐗', '멧돼지'], ['🐍', '뱀'],
@@ -199,39 +205,43 @@ function freshCreature(adj, seedKey) {
   return { face: '❓', name: `${adj} 몬스터 ${seedKey}` };
 }
 
-// 순수 속성
-EL.forEach((e, i) => {
+// 순수 속성 몬스터 하나 만들기
+function addPure(e, i, k) {
   const base = i < BASE.length;
-  for (let k = 0; k < PURE_VARIANTS; k++) {
-    const group = 'p:' + e.id;
-    const id = k === 0 ? group : `${group}:${k}`;
-    const look = k === 0 ? { face: e.face, name: `${e.adj} ${e.noun}` } : freshCreature(ADJ[e.id][k], id);
-    addMon({
-      id, group, variant: k, ...look, els: [e.id],
-      // 기본 속성: 변종 0~8이 일반~서사 한 단계씩 / 특수 속성: 기본은 일반, 나머지는 고급부터
-      rarity: RAR_ORDER[base ? k : k === 0 ? (COMMON_SPECIAL.includes(e.id) ? 0 : RANK.epic) : Math.min(RANK.epic, k + 1)],
-      mod: k === 0 ? null : variantMod(id),
-    });
+  const group = 'p:' + e.id;
+  const id = k === 0 ? group : `${group}:${k}`;
+  const adjs = ADJ[e.id];
+  const look = k === 0 ? { face: e.face, name: `${e.adj} ${e.noun}` } : freshCreature(adjs[k % adjs.length], id);
+  let rank;
+  if (k < OLD_PURE) {
+    // 원래 몬스터: 기본 속성은 일반~서사 한 단계씩 / 특수 속성은 기본만 일반, 나머지는 고급부터
+    rank = base ? k : k === 0 ? (COMMON_SPECIAL.includes(e.id) ? 0 : RANK.epic) : Math.min(RANK.epic, k + 1);
+  } else {
+    // 새 몬스터: 기본 속성은 다시 일반~서사, 특수 속성은 고급~서사
+    rank = base ? (k - OLD_PURE) % (RANK.epic + 1) : Math.min(RANK.epic, RANK.uncommon + (k - OLD_PURE) % 7);
   }
-});
-// 두 속성 혼합
-for (let i = 0; i < EL.length; i++) {
-  for (let j = i + 1; j < EL.length; j++) {
-    const a = EL[i], b = EL[j];
-    const group = `h:${a.id}+${b.id}`;
-    for (let v = 0; v < HYB_VARIANTS; v++) {
-      const id = v === 0 ? group : `${group}:${v}`;
-      const adj = v % 2 ? ADJ[a.id][v] : ADJ[b.id][v];
-      const look = v === 0 ? { face: b.face, name: `${a.adj} ${b.noun}` } : freshCreature(adj, id);
-      addMon({
-        id, group, variant: v, ...look, els: [a.id, b.id],
-        // 두 기본 속성: 고급~서사 / 특수 속성이 섞이면: 희귀~서사
-        rarity: RAR_ORDER[i < BASE.length && j < BASE.length ? Math.min(RANK.epic, RANK.uncommon + v) : Math.min(RANK.epic, RANK.rare + v)],
-        mod: v === 0 ? null : variantMod(id),
-      });
-    }
-  }
+  addMon({ id, group, variant: k, ...look, els: [e.id], rarity: RAR_ORDER[rank], mod: k === 0 ? null : variantMod(id) });
 }
+// 두 속성 혼합 몬스터 하나 만들기
+function addHybrid(i, j, v) {
+  const a = EL[i], b = EL[j];
+  const group = `h:${a.id}+${b.id}`;
+  const id = v === 0 ? group : `${group}:${v}`;
+  const adjs = v % 2 ? ADJ[a.id] : ADJ[b.id];
+  const look = v === 0 ? { face: b.face, name: `${a.adj} ${b.noun}` } : freshCreature(adjs[v % adjs.length], id);
+  const step = v % OLD_HYB;   // 새 몬스터(7~13)도 원래처럼 한 단계씩
+  // 두 기본 속성: 고급~서사 / 특수 속성이 섞이면: 희귀~서사
+  const rank = i < BASE.length && j < BASE.length ? Math.min(RANK.epic, RANK.uncommon + step) : Math.min(RANK.epic, RANK.rare + step);
+  addMon({ id, group, variant: v, ...look, els: [a.id, b.id], rarity: RAR_ORDER[rank], mod: v === 0 ? null : variantMod(id) });
+}
+const PAIRS = [];
+for (let i = 0; i < EL.length; i++) for (let j = i + 1; j < EL.length; j++) PAIRS.push([i, j]);
+// 1) 원래 500마리 쪽
+EL.forEach((e, i) => { for (let k = 0; k < OLD_PURE; k++) addPure(e, i, k); });
+PAIRS.forEach(([i, j]) => { for (let v = 0; v < OLD_HYB; v++) addHybrid(i, j, v); });
+// 2) 새로 추가된 몬스터
+EL.forEach((e, i) => { for (let k = OLD_PURE; k < PURE_VARIANTS; k++) addPure(e, i, k); });
+PAIRS.forEach(([i, j]) => { for (let v = OLD_HYB; v < HYB_VARIANTS; v++) addHybrid(i, j, v); });
 LEGENDS.forEach(l => addMon({ ...l, rarity: 'legendary' }));
 addMon({ ...MYTHIC, rarity: 'mythic' });
 SHOP_LEGENDS.forEach(l => addMon({ ...l, rarity: l.rank || 'divine', shop: true }));
