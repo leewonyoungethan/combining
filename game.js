@@ -147,9 +147,8 @@ const needsTarget = (sk) => ['dmg', 'burn', 'poison', 'stun', 'curse'].includes(
 
 // ===================== 몬스터 카탈로그 (500마리) =====================
 // 속성마다 19마리(순수 209), 두 속성 조합마다 14마리(혼합 770) + 전설 15 + 신화 1 + 전설 상점 5 = 1000
-const PURE_VARIANTS = 19;   // 속성마다 19마리 (0~8은 원래 몬스터, 9~18은 새로 추가)
-const HYB_VARIANTS = 14;    // 두 속성 조합마다 14마리 (0~6은 원래, 7~13은 새로 추가)
-const OLD_PURE = 9, OLD_HYB = 7;
+const PURE_VARIANTS = 19;   // 속성마다 19마리
+const HYB_VARIANTS = 14;    // 두 속성 조합마다 14마리
 const ADJ = {
   fire:    ['화염', '불꽃', '용암', '이글', '잿불', '태양', '폭염', '화산', '봉화', '홍련', '불사', '적염'],
   water:   ['물결', '파도', '심해', '이슬', '빗방울', '소용돌이', '산호', '해류', '호수', '해일', '청류', '물보라'],
@@ -196,8 +195,9 @@ function addMon(m) {
 function variantMod(key) {
   return { hp: 0.88 + frac(key + 'h') * 0.24, atk: 0.88 + frac(key + 'a') * 0.24, spd: 0.93 + frac(key + 's') * 0.14 };
 }
-function freshCreature(adj, seedKey) {
-  let k = hashStr(seedKey) % CREATURES.length;
+// start를 주면 그 번호부터 동물을 고른다 (같은 그룹 안에서 동물이 겹치지 않게)
+function freshCreature(adj, seedKey, start) {
+  let k = start != null ? start % CREATURES.length : hashStr(seedKey) % CREATURES.length;
   for (let tries = 0; tries < CREATURES.length; tries++, k = (k + 1) % CREATURES.length) {
     const [face, noun] = CREATURES[k];
     if (!usedNames.has(`${adj} ${noun}`)) return { face, name: `${adj} ${noun}` };
@@ -205,43 +205,39 @@ function freshCreature(adj, seedKey) {
   return { face: '❓', name: `${adj} 몬스터 ${seedKey}` };
 }
 
-// 순수 속성 몬스터 하나 만들기
+// 1000마리를 한 번에 같은 규칙으로 만든다.
+// 대표 몬스터(변종 0번: 알 상점의 기본 몬스터, 두 속성 조합의 첫 몬스터)만 원래 이름을 유지한다.
+const SPREAD = (n, count, from, to) => from + Math.floor(n * (to - from + 1) / count);   // n번째를 from~to 등급에 고르게
+
+// 순수 속성: 기본 속성은 일반~서사 / 특수 속성은 대표만 일반, 나머지는 고급~서사
 function addPure(e, i, k) {
   const base = i < BASE.length;
   const group = 'p:' + e.id;
   const id = k === 0 ? group : `${group}:${k}`;
   const adjs = ADJ[e.id];
-  const look = k === 0 ? { face: e.face, name: `${e.adj} ${e.noun}` } : freshCreature(adjs[k % adjs.length], id);
-  let rank;
-  if (k < OLD_PURE) {
-    // 원래 몬스터: 기본 속성은 일반~서사 한 단계씩 / 특수 속성은 기본만 일반, 나머지는 고급부터
-    rank = base ? k : k === 0 ? (COMMON_SPECIAL.includes(e.id) ? 0 : RANK.epic) : Math.min(RANK.epic, k + 1);
-  } else {
-    // 새 몬스터: 기본 속성은 다시 일반~서사, 특수 속성은 고급~서사
-    rank = base ? (k - OLD_PURE) % (RANK.epic + 1) : Math.min(RANK.epic, RANK.uncommon + (k - OLD_PURE) % 7);
-  }
+  const look = k === 0 ? { face: e.face, name: `${e.adj} ${e.noun}` } : freshCreature(adjs[k % adjs.length], id, hashStr(group) + k * 7);
+  const rank = base ? SPREAD(k, PURE_VARIANTS, 0, RANK.epic)
+    : k === 0 ? (COMMON_SPECIAL.includes(e.id) ? 0 : RANK.epic)
+    : SPREAD(k - 1, PURE_VARIANTS - 1, RANK.uncommon, RANK.epic);
   addMon({ id, group, variant: k, ...look, els: [e.id], rarity: RAR_ORDER[rank], mod: k === 0 ? null : variantMod(id) });
 }
-// 두 속성 혼합 몬스터 하나 만들기
+// 두 속성 혼합: 두 기본 속성은 고급~서사 / 특수 속성이 섞이면 희귀~서사
 function addHybrid(i, j, v) {
   const a = EL[i], b = EL[j];
   const group = `h:${a.id}+${b.id}`;
   const id = v === 0 ? group : `${group}:${v}`;
   const adjs = v % 2 ? ADJ[a.id] : ADJ[b.id];
-  const look = v === 0 ? { face: b.face, name: `${a.adj} ${b.noun}` } : freshCreature(adjs[v % adjs.length], id);
-  const step = v % OLD_HYB;   // 새 몬스터(7~13)도 원래처럼 한 단계씩
-  // 두 기본 속성: 고급~서사 / 특수 속성이 섞이면: 희귀~서사
-  const rank = i < BASE.length && j < BASE.length ? Math.min(RANK.epic, RANK.uncommon + step) : Math.min(RANK.epic, RANK.rare + step);
+  const look = v === 0 ? { face: b.face, name: `${a.adj} ${b.noun}` } : freshCreature(adjs[v % adjs.length], id, hashStr(group) + v * 7);
+  const rank = i < BASE.length && j < BASE.length ? SPREAD(v, HYB_VARIANTS, RANK.uncommon, RANK.epic) : SPREAD(v, HYB_VARIANTS, RANK.rare, RANK.epic);
   addMon({ id, group, variant: v, ...look, els: [a.id, b.id], rarity: RAR_ORDER[rank], mod: v === 0 ? null : variantMod(id) });
 }
 const PAIRS = [];
 for (let i = 0; i < EL.length; i++) for (let j = i + 1; j < EL.length; j++) PAIRS.push([i, j]);
-// 1) 원래 500마리 쪽
-EL.forEach((e, i) => { for (let k = 0; k < OLD_PURE; k++) addPure(e, i, k); });
-PAIRS.forEach(([i, j]) => { for (let v = 0; v < OLD_HYB; v++) addHybrid(i, j, v); });
-// 2) 새로 추가된 몬스터
-EL.forEach((e, i) => { for (let k = OLD_PURE; k < PURE_VARIANTS; k++) addPure(e, i, k); });
-PAIRS.forEach(([i, j]) => { for (let v = OLD_HYB; v < HYB_VARIANTS; v++) addHybrid(i, j, v); });
+// 대표 몬스터 이름이 먼저 자리를 잡도록 변종 0번부터 만든 뒤 나머지를 만든다
+EL.forEach((e, i) => addPure(e, i, 0));
+PAIRS.forEach(([i, j]) => addHybrid(i, j, 0));
+EL.forEach((e, i) => { for (let k = 1; k < PURE_VARIANTS; k++) addPure(e, i, k); });
+PAIRS.forEach(([i, j]) => { for (let v = 1; v < HYB_VARIANTS; v++) addHybrid(i, j, v); });
 LEGENDS.forEach(l => addMon({ ...l, rarity: 'legendary' }));
 addMon({ ...MYTHIC, rarity: 'mythic' });
 SHOP_LEGENDS.forEach(l => addMon({ ...l, rarity: l.rank || 'divine', shop: true }));
