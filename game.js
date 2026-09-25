@@ -1266,6 +1266,24 @@ function harvestAll(i) {
   refreshFarm(i);
 }
 
+// 아래 버튼: 모든 섬의 농장을 한 번에 수확
+function harvestEverywhere() {
+  if (!farmIdx().length) { toast('아직 농장이 없어요. 상점이나 빈 땅에서 지어 보세요 🌾'); return; }
+  const { food, n } = harvestReady();
+  if (!n) { toast('아직 다 자란 작물이 없어요 🌱'); return; }
+  toast(`🧺 농장 ${n}개 수확! 🍖 먹이 ${fmt(food)}개`);
+  save();
+  if (!$('#modal').classList.contains('hidden') && $('.farm-all')) closeModal();
+  render();
+}
+function updateHarvestBadge() {
+  const b = $('#harvestBadge');
+  if (!b) return;
+  const n = farmIdx().filter(k => farmReady(S.plots[k])).length;
+  b.textContent = n || '';
+  b.classList.toggle('on', n > 0);
+}
+
 function replantAll(i) {
   const { food, n } = harvestReady();
   let planted = 0, broke = false;
@@ -2831,6 +2849,7 @@ function tick() {
     if (p && p.kind === 'hab') p.gold = Math.min(habGoldCap(i), p.gold + habIncome(i) * dt);
   });
   refreshLive();
+  updateHarvestBadge();
 }
 
 const ACTIONS = {
@@ -2846,6 +2865,7 @@ const ACTIONS = {
   plant: (d) => plant(d.i, d.c),
   harvest: (d) => harvest(d.i),
   harvestAll: (d) => harvestAll(d.i),
+  harvestEverywhere: () => harvestEverywhere(),
   replantAll: (d) => replantAll(d.i),
   farmGem: (d) => farmGem(d.i),
   pick: (d) => pickBreed(d.uid),

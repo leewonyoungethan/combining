@@ -115,6 +115,15 @@ small.muted { font-size: 12px; font-weight: 400; }
 .round.on { border-color: var(--accent); background: linear-gradient(180deg, #54489a, #332c6e); }
 .round.gold { background: linear-gradient(180deg, #ffc247, #f09a00); border-color: #ffd97a; box-shadow: 0 3px 0 #a86700; }
 .round.gold span { color: #3a2400; }
+.round { position: relative; }
+.round.green { background: linear-gradient(180deg, #6ee67f, #2fb344); border-color: #a8f5b4; box-shadow: 0 3px 0 #1f7a2e; }
+.round.green span { color: #062a0e; }
+.round .badge {
+  display: none; position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px;
+  border-radius: 999px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 900; font-style: normal;
+  line-height: 20px; box-shadow: 0 0 0 2px var(--bg);
+}
+.round .badge.on { display: block; animation: ready 1s ease-in-out infinite; }
 .round:active { transform: translateY(2px); box-shadow: none; }
 
 main { max-width: 900px; margin: 0 auto; padding: 0 16px; }
@@ -509,7 +518,7 @@ h3.sub .btn.small { margin-left: 8px; vertical-align: middle; }
   .hud { justify-content: center; }
   .pill { padding: 4px 8px; font-size: 13px; }
   .bottom-bar { gap: 4px; padding: 6px; width: calc(100% - 16px); justify-content: space-between; bottom: 8px; }
-  .round { width: 52px; height: 52px; font-size: 20px; }
+  .round { width: 46px; height: 46px; font-size: 18px; }
   .round span { font-size: 9px; }
   .grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
   .slot { width: 100px; min-height: 120px; }
