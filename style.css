@@ -518,7 +518,7 @@ h3.sub .btn.small { margin-left: 8px; vertical-align: middle; }
   .hud { justify-content: center; }
   .pill { padding: 4px 8px; font-size: 13px; }
   .bottom-bar { gap: 4px; padding: 6px; width: calc(100% - 16px); justify-content: space-between; bottom: 8px; }
-  .round { width: 46px; height: 46px; font-size: 18px; }
+  .round { width: 52px; height: 52px; font-size: 20px; }
   .round span { font-size: 9px; }
   .grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
   .slot { width: 100px; min-height: 120px; }
@@ -530,3 +530,12 @@ h3.sub .btn.small { margin-left: 8px; vertical-align: middle; }
   .skill { padding: 7px 8px; }
   .sk-nm { font-size: 12px; }
 }
+
+/* 작물 목록: 한 칸 심기 + 모든 농장에 심기 */
+.crop-row { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: stretch; }
+.crop-row .build-opt { min-width: 0; }
+.btn.plant-all {
+  background: linear-gradient(180deg, #6ee67f, #2fb344); color: #062a0e; box-shadow: 0 3px 0 #1f7a2e;
+  font-size: 12px; line-height: 1.25; padding: 6px 10px; border-radius: 12px; white-space: nowrap;
+}
+.btn.plant-all small { font-size: 10px; font-weight: 700; }

@@ -1174,13 +1174,18 @@ function openFarm(i) {
   if (p.crop == null) {
     showModal(`
       <h3>🌾 농장</h3>
-      <p class="muted">심을 작물을 골라요. 다 자라면 수확해서 먹이 🍖로 바꿔요.</p>
-      <div class="build-list">${CROP_ORDER.map(ci => [CROPS[ci], ci]).map(([c, ci]) => `
+      <p class="muted">심을 작물을 골라요. <b>🌾 모든 농장에</b>를 누르면 비어 있는 농장 전부에 같은 작물을 심어요.</p>
+      <div class="build-list">${CROP_ORDER.map(ci => [CROPS[ci], ci]).map(([c, ci]) => {
+        const n = plantTargets().length;
+        return `<div class="crop-row">
         <button class="build-opt" data-act="plant" data-i="${i}" data-c="${ci}" style="--hc:#4cd964">
           <span class="bo-ico">${c.emoji}</span>
           <span class="bo-nm">${c.name}<br><small>🍖 ${fmt(c.food)} · ${c.time >= 3600 ? `${c.time / 3600}시간` : mmss(c.time)} · 분당 🍖${fmt(c.food / c.time * 60)}</small></span>
           <span class="bo-cost">💰 ${fmt(c.cost)}</span>
-        </button>`).join('')}</div>
+        </button>
+        ${n > 1 ? `<button class="btn small plant-all" data-act="plantAll" data-i="${i}" data-c="${ci}">🌾 모든 농장에<br><small>${n}곳 · 💰${fmt(c.cost * n)}</small></button>` : ''}
+      </div>`;
+      }).join('')}</div>
       ${farmAllHTML(i)}
       <div class="row">
         <button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 철거 (+💰 ${fmt(demolishRefund(p))})</button>
@@ -1266,22 +1271,31 @@ function harvestAll(i) {
   refreshFarm(i);
 }
 
-// 아래 버튼: 모든 섬의 농장을 한 번에 수확
-function harvestEverywhere() {
-  if (!farmIdx().length) { toast('아직 농장이 없어요. 상점이나 빈 땅에서 지어 보세요 🌾'); return; }
+// 골라 둔 작물을 모든 농장에: 다 자란 건 먼저 수확하고, 빈 농장 전부에 같은 작물을 심는다
+const plantTargets = () => farmIdx().filter(k => S.plots[k].crop == null || farmReady(S.plots[k]));
+
+function plantAll(i, ci) {
+  ci = Number(ci);
+  const c = CROPS[ci];
   const { food, n } = harvestReady();
-  if (!n) { toast('아직 다 자란 작물이 없어요 🌱'); return; }
-  toast(`🧺 농장 ${n}개 수확! 🍖 먹이 ${fmt(food)}개`);
+  let planted = 0, broke = false;
+  farmIdx().forEach(k => {
+    const p = S.plots[k];
+    if (p.crop != null || broke) return;
+    if (!spend(c.cost)) { broke = true; return; }
+    p.crop = ci;
+    p.lastCrop = ci;
+    p.end = Date.now() + c.time * 1000;
+    planted++;
+  });
+  S.lastCrop = ci;
+  const parts = [];
+  if (n) parts.push(`🧺 ${n}곳 수확 (🍖${fmt(food)})`);
+  if (planted) parts.push(`${c.emoji} ${c.name} ${planted}곳에 심었어요!`);
+  if (broke) parts.push('💰 골드가 모자라서 일부만 심었어요');
+  toast(parts.join(' · ') || '심을 빈 농장이 없어요');
   save();
-  if (!$('#modal').classList.contains('hidden') && $('.farm-all')) closeModal();
-  render();
-}
-function updateHarvestBadge() {
-  const b = $('#harvestBadge');
-  if (!b) return;
-  const n = farmIdx().filter(k => farmReady(S.plots[k])).length;
-  b.textContent = n || '';
-  b.classList.toggle('on', n > 0);
+  refreshFarm(i);
 }
 
 function replantAll(i) {
@@ -2849,7 +2863,6 @@ function tick() {
     if (p && p.kind === 'hab') p.gold = Math.min(habGoldCap(i), p.gold + habIncome(i) * dt);
   });
   refreshLive();
-  updateHarvestBadge();
 }
 
 const ACTIONS = {
@@ -2865,7 +2878,7 @@ const ACTIONS = {
   plant: (d) => plant(d.i, d.c),
   harvest: (d) => harvest(d.i),
   harvestAll: (d) => harvestAll(d.i),
-  harvestEverywhere: () => harvestEverywhere(),
+  plantAll: (d) => plantAll(d.i, d.c),
   replantAll: (d) => replantAll(d.i),
   farmGem: (d) => farmGem(d.i),
   pick: (d) => pickBreed(d.uid),
