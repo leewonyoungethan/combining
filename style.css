@@ -656,3 +656,11 @@ body.ui-hidden .island-bar:hover { opacity: 1; }
 }
 .zoom-btns button:active { transform: scale(.92); }
 body.ui-hidden .zoom-btns { opacity: .55; }
+
+/* 15단계 등급 테두리 */
+.card { border-color: color-mix(in srgb, var(--rc, var(--line)) 55%, var(--line)); }
+.card.r-common, .card.r-refined { border-color: var(--line); }
+.card.r-epic { border-color: #b84ad6; box-shadow: 0 0 10px rgba(228, 92, 255, .3); }
+.card.r-holy { border-color: #fff27a; box-shadow: 0 0 22px rgba(255, 242, 122, .6); animation: divineGlow 3s linear infinite; }
+.card.r-absolute { border-color: #fff; box-shadow: 0 0 26px rgba(255, 255, 255, .7), inset 0 0 12px rgba(255, 255, 255, .25); }
+.card.r-origin { border-color: #ff8a3d; box-shadow: 0 0 30px rgba(255, 138, 61, .75), 0 0 60px rgba(255, 77, 109, .35); animation: divineGlow 2s linear infinite; }

@@ -34,15 +34,29 @@ const BEATS = {
 };
 
 // ===================== 등급 =====================
-const RAR_ORDER = ['common', 'rare', 'epic', 'legendary', 'mythic', 'divine'];
-const RAR = {
-  common:    { name: '커먼',     color: '#b4bccb', time: 5,   income: 1,   cost: 50,   hp: 300,  atk: 50,  spd: 100 },
-  rare:      { name: '레어',     color: '#5cb6ff', time: 15,  income: 3,   cost: 120,  hp: 420,  atk: 65,  spd: 108 },
-  epic:      { name: '에픽',     color: '#c28cff', time: 40,  income: 10,  cost: 300,  hp: 600,  atk: 90,  spd: 116 },
-  legendary: { name: '레전더리', color: '#ffb020', time: 90,  income: 40,  cost: 800,  hp: 900,  atk: 130, spd: 126 },
-  mythic:    { name: '신화',     color: '#ff4d6d', time: 180, income: 200, cost: 2000, hp: 1400, atk: 190, spd: 140 },
-  divine:    { name: '초월',     color: '#3dffd8', time: 300, income: 1000, cost: 5000, hp: 2400, atk: 320, spd: 160 },
-};
+// 15단계. 예전 등급 키(common/rare/epic/legendary/mythic/divine)는 저장 호환을 위해 그대로 쓰고 사이사이에 새 등급을 끼웠다
+const RAR_TABLE = [
+  // key          이름    색          부화(초) 초당골드 교배비  체력  공격 속도
+  ['common',     '일반', '#b4bccb',   5,     1,     50,    300,  50,  100],
+  ['refined',    '정제', '#d7dee6',   7,     1.5,   65,    330,  54,  102],
+  ['uncommon',   '고급', '#7ddc7d',   9,     2,     80,    360,  58,  104],
+  ['skilled',    '숙련', '#3fd6a4',   12,    2.5,   100,   390,  61,  106],
+  ['rare',       '희귀', '#5cb6ff',   15,    3,     120,   420,  65,  108],
+  ['special',    '특별', '#6f8cff',   20,    4.5,   160,   470,  71,  110],
+  ['masterwork', '명품', '#9b7bff',   25,    6,     200,   520,  77,  112],
+  ['hero',       '영웅', '#c28cff',   32,    8,     250,   560,  83,  114],
+  ['epic',       '서사', '#e45cff',   40,    10,    300,   600,  90,  116],
+  ['legendary',  '전설', '#ffb020',   90,    40,    800,   900,  130, 126],
+  ['mythic',     '신화', '#ff4d6d',   180,   200,   2000,  1400, 190, 140],
+  ['divine',     '초월', '#3dffd8',   300,   1000,  5000,  2400, 320, 160],
+  ['holy',       '신성', '#fff27a',   420,   2500,  8000,  3200, 420, 168],
+  ['absolute',   '절대', '#ffffff',   600,   6000,  12000, 4200, 540, 176],
+  ['origin',     '근원', '#ff8a3d',   900,   15000, 20000, 5500, 700, 185],
+];
+const RAR_ORDER = RAR_TABLE.map(r => r[0]);
+const RAR = Object.fromEntries(RAR_TABLE.map(([key, name, color, time, income, cost, hp, atk, spd]) =>
+  [key, { name, color, time, income, cost, hp, atk, spd }]));
+const RANK = Object.fromEntries(RAR_ORDER.map((k, i) => [k, i]));   // 등급 키 → 순서 번호
 
 // ===================== 족보 =====================
 const ADV_RECIPES = [
@@ -66,10 +80,10 @@ const MYTHIC = { id: 'M:arche', name: '태초의 신수 아르케', face: '🌌'
 // 전설 상점 전용: 골드로 살 수는 있지만… 절대 모을 수 없는 가격
 const SHOP_LEGENDS = [
   { id: 'X:goldking', name: '황금 용왕 골드킹',     face: '🐲', els: ['fire', 'light', 'metal'],   ult: '황금 멸망포',  price: 9999999999 },
-  { id: 'X:whale',    name: '은하 고래 코스모',     face: '🐋', els: ['water', 'magic', 'dark'],   ult: '은하 붕괴',    price: 77777777777 },
-  { id: 'X:lion',     name: '천둥 사자왕 제우스',   face: '🦁', els: ['thunder', 'light', 'earth'], ult: '신의 번개',    price: 500000000000 },
-  { id: 'X:owl',      name: '시간의 수호자 크로노', face: '🦉', els: ['magic', 'ice', 'light'],    ult: '시간 정지',    price: 12345678901234 },
-  { id: 'X:chaos',    name: '혼돈의 신 카오스',     face: '👁️', els: ['dark', 'fire', 'magic'],   ult: '혼돈의 눈',    price: 999999999999999 },
+  { id: 'X:whale',    name: '은하 고래 코스모',     face: '🐋', els: ['water', 'magic', 'dark'],   ult: '은하 붕괴',    price: 77777777777, rank: 'holy' },
+  { id: 'X:lion',     name: '천둥 사자왕 제우스',   face: '🦁', els: ['thunder', 'light', 'earth'], ult: '신의 번개',    price: 500000000000, rank: 'holy' },
+  { id: 'X:owl',      name: '시간의 수호자 크로노', face: '🦉', els: ['magic', 'ice', 'light'],    ult: '시간 정지',    price: 12345678901234, rank: 'absolute' },
+  { id: 'X:chaos',    name: '혼돈의 신 카오스',     face: '👁️', els: ['dark', 'fire', 'magic'],   ult: '혼돈의 눈',    price: 999999999999999, rank: 'origin' },
 ];
 
 // ===================== 스킬 =====================
@@ -102,7 +116,7 @@ function buildSkills(c) {
   const e = c.els;
   if (c.ult) {
     return [basicSkill(e[0]), atkSkill(e[0]), effSkill(e[1]), atkSkill(e[2]),
-      { name: c.ult, el: e[0], type: 'dmg', mult: c.rarity === 'divine' ? 2.2 : c.rarity === 'mythic' ? 1.8 : 1.4, aoe: true, cost: 7 }];
+      { name: c.ult, el: e[0], type: 'dmg', mult: RANK[c.rarity] >= RANK.divine ? 2.2 + 0.2 * (RANK[c.rarity] - RANK.divine) : c.rarity === 'mythic' ? 1.8 : 1.4, aoe: true, cost: 7 }];
   }
   const s = [basicSkill(e[0]), atkSkill(e[0]), effSkill(e[0])];
   if (e[1]) s.push(atkSkill(e[1]), effSkill(e[1]));
@@ -160,7 +174,7 @@ const CREATURES = [
 ];
 const hashStr = (s) => { let h = 5381; for (const ch of s) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0; return h; };
 const frac = (s) => (hashStr(s) % 1000) / 1000;
-const VW = { common: 6, rare: 3, epic: 1 };   // 같은 그룹 안에서 변종이 나올 가중치
+const vw = (t) => Math.max(0.5, 8 * Math.pow(0.75, RANK[CAT[t].rarity]));   // 같은 그룹 안에서 변종이 나올 가중치
 const COMMON_SPECIAL = ['ice', 'metal', 'magic'];   // 서리 펭귄, 강철 로봇, 비전 고블린은 특수 속성이지만 커먼
 
 const CAT = {};
@@ -194,7 +208,8 @@ EL.forEach((e, i) => {
     const look = k === 0 ? { face: e.face, name: `${e.adj} ${e.noun}` } : freshCreature(ADJ[e.id][k], id);
     addMon({
       id, group, variant: k, ...look, els: [e.id],
-      rarity: !base ? (k === 0 && COMMON_SPECIAL.includes(e.id) ? 'common' : 'epic') : k <= 3 ? 'common' : k <= 6 ? 'rare' : 'epic',
+      // 기본 속성: 변종 0~8이 일반~서사 한 단계씩 / 특수 속성: 기본은 일반, 나머지는 고급부터
+      rarity: RAR_ORDER[base ? k : k === 0 ? (COMMON_SPECIAL.includes(e.id) ? 0 : RANK.epic) : Math.min(RANK.epic, k + 1)],
       mod: k === 0 ? null : variantMod(id),
     });
   }
@@ -210,7 +225,8 @@ for (let i = 0; i < EL.length; i++) {
       const look = v === 0 ? { face: b.face, name: `${a.adj} ${b.noun}` } : freshCreature(adj, id);
       addMon({
         id, group, variant: v, ...look, els: [a.id, b.id],
-        rarity: i < BASE.length && j < BASE.length ? (v <= 3 ? 'rare' : 'epic') : 'epic',
+        // 두 기본 속성: 고급~서사 / 특수 속성이 섞이면: 희귀~서사
+        rarity: RAR_ORDER[i < BASE.length && j < BASE.length ? Math.min(RANK.epic, RANK.uncommon + v) : Math.min(RANK.epic, RANK.rare + v)],
         mod: v === 0 ? null : variantMod(id),
       });
     }
@@ -218,7 +234,7 @@ for (let i = 0; i < EL.length; i++) {
 }
 LEGENDS.forEach(l => addMon({ ...l, rarity: 'legendary' }));
 addMon({ ...MYTHIC, rarity: 'mythic' });
-SHOP_LEGENDS.forEach(l => addMon({ ...l, rarity: 'divine', shop: true }));
+SHOP_LEGENDS.forEach(l => addMon({ ...l, rarity: l.rank || 'divine', shop: true }));
 CAT_LIST.sort((a, b) => RAR_ORDER.indexOf(a.rarity) - RAR_ORDER.indexOf(b.rarity));
 CAT_LIST.forEach(c => { c.skills = buildSkills(c); });
 
@@ -227,7 +243,8 @@ const hybridId = (x, y) => {
   return `h:${a}+${b}`;
 };
 const rIdx = (type) => RAR_ORDER.indexOf(CAT[type].rarity);
-const isLegend = (type) => rIdx(type) >= 3;
+const eggLv = (t) => { const r = rIdx(t); return r >= RANK.mythic ? 'lv5' : r >= RANK.legendary ? 'lv4' : r >= RANK.masterwork ? 'lv3' : ''; };
+const isLegend = (type) => rIdx(type) >= RANK.legendary;
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const shuffle = (arr) => {
   const a = arr.slice();
@@ -247,8 +264,8 @@ function breedDist(ta, tb) {
   const add = (t, p) => { if (p > 0) d[t] = (d[t] || 0) + p; };
   const addGroup = (g, p) => {
     const list = GROUPS[g];
-    const tot = list.reduce((s, t) => s + VW[CAT[t].rarity], 0);
-    list.forEach(t => add(t, p * VW[CAT[t].rarity] / tot));
+    const tot = list.reduce((s, t) => s + vw(t), 0);
+    list.forEach(t => add(t, p * vw(t) / tot));
   };
   if (isLegend(ta) && isLegend(tb)) {
     add(MYTHIC.id, 0.35);
@@ -260,7 +277,7 @@ function breedDist(ta, tb) {
   // 행운의 레전더리: 족보를 몰라도 부모 등급이 높으면 가끔 나온다 (부모 속성이 하나라도 겹치는 레전더리 중에서)
   const minR = Math.min(rIdx(ta), rIdx(tb));
   const luckyPool = LEGENDS.filter(l => l.els.some(e => pool.includes(e)));
-  const pLucky = luckyPool.length ? (minR >= 2 ? LUCKY_LEGEND.epic : minR >= 1 ? LUCKY_LEGEND.rare : 0) : 0;
+  const pLucky = luckyPool.length ? (minR >= RANK.epic ? LUCKY_LEGEND.epic : minR >= RANK.rare ? LUCKY_LEGEND.rare : 0) : 0;
   luckyPool.forEach(l => add(l.id, pLucky / luckyPool.length));
   let rest = 1 - pLucky;
   // 족보(세 속성을 모두 섞기)를 맞추면 레전더리가 잘 나온다
@@ -510,7 +527,7 @@ function mmss(sec) {
 
 function card(m, attrs = '', cls = '', extra = '') {
   const c = CAT[m.type], r = RAR[c.rarity];
-  return `<div class="card r-${c.rarity} ${cls}" ${attrs}>
+  return `<div class="card r-${c.rarity} ${cls}" style="--rc:${r.color}" ${attrs}>
     ${extra}
     <div class="face" style="background:${grad(c)}">${c.face}</div>
     <div class="nm">${c.name}</div>
@@ -1581,9 +1598,11 @@ function farmGem(i) {
 
 // ----- 교배산 -----
 function breedHint(total) {
+  if (total >= RAR.holy.time) return '✨ 신성한 빛이 새어 나와요!!!!';
   if (total >= RAR.mythic.time) return '🌌 전설을 넘어선 무언가가 태어나려 해요!!!';
-  if (total >= RAR.legendary.time) return '🌟 이렇게 긴 시간이라니… 레전더리 예감!!';
-  if (total >= RAR.epic.time) return '⚡ 강한 기운이 느껴져요! 에픽급이에요!';
+  if (total >= RAR.legendary.time) return '🌟 이렇게 긴 시간이라니… 전설 예감!!';
+  if (total >= RAR.epic.time) return '⚡ 강한 기운이 느껴져요! 서사급이에요!';
+  if (total >= RAR.hero.time) return '🦸 영웅의 기운이 느껴져요!';
   if (total >= RAR.rare.time) return '오, 조금 특별한 기운이…';
   return '평범한 알 같아요';
 }
@@ -1620,7 +1639,7 @@ function openBreed(i = curMtn) {
     const done = Date.now() >= b.end;
     showModal(`
       <h3>🏔️ 교배산</h3>
-      <div class="egg ${done ? 'ready' : 'lv' + (rIdx(b.type) + 1)}">🥚</div>
+      <div class="egg ${done ? 'ready' : eggLv(b.type)}">🥚</div>
       <div class="timer" data-live="breed:${i}"></div>
       <div class="hint">${breedHint(b.base || b.total)}</div>
       <div class="parents">${b.parents.join(' + ')}</div>
@@ -1761,7 +1780,7 @@ function openHatchery(i = curHatch) {
     <h3>🪺 부화장 <small class="muted">${S.hatch.length}/${hatchCap()}</small></h3>
     <p class="muted">알을 부화시켜 알맞은 서식지로 보내 주세요.</p>
     <div class="egg-row">${S.hatch.length
-      ? S.hatch.map((t, i) => `<button class="egg-slot" data-act="hatchOne" data-idx="${i}"><span class="egg small lv${rIdx(t) + 1}">🥚</span><span>부화!</span></button>`).join('')
+      ? S.hatch.map((t, i) => `<button class="egg-slot" data-act="hatchOne" data-idx="${i}"><span class="egg small ${eggLv(t)}">🥚</span><span>부화!</span></button>`).join('')
       : '<p class="muted">부화장이 비어 있어요. 교배산에서 알을 가져오세요!</p>'}</div>
     ${S.hatch.length > 1 ? `<div class="all-box"><button class="btn green" data-act="hatchAll">🐣 모두 부화 (알맞은 서식지로 자동 이사)</button></div>` : ''}
     <p class="muted small-note">부화장 ${n}개가 알을 같이 보관해요 (${hatcheries().map(k => (S.plots[k].cap || HATCH_CAP) + '칸').join(' + ')}${mountains().length > 1 ? ` + 교배산 추가분 ${2 * (mountains().length - 1)}칸` : ''})</p>
@@ -2160,7 +2179,7 @@ function renderShop() {
         <div class="face" style="background:${grad(c)}">${c.face}</div>
         <div class="li-info">
           <div class="li-nm">${c.name}${owned ? ` <small class="muted">보유 ${owned}</small>` : ''}</div>
-          <div class="li-els">${elNames(c.els)} · <span class="rar" style="color:${RAR.divine.color}">초월</span></div>
+          <div class="li-els">${elNames(c.els)} · <span class="rar" style="color:${RAR[c.rarity].color}">${RAR[c.rarity].name}</span></div>
           <div class="li-price">💰 ${fmt(l.price)}</div>
           <div class="li-wait muted">${S.infinite ? '♾️ 돈 무한이라 바로 살 수 있어요!' : waitText(l.price)}</div>
         </div>
@@ -2360,7 +2379,7 @@ function merge(t, lv) {
 function enemyTeam(stage) {
   let seed = stage * 7919 + 13;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const tier = Math.min(4, Math.floor((stage - 1) / 5));
+  const tier = Math.min(RANK.mythic, Math.floor((stage - 1) / 2));
   const res = [];
   for (let i = 0; i < 3; i++) {
     const ri = Math.max(0, tier - (rnd() < 0.35 ? 1 : 0));
@@ -3006,8 +3025,8 @@ const DAILY = [
   { icon: '💎', text: '보석 10',        give: () => { earn(10, 'gems'); } },
   { icon: '💰', text: '골드 1,500',     give: () => { earn(1500); } },
   { icon: '💠', text: '룬 상자',        give: () => runeText(giveRune([0.5, 0.4, 0.1])) },
-  { icon: '🥚', text: '레어 알',        give: () => {
-    const t = pick(CAT_LIST.filter(c => c.rarity === 'rare' && c.els.length === 2)).id;
+  { icon: '🥚', text: '희귀 알',        give: () => {
+    const t = pick(CAT_LIST.filter(c => c.rarity === 'rare' && c.els.length === 2 && !c.shop)).id;
     if (S.hatch.length >= hatchCap()) { earn(1000); return '부화장이 가득 차서 💰1,000으로 받았어요'; }
     S.hatch.push(t);
     return `${CAT[t].face} ${CAT[t].name} 알 (부화장으로)`;
@@ -3065,8 +3084,8 @@ let dexFilter = { el: 'all', rar: 'all', found: 'all' };
 
 function dexHint(c) {
   if (c.shop) return `👑 전설 상점 💰${fmt(c.price)}`;
-  if (c.rarity === 'mythic') return '레전더리 + 레전더리';
-  if (c.rarity === 'legendary') return `족보: ${elBadges(c.els)} 세 속성을 섞기 (에픽끼리 교배해도 가끔 나와요)`;
+  if (c.rarity === 'mythic') return '전설 + 전설';
+  if (c.rarity === 'legendary') return `족보: ${elBadges(c.els)} 세 속성을 섞기 (서사끼리 교배해도 가끔 나와요)`;
   const adv = ADV_RECIPES.find(r => 'p:' + r.el === c.group);
   if (adv) return `족보: ${elBadges(adv.need)} 섞기`;
   if (c.els.length === 1) return `${elBadges(c.els)} + ${elBadges(c.els)}`;
@@ -3175,7 +3194,7 @@ function openDexMon(type) {
     }
     if (ideal) {
       const shopHint = [ideal.pa, ideal.pb].some(t => CAT[t].variant === 0 && rIdx(t) === 0)
-        ? '<p class="muted">💡 커먼 부모는 상점의 🥚 몬스터 알 상점에서 살 수 있어요.</p>' : '';
+        ? '<p class="muted">💡 일반 부모는 상점의 🥚 몬스터 알 상점에서 살 수 있어요.</p>' : '';
       how += `<div class="rec-box">
         <h4>📖 최고의 부모 <small class="muted">도감 기준</small></h4>
         <div class="pair">${card({ type: ideal.pa, lv: 1 }, `data-act="dexMon" data-type="${ideal.pa}"`, 'mini')}<div class="plus">+</div>${card({ type: ideal.pb, lv: 1 }, `data-act="dexMon" data-type="${ideal.pb}"`, 'mini')}</div>
