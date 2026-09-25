@@ -1053,13 +1053,39 @@ function dropBuilding(from, to) {
   save();
   render();
 }
+// ----- 확대/축소: 두 손가락 벌리기(핀치), 마우스 휠, ＋/− 버튼 -----
+const ZOOM_MIN = 0.28, ZOOM_MAX = 2.2;
+// 화면의 (sx, sy) 지점을 기준으로 배율을 바꾼다 (그 지점 아래의 섬은 그대로 있게)
+function zoomAt(z, sx = W / 2, sy = H / 2 + 10) {
+  const before = toWorld(sx, sy);
+  cam.z = clamp(z, ZOOM_MIN, ZOOM_MAX);
+  cam.x = clamp(before.x - (sx - W / 2) / cam.z, -650, 650);
+  cam.y = clamp(before.y - (sy - H / 2 - 10) / cam.z, -150, 680);
+}
+const ptrs = new Map();   // 화면에 닿아 있는 손가락들
+let pinch = null;
+const pinchInfo = () => {
+  const [p, q] = [...ptrs.values()];
+  return { d: Math.hypot(p.x - q.x, p.y - q.y), mx: (p.x + q.x) / 2, my: (p.y + q.y) / 2 };
+};
+
 cv.addEventListener('pointerdown', (e) => {
-  drag = { sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false, hold: null };
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   try { cv.setPointerCapture(e.pointerId); } catch (err) { /* 캡처 불가 */ }
+  if (ptrs.size >= 2) {
+    // 두 번째 손가락: 끌기/탭을 멈추고 핀치 시작
+    if (drag) clearTimeout(drag.hold);
+    carry = null;
+    drag = null;
+    const info = pinchInfo();
+    pinch = { d0: Math.max(10, info.d), z0: cam.z, mx: info.mx, my: info.my };
+    return;
+  }
+  drag = { sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false, hold: null };
   const i = plotAt(e.clientX, e.clientY);
   if (i >= 0 && S.plots[i]) {
     drag.hold = setTimeout(() => {
-      if (!drag || drag.moved) return;
+      if (!drag || drag.moved || pinch) return;
       carry = { from: i, sx: drag.sx, sy: drag.sy, over: i };
       if (navigator.vibrate) try { navigator.vibrate(25); } catch (err) { /* 진동 없음 */ }
       toast('끌어서 빈 땅에 놓으면 옮기고, 같은 건물 위에 놓으면 합쳐요');
@@ -1067,6 +1093,19 @@ cv.addEventListener('pointerdown', (e) => {
   }
 });
 cv.addEventListener('pointermove', (e) => {
+  if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && ptrs.size >= 2) {
+    const info = pinchInfo();
+    // 손가락 사이 가운데를 기준으로 확대하고, 두 손가락을 같이 움직이면 화면도 따라 움직인다
+    zoomAt(pinch.z0 * info.d / pinch.d0, info.mx, info.my);
+    cam.x = clamp(cam.x - (info.mx - pinch.mx) / cam.z, -650, 650);
+    cam.y = clamp(cam.y - (info.my - pinch.my) / cam.z, -150, 680);
+    pinch.mx = info.mx;
+    pinch.my = info.my;
+    pinch.z0 = cam.z;
+    pinch.d0 = Math.max(10, info.d);
+    return;
+  }
   if (!drag) return;
   if (carry) {
     carry.sx = e.clientX;
@@ -1081,19 +1120,27 @@ cv.addEventListener('pointermove', (e) => {
     cam.y = clamp(drag.cy - dy / cam.z, -150, 680);
   }
 });
-cv.addEventListener('pointerup', (e) => {
+function endPointer(e, cancel) {
+  ptrs.delete(e.pointerId);
+  if (pinch) {
+    if (ptrs.size < 2) pinch = null;   // 핀치가 끝나도 남은 손가락으로 탭이 되지 않게
+    drag = null;
+    return;
+  }
   if (drag) clearTimeout(drag.hold);
-  if (carry) {
+  if (!cancel && carry) {
     const c = carry;
     carry = null;
     if (c.over !== c.from) dropBuilding(c.from, plotAt(e.clientX, e.clientY));
-  } else if (drag && !drag.moved) tapAt(e.clientX, e.clientY);
+  } else if (!cancel && drag && !drag.moved) tapAt(e.clientX, e.clientY);
+  if (cancel) carry = null;
   drag = null;
-});
-cv.addEventListener('pointercancel', () => { if (drag) clearTimeout(drag.hold); drag = null; carry = null; });
+}
+cv.addEventListener('pointerup', (e) => endPointer(e, false));
+cv.addEventListener('pointercancel', (e) => endPointer(e, true));
 cv.addEventListener('wheel', (e) => {
   e.preventDefault();
-  cam.z = clamp(cam.z * Math.exp(-e.deltaY * 0.0012), 0.28, 1.6);
+  zoomAt(cam.z * Math.exp(-e.deltaY * 0.0012), e.clientX, e.clientY);
 }, { passive: false });
 window.addEventListener('resize', resize);
 resize();
@@ -1106,6 +1153,7 @@ function renderIslandBar() {
     '<button class="ib-name" data-act="islList">' + th.emoji + ' ' + (k + 1) + '. ' + th.name + ' <small>' + used + '/' + ISLAND_PLOTS + '칸' + (decoPercent(k) ? ' · 🎨+' + decoPercent(k) + '%' : '') + ' · 🗺️</small></button>' +
     '<button class="ib-arrow" data-act="isl" data-d="1">▶</button>';
   bar.classList.toggle('hidden', tab !== 'island');
+  $('#zoomBtns').classList.toggle('hidden', tab !== 'island');
   const hb = $('#hideBtn');
   hb.classList.toggle('hidden', tab !== 'island');
   hb.classList.toggle('on', !!S.hideUI);
@@ -3517,6 +3565,8 @@ const ACTIONS = {
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; drawBattle(); },
   typeChart: () => openTypeChart(),
+  zoomIn: () => zoomAt(cam.z * 1.3),
+  zoomOut: () => zoomAt(cam.z / 1.3),
   hideUI: () => { S.hideUI = !S.hideUI; save(); renderIslandBar(); updateGuide(); updateFinger(); toast(S.hideUI ? '🙈 이름표와 안내를 숨겼어요. 👁️ 보이기로 다시 켜요' : '👁️ 다시 보여요'); },
   decoPick: (d) => openDecoPick(Number(d.i)),
   buyDeco: (d) => buyDeco(d.id),
