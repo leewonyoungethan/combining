@@ -300,11 +300,22 @@ const BREED_LV = 4;
 const MAX_LV = 20;
 const HAB_MAX_LV = 3;
 const FARM_COST = 250;
+// 순서는 저장 데이터와 맞추려고 그대로 두고, 화면에는 자라는 시간 순으로 보여 준다.
+// 오래 걸리는 작물일수록 시간당 먹이가 조금씩 더 많다
 const CROPS = [
-  { name: '새싹 풀',    emoji: '🌱', food: 60,   time: 30,  cost: 40 },
-  { name: '토마토',     emoji: '🍅', food: 400,  time: 120, cost: 200 },
-  { name: '황금 옥수수', emoji: '🌽', food: 2000, time: 600, cost: 800 },
+  { name: '새싹 풀',     emoji: '🌱', food: 60,    time: 30,   cost: 40 },
+  { name: '토마토',      emoji: '🍅', food: 400,   time: 120,  cost: 200 },
+  { name: '황금 옥수수', emoji: '🌽', food: 2200,  time: 600,  cost: 800 },
+  { name: '당근',        emoji: '🥕', food: 150,   time: 60,   cost: 90 },
+  { name: '딸기',        emoji: '🍓', food: 250,   time: 90,   cost: 140 },
+  { name: '감자',        emoji: '🥔', food: 1050,  time: 300,  cost: 400 },
+  { name: '가지',        emoji: '🍆', food: 1500,  time: 420,  cost: 550 },
+  { name: '호박',        emoji: '🎃', food: 4600,  time: 1200, cost: 1500 },
+  { name: '수박',        emoji: '🍉', food: 7500,  time: 1800, cost: 2500 },
+  { name: '파인애플',    emoji: '🍍', food: 16200, time: 3600, cost: 5000 },
+  { name: '별빛 과일',   emoji: '🌟', food: 40000, time: 7200, cost: 12000 },
 ];
+const CROP_ORDER = CROPS.map((c, ci) => ci).sort((a, b) => CROPS[a].time - CROPS[b].time);
 const habName = (el) => el === 'legend' ? '전설의 서식지' : `${EL[ELI[el]].name} 서식지`;
 const habEmoji = (el) => el === 'legend' ? '🏛️' : EL[ELI[el]].emoji;
 const habColor = (el) => el === 'legend' ? '#ffb020' : EL[ELI[el]].color;
@@ -1137,10 +1148,10 @@ function openFarm(i) {
     showModal(`
       <h3>🌾 농장</h3>
       <p class="muted">심을 작물을 골라요. 다 자라면 수확해서 먹이 🍖로 바꿔요.</p>
-      <div class="build-list">${CROPS.map((c, ci) => `
+      <div class="build-list">${CROP_ORDER.map(ci => [CROPS[ci], ci]).map(([c, ci]) => `
         <button class="build-opt" data-act="plant" data-i="${i}" data-c="${ci}" style="--hc:#4cd964">
           <span class="bo-ico">${c.emoji}</span>
-          <span class="bo-nm">${c.name}<br><small>🍖 ${fmt(c.food)} · ${mmss(c.time)}</small></span>
+          <span class="bo-nm">${c.name}<br><small>🍖 ${fmt(c.food)} · ${c.time >= 3600 ? `${c.time / 3600}시간` : mmss(c.time)} · 분당 🍖${fmt(c.food / c.time * 60)}</small></span>
           <span class="bo-cost">💰 ${fmt(c.cost)}</span>
         </button>`).join('')}</div>
       ${farmAllHTML(i)}
