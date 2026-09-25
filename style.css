@@ -664,3 +664,14 @@ body.ui-hidden .zoom-btns { opacity: .55; }
 .card.r-holy { border-color: #fff27a; box-shadow: 0 0 22px rgba(255, 242, 122, .6); animation: divineGlow 3s linear infinite; }
 .card.r-absolute { border-color: #fff; box-shadow: 0 0 26px rgba(255, 255, 255, .7), inset 0 0 12px rgba(255, 255, 255, .25); }
 .card.r-origin { border-color: #ff8a3d; box-shadow: 0 0 30px rgba(255, 138, 61, .75), 0 0 60px rgba(255, 77, 109, .35); animation: divineGlow 2s linear infinite; }
+
+/* 겹치는 몬스터 팔기 */
+.btn.sell-dups { background: linear-gradient(180deg, #ff9a6b, #e0602e); color: #2a0e00; box-shadow: 0 3px 0 #9a3a14; }
+.dup-list { display: grid; gap: 6px; margin-top: 10px; max-height: 46vh; overflow-y: auto; text-align: left; }
+.dup-row { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center; background: var(--panel); border-radius: 12px; padding: 6px 10px; }
+.dup-face { width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; font-size: 26px; }
+.dup-nm { font-weight: 800; font-size: 13px; line-height: 1.3; }
+.dup-sell { text-align: right; font-size: 12px; color: #ffc2cf; }
+.dup-sell b { color: #ffe066; }
+.dup-total { margin-top: 10px; font-size: 15px; }
+.dup-total b { color: #ffe066; }

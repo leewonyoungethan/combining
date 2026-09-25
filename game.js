@@ -1965,6 +1965,7 @@ function openMon(uid) {
       <button class="btn" data-act="feed" data-uid="${m.uid}" ${max ? 'disabled' : ''}>🍖 먹이 주기 (${fmt(feedCost(m))})</button>
       <button class="btn ghost" data-act="sell" data-uid="${m.uid}">팔기 (+💰 ${fmt(sellPrice(m))})</button>
       <button class="btn ghost" data-act="openMove" data-uid="${m.uid}">🏠 이사</button>
+      ${S.monsters.filter(x => x.type === m.type).length > 1 ? `<button class="btn ghost" data-act="sellDups" data-type="${m.type}">💸 이 종류 겹치는 것 팔기 (${S.monsters.filter(x => x.type === m.type).length}마리)</button>` : ''}
     </div>
     <div class="row"><button class="btn ghost small" data-act="${back ? 'back' : 'close'}">${back ? '← 뒤로' : '닫기'}</button></div>`);
   modalStack = back;
@@ -1997,6 +1998,71 @@ function sell(uid) {
   save();
   closeModal();
   toast(`${CAT[m.type].name}을(를) 팔았어요`);
+  render();
+}
+
+// ----- 겹치는 몬스터 팔기: 종류마다 한 마리만 남긴다 -----
+// 가장 좋은 한 마리(레벨 → 룬 → 먼저 얻은 순)는 남기고, 모험 팀에 있는 몬스터도 팔지 않는다
+function dupPlan(onlyType) {
+  const groups = {};
+  S.monsters.forEach(m => { if (!onlyType || m.type === onlyType) (groups[m.type] = groups[m.type] || []).push(m); });
+  const rows = [];
+  let gold = 0;
+  const sellList = [];
+  Object.entries(groups).forEach(([type, list]) => {
+    if (list.length < 2) return;
+    const runes = (m) => m.runes.filter(x => x != null).length;
+    const sorted = list.slice().sort((a, b) =>
+      b.lv - a.lv || runes(b) - runes(a) || a.uid - b.uid);
+    // 팀에 있는 몬스터는 여러 마리여도 팔지 않는다
+    const keep = sorted.filter((m, k) => k === 0 || S.team.includes(m.uid));
+    const sell = sorted.filter(m => !keep.includes(m));
+    if (!sell.length) return;
+    const g = sell.reduce((t, m) => t + sellPrice(m), 0);
+    gold += g;
+    sellList.push(...sell);
+    rows.push({ type, total: list.length, keep: keep.length, sell: sell.length, gold: g, best: keep[0] });
+  });
+  rows.sort((a, b) => rIdx(b.type) - rIdx(a.type) || b.sell - a.sell);
+  return { rows, gold, sellList };
+}
+
+function openSellDups(onlyType) {
+  const plan = dupPlan(onlyType || null);
+  if (!plan.sellList.length) { toast('겹치는 몬스터가 없어요'); return; }
+  showModal(`<h3>💸 겹치는 몬스터 팔기</h3>
+    <p class="muted">종류마다 <b>가장 레벨이 높은 한 마리</b>만 남기고 팔아요. 모험 팀에 있는 몬스터는 팔지 않아요.</p>
+    <div class="dup-list">${plan.rows.map(r => {
+      const c = CAT[r.type];
+      return `<div class="dup-row">
+        <span class="dup-face" style="background:${grad(c)}">${c.face}</span>
+        <span class="dup-nm">${c.name} <small style="color:${RAR[c.rarity].color}">${RAR[c.rarity].name}</small><br>
+          <small class="muted">${r.total}마리 → ${r.keep}마리 남김 (Lv.${r.best.lv})</small></span>
+        <span class="dup-sell">-${r.sell}마리<br><b>+💰${fmt(r.gold)}</b></span>
+      </div>`;
+    }).join('')}</div>
+    <p class="dup-total">모두 ${plan.sellList.length}마리 팔기 · <b>+💰${fmt(plan.gold)}</b></p>
+    <div class="row">
+      <button class="btn big" data-act="sellDupsOk" data-type="${onlyType || ''}">💸 팔기</button>
+      <button class="btn ghost" data-act="close">취소</button>
+    </div>`);
+}
+
+function sellDups(onlyType) {
+  const plan = dupPlan(onlyType || null);
+  if (!plan.sellList.length) { closeModal(); return; }
+  const gone = new Set(plan.sellList.map(m => m.uid));
+  plan.sellList.forEach(m => {
+    m.runes.forEach(id => { const r = S.runes.find(x => x.id === id); if (r) r.on = null; });
+    earn(sellPrice(m));
+    delete walkers[m.uid];
+  });
+  S.monsters = S.monsters.filter(m => !gone.has(m.uid));
+  S.team = S.team.filter(u => !gone.has(u));
+  sel = sel.filter(u => !gone.has(u));
+  save();
+  closeModal();
+  toast(`💸 겹치는 몬스터 ${gone.size}마리를 팔고 💰${fmt(plan.gold)}을 받았어요`);
   render();
 }
 
@@ -2057,6 +2123,12 @@ function renderMons() {
       </div>`;
     })()}
     ${S.hatch.length ? `<div class="notice" data-act="openHatch">🪺 부화장에 알이 ${S.hatch.length}개 기다리고 있어요! →</div>` : ''}
+    ${(() => {
+      const plan = dupPlan();
+      return plan.sellList.length
+        ? `<div class="all-box row"><button class="btn small sell-dups" data-act="sellDups">💸 겹치는 몬스터 팔기 (${plan.sellList.length}마리 · +💰${fmt(plan.gold)})</button></div>`
+        : '';
+    })()}
     ${monSummaryHTML()}
     ${monControlsHTML()}
     ${monGroupsHTML()}`;
@@ -3610,6 +3682,8 @@ const ACTIONS = {
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; drawBattle(); },
   typeChart: () => openTypeChart(),
+  sellDups: (d) => openSellDups(d.type),
+  sellDupsOk: (d) => sellDups(d.type),
   zoomIn: () => zoomAt(cam.z * 1.3),
   zoomOut: () => zoomAt(cam.z / 1.3),
   hideUI: () => { S.hideUI = !S.hideUI; save(); renderIslandBar(); updateGuide(); updateFinger(); toast(S.hideUI ? '🙈 이름표와 안내를 숨겼어요. 👁️ 보이기로 다시 켜요' : '👁️ 다시 보여요'); },
