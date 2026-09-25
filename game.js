@@ -502,6 +502,10 @@ function load() {
     delete s.breed;
     s.monsters = s.monsters.filter(m => CAT[m.type]);
     s.hatch = (s.hatch || []).filter(t => CAT[t]);
+    // 예전에 합친 부화장은 칸 수만 있고 레벨이 없다: 칸 수(3+3+1=7, 3개면 11 ...)로 합친 개수를 계산
+    s.plots.forEach(p => {
+      if (p && p.kind === 'hatchery' && !p.lv && (p.cap || HATCH_CAP) > HATCH_CAP) p.lv = Math.max(1, Math.round(((p.cap || HATCH_CAP) + 1) / (HATCH_CAP + 1)));
+    });
     s.plots.forEach(p => {
       if (!p || p.kind !== 'mountain') return;
       // 예전 저장(칸 하나 = p.breed)을 칸 배열로 옮기고, 칸 수는 교배산 레벨만큼
