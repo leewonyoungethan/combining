@@ -1793,8 +1793,8 @@ function buyHab(el) {
 }
 
 const MON_PRICE = 500;
-// 기본 8속성 알 + 얼음/금속 서식지 전용 알 (화염 살라맨더처럼 기본 한 마리씩, 모두 500)
-const SPECIAL_EGGS = ['p:ice', 'p:metal'];
+// 기본 8속성 알 + 얼음/금속/마법 서식지 전용 알 (화염 살라맨더처럼 기본 한 마리씩, 모두 500)
+const SPECIAL_EGGS = ['p:ice', 'p:metal', 'p:magic'];
 const EGG_SHOP = [...BASE.map(e => 'p:' + e), ...SPECIAL_EGGS];
 const eggPrice = () => MON_PRICE;
 function buyMon(type) {
