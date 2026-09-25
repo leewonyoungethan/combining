@@ -238,6 +238,9 @@ const shuffle = (arr) => {
   return a;
 };
 
+const LEGEND_RECIPE_CHANCE = 0.4;               // 족보를 맞췄을 때 레전더리 한 마리당 확률
+const LUCKY_LEGEND = { rare: 0.04, epic: 0.1 }; // 두 부모가 모두 레어 이상 / 에픽 이상일 때 행운의 레전더리
+
 // 두 부모로 교배했을 때 각 몬스터가 나올 확률 { type: 확률 }
 function breedDist(ta, tb) {
   const d = {};
@@ -254,10 +257,17 @@ function breedDist(ta, tb) {
   }
   const pool = [...new Set([...CAT[ta].els, ...CAT[tb].els])];
   const has = (need) => need.every(e => pool.includes(e));
+  // 행운의 레전더리: 족보를 몰라도 부모 등급이 높으면 가끔 나온다 (부모 속성이 하나라도 겹치는 레전더리 중에서)
+  const minR = Math.min(rIdx(ta), rIdx(tb));
+  const luckyPool = LEGENDS.filter(l => l.els.some(e => pool.includes(e)));
+  const pLucky = luckyPool.length ? (minR >= 2 ? LUCKY_LEGEND.epic : minR >= 1 ? LUCKY_LEGEND.rare : 0) : 0;
+  luckyPool.forEach(l => add(l.id, pLucky / luckyPool.length));
+  let rest = 1 - pLucky;
+  // 족보(세 속성을 모두 섞기)를 맞추면 레전더리가 잘 나온다
   const legs = LEGENDS.filter(l => has(l.els));
-  const pLeg = 1 - Math.pow(0.75, legs.length);
-  legs.forEach(l => add(l.id, pLeg / legs.length));
-  let rest = 1 - pLeg;
+  const pLeg = 1 - Math.pow(1 - LEGEND_RECIPE_CHANCE, legs.length);
+  legs.forEach(l => add(l.id, rest * pLeg / legs.length));
+  rest *= 1 - pLeg;
   const advs = ADV_RECIPES.filter(r => has(r.need));
   const pAdv = 1 - Math.pow(0.7, advs.length);
   advs.forEach(r => addGroup('p:' + r.el, rest * pAdv / advs.length));
@@ -1691,7 +1701,77 @@ function renderMons() {
       </div>`;
     })()}
     ${S.hatch.length ? `<div class="notice" data-act="openHatch">🪺 부화장에 알이 ${S.hatch.length}개 기다리고 있어요! →</div>` : ''}
-    <div class="grid">${sortMons(S.monsters).map(m => card(m, `data-act="openMon" data-uid="${m.uid}"`)).join('')}</div>`;
+    ${monSummaryHTML()}
+    ${monControlsHTML()}
+    ${monGroupsHTML()}`;
+}
+
+// ----- 내 몬스터 정리해서 보기 -----
+const MON_VIEW_DEFAULT = { group: 'rar', sort: 'lv', el: 'all' };
+const monView = () => (S.monView = { ...MON_VIEW_DEFAULT, ...(S.monView || {}) });
+
+function monSummaryHTML() {
+  const inc = S.monsters.reduce((s, m) => s + monIncome(m), 0);
+  const byRar = RAR_ORDER.map(r => [r, S.monsters.filter(m => CAT[m.type].rarity === r).length]).filter(([, n]) => n);
+  return `<div class="mon-summary">
+    <div class="ms-big"><b>${S.monsters.length}</b><span>마리</span></div>
+    <div class="ms-big"><b>💰${fmt(inc)}</b><span>초당 골드</span></div>
+    <div class="ms-big"><b>${new Set(S.monsters.map(m => m.type)).size}</b><span>종류</span></div>
+    <div class="ms-rar">${byRar.map(([r, n]) => `<span style="color:${RAR[r].color}">${RAR[r].name} ${n}</span>`).join('')}</div>
+  </div>`;
+}
+
+function monControlsHTML() {
+  const v = monView();
+  const chip = (key, val, label) =>
+    `<button class="chip ${v[key] === val ? 'on' : ''}" data-act="monView" data-k="${key}" data-v="${val}">${label}</button>`;
+  const owned = new Set(S.monsters.flatMap(m => CAT[m.type].els));
+  return `
+    <div class="chips"><span class="chip-label">묶어 보기</span>${chip('group', 'rar', '⭐ 등급')}${chip('group', 'el', '🔥 속성')}${chip('group', 'isl', '🏝️ 섬')}${chip('group', 'hab', '🏠 서식지')}${chip('group', 'none', '📋 전체')}</div>
+    <div class="chips"><span class="chip-label">정렬</span>${chip('sort', 'lv', '⬆️ 레벨')}${chip('sort', 'rar', '⭐ 등급')}${chip('sort', 'name', '가나다')}${chip('sort', 'new', '🆕 최근')}</div>
+    <div class="chips"><span class="chip-label">속성</span>${chip('el', 'all', '전체')}${EL.filter(e => owned.has(e.id)).map(e => chip('el', e.id, e.emoji + e.name)).join('')}</div>`;
+}
+
+function monSorter(sort) {
+  const byRar = (a, b) => rIdx(b.type) - rIdx(a.type);
+  const byLv = (a, b) => b.lv - a.lv;
+  const byName = (a, b) => CAT[a.type].name.localeCompare(CAT[b.type].name, 'ko');
+  if (sort === 'rar') return (a, b) => byRar(a, b) || byLv(a, b) || byName(a, b);
+  if (sort === 'name') return (a, b) => byName(a, b) || byLv(a, b);
+  if (sort === 'new') return (a, b) => b.uid - a.uid;
+  return (a, b) => byLv(a, b) || byRar(a, b) || byName(a, b);
+}
+
+function monGroupsHTML() {
+  const v = monView();
+  const list = S.monsters.filter(m => v.el === 'all' || CAT[m.type].els.includes(v.el)).sort(monSorter(v.sort));
+  if (!list.length) return '<p class="muted empty-note">아직 몬스터가 없어요. 상점에서 알을 사 보세요! 🥚</p>';
+  const groups = new Map();
+  const add = (key, label, order, m) => {
+    if (!groups.has(key)) groups.set(key, { label, order, items: [] });
+    groups.get(key).items.push(m);
+  };
+  list.forEach(m => {
+    const c = CAT[m.type];
+    if (v.group === 'rar') add(c.rarity, `<span style="color:${RAR[c.rarity].color}">⭐ ${RAR[c.rarity].name}</span>`, -rIdx(m.type), m);
+    else if (v.group === 'el') {
+      const key = c.els.join('+');
+      add(key, `${elBadges(c.els)} ${c.els.map(e => EL[ELI[e]].name).join(' + ')}`, c.els.length * 100 + ELI[c.els[0]] * 10 + (ELI[c.els[1]] || 0), m);
+    } else if (v.group === 'isl') {
+      const k = islandOf(m.hab);
+      add(k, `${ISLANDS[k].emoji} ${k + 1}. ${ISLANDS[k].name}`, k, m);
+    } else if (v.group === 'hab') {
+      const p = S.plots[m.hab];
+      add(m.hab, `${habEmoji(p.el)} ${habName(p.el)} Lv.${p.lv} <small class="muted">${islandLabel(m.hab)} · ${habMons(m.hab).length}/${habCap(m.hab)}</small>`, m.hab, m);
+    } else add('all', '📋 전체', 0, m);
+  });
+  return [...groups.values()].sort((a, b) => a.order - b.order).map(g => {
+    const inc = g.items.reduce((s, m) => s + monIncome(m), 0);
+    return `<div class="mon-group">
+      <h3 class="mg-head">${g.label} <span class="mg-count">${g.items.length}마리 · 초당 💰${fmt(inc)}</span></h3>
+      <div class="grid">${g.items.map(m => card(m, `data-act="openMon" data-uid="${m.uid}"`)).join('')}</div>
+    </div>`;
+  }).join('');
 }
 
 // ===================== 화면: 상점 =====================
@@ -2627,7 +2707,7 @@ let dexFilter = { el: 'all', rar: 'all', found: 'all' };
 function dexHint(c) {
   if (c.shop) return `👑 전설 상점 💰${fmt(c.price)}`;
   if (c.rarity === 'mythic') return '레전더리 + 레전더리';
-  if (c.rarity === 'legendary') return `족보: ${elBadges(c.els)} 세 속성을 섞기`;
+  if (c.rarity === 'legendary') return `족보: ${elBadges(c.els)} 세 속성을 섞기 (에픽끼리 교배해도 가끔 나와요)`;
   const adv = ADV_RECIPES.find(r => 'p:' + r.el === c.group);
   if (adv) return `족보: ${elBadges(adv.need)} 섞기`;
   if (c.els.length === 1) return `${elBadges(c.els)} + ${elBadges(c.els)}`;
@@ -2913,6 +2993,7 @@ const ACTIONS = {
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; drawBattle(); },
   typeChart: () => openTypeChart(),
+  monView: (d) => { monView()[d.k] = d.v; save(); renderMons(); },
   isl: (d) => goIsland((S.isl || 0) + Number(d.d)),
   islGo: (d) => goIsland(d.k),
   islList: () => openIslandList(),
