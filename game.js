@@ -82,6 +82,19 @@ const LEGENDS = [
   { id: 'L:hydra',   name: '늪의 히드라',     face: '🐲', els: ['poison', 'water', 'nature'], ult: '독 물결' },
 ];
 const MYTHIC = { id: 'M:arche', name: '태초의 신수 아르케', face: '🌌', els: ['magic', 'light', 'dark'], ult: '태초의 빛' };
+// 신화 10마리: 전설끼리 교배하면 부모와 속성이 많이 겹치는 신화일수록 잘 나온다
+const MYTHICS = [
+  MYTHIC,
+  { id: 'M:leviathan', name: '심연의 레비아탄',   face: '🦑', els: ['water', 'dark', 'ice'],      ult: '심연 해일' },
+  { id: 'M:bahamut',   name: '용신 바하무트',     face: '🐉', els: ['fire', 'metal', 'light'],    ult: '기가 플레어' },
+  { id: 'M:yggdrasil', name: '세계수의 정령',     face: '🌲', els: ['nature', 'light', 'magic'],  ult: '생명의 노래' },
+  { id: 'M:thor',      name: '천둥신 토르',       face: '⛈️', els: ['thunder', 'metal', 'earth'], ult: '묠니르' },
+  { id: 'M:hades',     name: '명계의 왕 하데스',  face: '👻', els: ['dark', 'poison', 'fire'],    ult: '명계의 불꽃' },
+  { id: 'M:gaia',      name: '대지모신 가이아',   face: '🌍', els: ['earth', 'nature', 'water'],  ult: '대지의 포옹' },
+  { id: 'M:skadi',     name: '빙결 여왕 스카디',  face: '👸', els: ['ice', 'water', 'light'],     ult: '영원한 겨울' },
+  { id: 'M:echidna',   name: '맹독 여제 에키드나', face: '🐍', els: ['poison', 'dark', 'magic'],   ult: '만독' },
+  { id: 'M:astra',     name: '별의 수호자 아스트라', face: '🌟', els: ['light', 'magic', 'thunder'], ult: '유성우' },
+];
 // 전설 상점 전용: 골드로 살 수는 있지만… 절대 모을 수 없는 가격
 const SHOP_LEGENDS = [
   { id: 'X:goldking', name: '황금 용왕 골드킹',     face: '🐲', els: ['fire', 'light', 'metal'],   ult: '황금 멸망포',  price: 9999999999 },
@@ -239,7 +252,7 @@ PAIRS.forEach(([i, j]) => addHybrid(i, j, 0));
 EL.forEach((e, i) => { for (let k = 1; k < PURE_VARIANTS; k++) addPure(e, i, k); });
 PAIRS.forEach(([i, j]) => { for (let v = 1; v < HYB_VARIANTS; v++) addHybrid(i, j, v); });
 LEGENDS.forEach(l => addMon({ ...l, rarity: 'legendary' }));
-addMon({ ...MYTHIC, rarity: 'mythic' });
+MYTHICS.forEach(m => addMon({ ...m, rarity: 'mythic' }));
 SHOP_LEGENDS.forEach(l => addMon({ ...l, rarity: l.rank || 'divine', shop: true }));
 CAT_LIST.sort((a, b) => RAR_ORDER.indexOf(a.rarity) - RAR_ORDER.indexOf(b.rarity));
 CAT_LIST.forEach(c => { c.skills = buildSkills(c); });
@@ -286,9 +299,14 @@ function breedDist(ta, tb) {
       shopTotal += p;
     });
     const rest = 1 - shopTotal;
-    add(MYTHIC.id, 0.35 * rest);
+    // 신화: 부모 속성과 겹치는 개수 + 1 만큼 가중치
+    const parentEls = new Set([...CAT[ta].els, ...CAT[tb].els]);
+    const mw = MYTHICS.map(m => 1 + m.els.filter(e => parentEls.has(e)).length * 2);
+    const mwSum = mw.reduce((x, y) => x + y, 0);
+    const addMythic = (p) => MYTHICS.forEach((m, k) => add(m.id, p * mw[k] / mwSum));
+    addMythic(0.35 * rest);
     // 부모를 그대로 물려받는 몫: 상점 몬스터는 위 확률로만 나오게 하고 이 몫은 신화로
-    [ta, tb].forEach(t => add(CAT[t].shop ? MYTHIC.id : t, 0.325 * rest));
+    [ta, tb].forEach(t => (CAT[t].shop ? addMythic(0.325 * rest) : add(t, 0.325 * rest)));
     return d;
   }
   const pool = [...new Set([...CAT[ta].els, ...CAT[tb].els])];
@@ -3259,7 +3277,7 @@ let dexFilter = { el: 'all', rar: 'all', found: 'all' };
 
 function dexHint(c) {
   if (c.shop) return `👑 전설 상점 💰${fmt(c.price)} 또는 전설 이상끼리 교배 (아주 드물게)`;
-  if (c.rarity === 'mythic') return '전설 + 전설';
+  if (c.rarity === 'mythic') return `전설 + 전설 (${elBadges(c.els)} 속성이 겹치는 전설일수록 잘 나와요)`;
   if (c.rarity === 'legendary') return `족보: ${elBadges(c.els)} 세 속성을 섞기 (서사끼리 교배해도 가끔 나와요)`;
   const adv = ADV_RECIPES.find(r => 'p:' + r.el === c.group);
   if (adv) return `족보: ${elBadges(adv.need)} 섞기`;
@@ -3324,7 +3342,16 @@ function idealParents(target) {
     return { pa: par, pb: par, p: breedDist(par, par)[target] || 0 };
   }
   let pa, pb;
-  if (c.rarity === 'mythic') { pa = LEGENDS[0].id; pb = LEGENDS[1].id; }
+  if (c.rarity === 'mythic') {
+    // 전설 두 마리 중 이 신화가 가장 잘 나오는 조합
+    let best = null;
+    LEGENDS.forEach((x, i) => LEGENDS.forEach((y, j) => {
+      if (j < i) return;
+      const p = breedDist(x.id, y.id)[target] || 0;
+      if (!best || p > best.p) best = { pa: x.id, pb: y.id, p };
+    }));
+    return best;
+  }
   else if (c.rarity === 'legendary') { pa = hybridId(c.els[0], c.els[1]); pb = 'p:' + c.els[2]; }
   else if (c.els.length === 1) {
     const adv = ADV_RECIPES.find(r => r.el === c.els[0]);
