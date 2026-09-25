@@ -819,7 +819,7 @@ function drawPlot(p, i, x, y, t, dt) {
     shadow(x, y + 8, 80);
     const lvUp = Math.min(40, ((p.lv || 1) - 1) * 12);
     emoji('🏔️', x, y - 42 - lvUp / 3, 118 + lvUp);
-    if ((p.lv || 1) > 1) emoji('⭐', x + 52, y - 92, 24);
+    if (!S.hideUI && (p.lv || 1) > 1) emoji('⭐', x + 52, y - 92, 24);
     if (p.breed) {
       const k = ready ? Math.abs(Math.sin(t * 5)) * -10 : 0;
       emoji('🥚', x + 58, y + 6 + k, 42, ready ? 0 : Math.sin(t * (4 + rIdx(p.breed.type) * 2)) * 0.25);
@@ -829,7 +829,7 @@ function drawPlot(p, i, x, y, t, dt) {
     shadow(x, y + 10, 60);
     const big = Math.min(40, ((p.cap || HATCH_CAP) - HATCH_CAP) * 4);
     emoji('🪺', x, y - 18 - big / 3, 86 + big);
-    if ((p.cap || HATCH_CAP) > HATCH_CAP) emoji('⭐', x + 44, y - 58, 24);
+    if (!S.hideUI && (p.cap || HATCH_CAP) > HATCH_CAP) emoji('⭐', x + 44, y - 58, 24);
     const hk = hatcheries().indexOf(i), per = Math.ceil(S.hatch.length / Math.max(1, hatcheries().length));
     S.hatch.slice(hk * per, hk * per + per).slice(0, 4).forEach((type, k) => emoji('🥚', x - 51 + k * 34, y + 26 + Math.sin(t * 6 + k) * 2, 30, Math.sin(t * 5 + k) * 0.2));
   } else if (p.kind === 'farm') {
@@ -863,7 +863,7 @@ function drawPlot(p, i, x, y, t, dt) {
       emoji(habEmoji(p.el), x + hw * 0.62, y - 8, 30);
       emoji(habEmoji(p.el), x, y - hh * 0.72, 28);
     }
-    for (let k = 1; k < p.lv; k++) emoji('⭐', x - hw * 0.3 + (k - 1) * 22, y + hh * 0.72, 16);
+    if (!S.hideUI) for (let k = 1; k < p.lv; k++) emoji('⭐', x - hw * 0.3 + (k - 1) * 22, y + hh * 0.72, 16);
     habMons(i)
       .map(m => ({ m, w: walkerFor(m, i) }))
       .sort((a, b) => a.w.oy - b.w.oy)
