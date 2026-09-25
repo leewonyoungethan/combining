@@ -801,7 +801,7 @@ function drawPlot(p, i, x, y, t, dt) {
     ctx.fillStyle = 'rgba(255,255,255,.4)';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('+', x, y);
+    if (!S.hideUI) ctx.fillText('+', x, y);
     return;
   }
   const ready = plotReady(i);
@@ -954,7 +954,8 @@ function drawWorld(now) {
     });
     items.sort((a, b) => a.y - b.y).forEach(it => it.fn());
     bubbles = [];
-    here.forEach(i => { const { x, y } = plotPos(i); drawLabel(S.plots[i], i, x, y, t); });
+    // 👁️ 숨기기: 이름표·타이머·💰 말풍선을 그리지 않는다
+    if (!S.hideUI) here.forEach(i => { const { x, y } = plotPos(i); drawLabel(S.plots[i], i, x, y, t); });
     drawFloaters(t);
   }
   requestAnimationFrame(drawWorld);
@@ -1011,6 +1012,11 @@ function renderIslandBar() {
     '<button class="ib-name" data-act="islList">' + th.emoji + ' ' + (k + 1) + '. ' + th.name + ' <small>' + used + '/' + ISLAND_PLOTS + '칸' + (decoPercent(k) ? ' · 🎨+' + decoPercent(k) + '%' : '') + ' · 🗺️</small></button>' +
     '<button class="ib-arrow" data-act="isl" data-d="1">▶</button>';
   bar.classList.toggle('hidden', tab !== 'island');
+  const hb = $('#hideBtn');
+  hb.classList.toggle('hidden', tab !== 'island');
+  hb.classList.toggle('on', !!S.hideUI);
+  hb.innerHTML = S.hideUI ? '👁️ 보이기' : '🙈 숨기기';
+  document.body.classList.toggle('ui-hidden', !!S.hideUI && tab === 'island');
 }
 function goIsland(k) {
   S.isl = (Number(k) + ISLANDS.length) % ISLANDS.length;
@@ -3194,7 +3200,7 @@ function updateFinger() {
   const k = tutShown();
   // 튜토리얼 창·설명 슬라이드가 열려 있을 때는 손가락을 숨긴다
   const reading = !!document.querySelector('#modalBox .tut-list, #modalBox .welcome');
-  const active = !B && !S.tutOff && k < TUT.length && !reading;
+  const active = !B && !S.tutOff && !S.hideUI && k < TUT.length && !reading;
   const target = active ? tutPoint(k) : null;
   let x = null, y = null, down = false, glow = null;
   if (target && target.plot != null && target.plot >= 0) {
@@ -3284,7 +3290,7 @@ function updateGuide() {
     save();
     toast('🎉 튜토리얼 완료! 이제 도감 500마리를 모두 모아 보세요!');
   }
-  const show = !B && !S.tutOff && k < TUT.length;
+  const show = !B && !S.tutOff && !(S.hideUI && tab === 'island') && k < TUT.length;
   g.classList.toggle('hidden', !show);
   if (!show) return;
   const html = `<div class="g-step">${tutFocus != null ? '🎓 다시 보기' : '튜토리얼'} ${k + 1} / ${TUT.length}</div>
@@ -3401,6 +3407,7 @@ const ACTIONS = {
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; drawBattle(); },
   typeChart: () => openTypeChart(),
+  hideUI: () => { S.hideUI = !S.hideUI; save(); renderIslandBar(); updateGuide(); updateFinger(); toast(S.hideUI ? '🙈 이름표와 안내를 숨겼어요. 👁️ 보이기로 다시 켜요' : '👁️ 다시 보여요'); },
   decoPick: (d) => openDecoPick(Number(d.i)),
   buyDeco: (d) => buyDeco(d.id),
   mergePick: (d) => openMergePick(d.i),

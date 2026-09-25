@@ -632,3 +632,16 @@ h3.sub .btn.small { margin-left: 8px; vertical-align: middle; }
 .tut-num { font-weight: 900; text-align: center; }
 .tut-text { font-weight: 700; }
 .tut-row .btn.small { padding: 5px 9px; font-size: 11px; white-space: nowrap; }
+
+/* 🙈 숨기기 */
+.hide-btn {
+  position: fixed; top: 112px; right: 12px; z-index: 28;
+  background: rgba(15, 16, 40, .8); border: 1px solid rgba(255, 255, 255, .18); color: var(--text);
+  border-radius: 999px; padding: 7px 12px; font-size: 13px; font-weight: 800;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .35); backdrop-filter: blur(6px);
+}
+.hide-btn.hidden { display: none; }
+.hide-btn.on { background: var(--accent); color: #2a1600; border-color: #ffd97a; }
+body.ui-hidden .guide, body.ui-hidden .finger { display: none !important; }
+body.ui-hidden .island-bar { opacity: .55; }
+body.ui-hidden .island-bar:hover { opacity: 1; }
