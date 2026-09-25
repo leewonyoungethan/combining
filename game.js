@@ -319,7 +319,8 @@ const islandLabel = (i) => ISLANDS[islandOf(i)].emoji + (islandOf(i) + 1);
 const HATCH_CAP = 3;
 const BREED_LV = 4;
 const MAX_LV = 20;
-const HAB_MAX_LV = 3;
+const HAB_MAX_LV = 10;
+const HAB_LV_BONUS = 25;   // 서식지 레벨마다 골드 +25%
 const FARM_COST = 250;
 // 순서는 저장 데이터와 맞추려고 그대로 두고, 화면에는 자라는 시간 순으로 보여 준다.
 // 오래 걸리는 작물일수록 시간당 먹이가 조금씩 더 많다
@@ -435,9 +436,11 @@ let S = load() || newState();
 const byUid = (uid) => S.monsters.find(m => m.uid === Number(uid));
 const monIncome = (m) => RAR[CAT[m.type].rarity].income * m.lv;
 const habMons = (i) => S.monsters.filter(m => m.hab === i);
-const habCap = (i) => S.plots[i].lv + 1;
-const habIncome = (i) => habMons(i).reduce((s, m) => s + monIncome(m), 0) * (1 + decoPercent(islandOf(i)) / 100);
-const habGoldCap = (i) => Math.max(300, habIncome(i) * 240 * S.plots[i].lv);
+// 서식지 한도 없음: 몬스터 수도, 쌓이는 골드도 무제한
+const habCap = () => Infinity;
+const habLvBonus = (i) => (S.plots[i].lv - 1) * HAB_LV_BONUS;
+const habIncome = (i) => habMons(i).reduce((s, m) => s + monIncome(m), 0) * (1 + (habLvBonus(i) + decoPercent(islandOf(i))) / 100);
+const habGoldCap = () => Infinity;
 const feedCost = (m) => m.lv * 20;
 const sellPrice = (m) => Math.round(RAR[CAT[m.type].rarity].cost * 0.5 * (1 + m.lv * 0.2));
 const breedCost = (a, b) => RAR[RAR_ORDER[Math.max(rIdx(a.type), rIdx(b.type))]].cost;
@@ -584,7 +587,7 @@ function liveText(key) {
   }
   if (k === 'hab') {
     const i = Number(arg);
-    return `${fmt(S.plots[i].gold)} / ${fmt(habGoldCap(i))}`;
+    return `💰 ${fmt(S.plots[i].gold)}`;
   }
   return '';
 }
@@ -596,7 +599,7 @@ function liveBar(key) {
     const p = S.plots[Number(arg)];
     if (p && p.crop != null) return Math.min(1, 1 - (p.end - now) / 1000 / CROPS[p.crop].time);
   }
-  if (k === 'hab') { const i = Number(arg); return S.plots[i].gold / habGoldCap(i); }
+
   return 0;
 }
 function refreshLive() {
@@ -879,10 +882,10 @@ function drawLabel(p, i, x, y, t) {
   const ly = y + TH / 2 + 10;
   label(name, x, ly, 17);
   if (p.kind === 'hab') {
-    const cap = habGoldCap(i);
-    if (p.gold >= Math.max(1, cap * 0.04)) {
+    const inc = habIncome(i);
+    if (p.gold >= Math.max(1, inc * 10)) {
       const by = y - TH * 0.95 + Math.sin(t * 3 + i) * 5;
-      const full = p.gold >= cap - 0.5;
+      const full = inc > 0 && p.gold >= inc * 600;   // 10분치 넘게 쌓이면 노랗게
       ctx.beginPath();
       ctx.arc(x, by, 30, 0, Math.PI * 2);
       ctx.fillStyle = full ? '#ffe066' : 'rgba(255,255,255,.92)';
@@ -1129,8 +1132,7 @@ function openHab(i) {
   showModal(`
     <div class="hab-head" style="--hc:${habColor(p.el)}">${habEmoji(p.el)}</div>
     <h3>${habName(p.el)} <small class="muted">Lv.${p.lv}</small></h3>
-    <p class="muted">몬스터 ${mons.length}/${habCap(i)} · 초당 💰 ${fmt(habIncome(i))}${decoPercent(islandOf(i)) ? ` <span class="deco-bonus">🎨 +${decoPercent(islandOf(i))}%</span>` : ''}</p>
-    <div class="bar gold"><div data-bar="hab:${i}"></div></div>
+    <p class="muted">몬스터 ${mons.length}마리 (한도 없음) · 초당 💰 ${fmt(habIncome(i))}${habLvBonus(i) ? ` · ⬆️ 레벨 보너스 +${habLvBonus(i)}%` : ''}${decoPercent(islandOf(i)) ? ` <span class="deco-bonus">🎨 +${decoPercent(islandOf(i))}%</span>` : ''}</p>
     <div class="store" data-live="hab:${i}"></div>
     <div class="row">
       <button class="btn" data-act="collectHab" data-i="${i}">💰 골드 걷기</button>
@@ -1202,7 +1204,7 @@ function openMove(uid) {
           <button class="build-opt" data-act="move" data-uid="${m.uid}" data-i="${i}" style="--hc:${habColor(p.el)}">
             <span class="bo-ico">${habEmoji(p.el)}</span>
             <span class="bo-nm">${habName(p.el)} Lv.${p.lv} <small>${islandLabel(i)}</small></span>
-            <span class="bo-cost">${habMons(i).length}/${habCap(i)}</span>
+            <span class="bo-cost">${habMons(i).length}마리</span>
           </button>`).join('')}</div>`
       : '<p class="warn">옮겨 갈 수 있는 빈 서식지가 없어요.<br>같은 속성 서식지를 하나 더 지어 보세요.</p>'}
     <div class="row"><button class="btn ghost small" data-act="openMon" data-uid="${m.uid}">← 뒤로</button></div>`);
@@ -1240,7 +1242,7 @@ function upHab(i) {
   if (p.lv >= HAB_MAX_LV) return;
   if (!spend(habUpCost(p.lv))) return;
   p.lv++;
-  toast(`⬆️ ${habName(p.el)} Lv.${p.lv}! 이제 ${habCap(i)}마리까지 살 수 있어요`);
+  toast(`⬆️ ${habName(p.el)} Lv.${p.lv}! 골드 수입 +${habLvBonus(i)}%`);
   save();
   openHab(i);
   render();
@@ -1694,7 +1696,7 @@ function hatchOne(idx) {
             <button class="build-opt" data-act="place" data-idx="${idx}" data-i="${i}" style="--hc:${habColor(p.el)}">
               <span class="bo-ico">${habEmoji(p.el)}</span>
               <span class="bo-nm">${habName(p.el)} Lv.${p.lv} <small>${islandLabel(i)}</small></span>
-              <span class="bo-cost">${habMons(i).length}/${habCap(i)}</span>
+              <span class="bo-cost">${habMons(i).length}마리</span>
             </button>`).join('')}</div>`
         : `<p class="warn">살 수 있는 빈 서식지가 없어요!<br>필요한 곳: ${need}<br>섬에 서식지를 짓거나 업그레이드한 뒤 다시 부화시켜 주세요.</p>`}
       <div class="row">
@@ -1914,7 +1916,7 @@ function monGroupsHTML() {
       add(k, `${ISLANDS[k].emoji} ${k + 1}. ${ISLANDS[k].name}`, k, m);
     } else if (v.group === 'hab') {
       const p = S.plots[m.hab];
-      add(m.hab, `${habEmoji(p.el)} ${habName(p.el)} Lv.${p.lv} <small class="muted">${islandLabel(m.hab)} · ${habMons(m.hab).length}/${habCap(m.hab)}</small>`, m.hab, m);
+      add(m.hab, `${habEmoji(p.el)} ${habName(p.el)} Lv.${p.lv} <small class="muted">${islandLabel(m.hab)} · ${habMons(m.hab).length}마리</small>`, m.hab, m);
     } else add('all', '📋 전체', 0, m);
   });
   return [...groups.values()].sort((a, b) => a.order - b.order).map(g => {
