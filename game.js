@@ -290,6 +290,16 @@ const ISLANDS = [
   { name: '밤의 섬', emoji: '🌙', grass: ['#454a98', '#1e2050'], sand: '#5b5f9f', decor: ['🌙', '🍄', '✨', '🦉', '🕯️', '⭐'] },
   { name: '수정 섬', emoji: '💎', grass: ['#c9a6ff', '#7b5cff'], sand: '#eadcff', decor: ['💎', '🔮', '✨', '🦄', '💠', '🌸'] },
   { name: '구름 섬', emoji: '☁️', grass: ['#ffffff', '#cfe3ff'], sand: '#eef5ff', decor: ['☁️', '🌈', '🕊️', '⭐', '🎈', '🌟'] },
+  { name: '벚꽃 섬', emoji: '🌸', grass: ['#ffc6dd', '#e98bb4'], sand: '#ffe6f0', decor: ['🌸', '🌷', '🦋', '🍡', '🌸', '🐇'] },
+  { name: '가을 섬', emoji: '🍁', grass: ['#e8a05a', '#b5622a'], sand: '#f1d19a', decor: ['🍁', '🍂', '🦊', '🌰', '🍄', '🦔'] },
+  { name: '해변 섬', emoji: '🏖️', grass: ['#9be0d0', '#4fb3a3'], sand: '#fbe8b0', decor: ['⛱️', '🐚', '🦀', '🌴', '🐢', '🏐'] },
+  { name: '사탕 섬', emoji: '🍭', grass: ['#ffb3e6', '#c77dff'], sand: '#ffe0f7', decor: ['🍭', '🍬', '🧁', '🍩', '🍫', '🎂'] },
+  { name: '버섯 섬', emoji: '🍄', grass: ['#8bc34a', '#4e7d2a'], sand: '#d7c69a', decor: ['🍄', '🍄', '🐌', '🌿', '🧚', '🐸'] },
+  { name: '해적 섬', emoji: '⚓', grass: ['#7fb069', '#3d6b3a'], sand: '#e8d59a', decor: ['⚓', '💰', '🦜', '🗺️', '💎', '🍾'] },
+  { name: '늪지 섬', emoji: '🐊', grass: ['#6b8e4e', '#34502a'], sand: '#8a8a5c', decor: ['🐊', '🌾', '🐸', '🦟', '🌿', '🍄'] },
+  { name: '우주 섬', emoji: '🚀', grass: ['#2b2d6e', '#0b0c2a'], sand: '#4b4d8f', decor: ['🚀', '🪐', '⭐', '🌠', '👽', '🛸'] },
+  { name: '황금 섬', emoji: '👑', grass: ['#ffe066', '#d4a017'], sand: '#fff3c4', decor: ['👑', '💰', '🏆', '💎', '✨', '🏆'] },
+  { name: '무지개 섬', emoji: '🌈', grass: ['#a0e7ff', '#ff9ad5'], sand: '#fff5d6', decor: ['🌈', '🦄', '☁️', '🎠', '🎈', '⭐'] },
 ];
 const PLOTS = ISLAND_PLOTS * ISLANDS.length;
 const islandOf = (i) => Math.floor(i / ISLAND_PLOTS);
