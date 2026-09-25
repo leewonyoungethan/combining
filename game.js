@@ -1779,10 +1779,10 @@ function buyHab(el) {
 }
 
 const MON_PRICE = 500;
-// 기본 8속성 알 + 얼음/금속 서식지 전용 알 (특수 속성이라 더 비싸다)
-const SPECIAL_EGGS = ['p:ice', 'p:ice:1', 'p:ice:2', 'p:metal', 'p:metal:1', 'p:metal:2'];
+// 기본 8속성 알 + 얼음/금속 서식지 전용 알 (화염 살라맨더처럼 기본 한 마리씩, 모두 500)
+const SPECIAL_EGGS = ['p:ice', 'p:metal'];
 const EGG_SHOP = [...BASE.map(e => 'p:' + e), ...SPECIAL_EGGS];
-const eggPrice = (t) => SPECIAL_EGGS.includes(t) ? 1500 : MON_PRICE;
+const eggPrice = () => MON_PRICE;
 function buyMon(type) {
   if (!CAT[type] || !EGG_SHOP.includes(type)) return;
   if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
