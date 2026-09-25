@@ -161,7 +161,7 @@ const CREATURES = [
 const hashStr = (s) => { let h = 5381; for (const ch of s) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0; return h; };
 const frac = (s) => (hashStr(s) % 1000) / 1000;
 const VW = { common: 6, rare: 3, epic: 1 };   // 같은 그룹 안에서 변종이 나올 가중치
-const COMMON_SPECIAL = ['ice', 'metal'];      // 서리 펭귄, 강철 로봇은 특수 속성이지만 커먼
+const COMMON_SPECIAL = ['ice', 'metal', 'magic'];   // 서리 펭귄, 강철 로봇, 비전 고블린은 특수 속성이지만 커먼
 
 const CAT = {};
 const CAT_LIST = [];
