@@ -1682,14 +1682,50 @@ function openBreed(i = curMtn) {
     <div class="row">
       <button class="btn big" data-act="breed" data-i="${i}" ${ma && mb ? '' : 'disabled'}>⛰️ 교배 시작${ma && mb ? ` (💰 ${fmt(breedCost(ma, mb))})` : ''}</button>
     </div>
-    <div class="grid small">${sortMons(S.monsters).map(m => {
-      const ok = m.lv >= BREED_LV;
-      const k = sel.indexOf(m.uid);
-      return card(m, ok ? `data-act="pick" data-uid="${m.uid}"` : '', `${k >= 0 ? 'sel' : ''} ${ok ? '' : 'locked'}`,
-        k >= 0 ? `<div class="check">${k + 1}</div>` : ok ? '' : `<div class="lock">Lv.${BREED_LV} 필요</div>`);
-    }).join('')}</div>
+    ${breedPickHTML()}
     ${breedLogHTML(i)}
     ${mountainFooter(i)}`);
+}
+
+// ----- 교배할 몬스터 고르기: 등급/속성별로 나눠 보기 -----
+const breedView = () => (S.breedView = { group: 'rar', el: 'all', ready: false, ...(S.breedView || {}) });
+function breedPickHTML() {
+  const v = breedView();
+  const chip = (key, val, label) =>
+    `<button class="chip ${String(v[key]) === String(val) ? 'on' : ''}" data-act="breedView" data-k="${key}" data-v="${val}">${label}</button>`;
+  const owned = new Set(S.monsters.flatMap(m => CAT[m.type].els));
+  const list = S.monsters
+    .filter(m => v.el === 'all' || CAT[m.type].els.includes(v.el))
+    .filter(m => !v.ready || m.lv >= BREED_LV)
+    .sort((a, b) => (b.lv >= BREED_LV) - (a.lv >= BREED_LV) || rIdx(b.type) - rIdx(a.type) || b.lv - a.lv || a.uid - b.uid);
+  const cardOf = (m) => {
+    const ok = m.lv >= BREED_LV;
+    const k = sel.indexOf(m.uid);
+    return card(m, ok ? `data-act="pick" data-uid="${m.uid}"` : '', `${k >= 0 ? 'sel' : ''} ${ok ? '' : 'locked'}`,
+      k >= 0 ? `<div class="check">${k + 1}</div>` : ok ? '' : `<div class="lock">Lv.${BREED_LV} 필요</div>`);
+  };
+  const groups = new Map();
+  list.forEach(m => {
+    const c = CAT[m.type];
+    let key, label, order;
+    if (v.group === 'rar') { key = c.rarity; label = `<span style="color:${RAR[c.rarity].color}">⭐ ${RAR[c.rarity].name}</span>`; order = -rIdx(m.type); }
+    else if (v.group === 'el') { key = c.els.join('+'); label = `${elBadges(c.els)} ${c.els.map(e => EL[ELI[e]].name).join(' + ')}`; order = c.els.length * 100 + ELI[c.els[0]] * 10 + (ELI[c.els[1]] || 0); }
+    else { key = 'all'; label = '📋 전체'; order = 0; }
+    if (!groups.has(key)) groups.set(key, { label, order, items: [] });
+    groups.get(key).items.push(m);
+  });
+  const body = list.length
+    ? [...groups.values()].sort((a, b) => a.order - b.order).map(g => `
+        <div class="bp-group">
+          <div class="bp-head">${g.label} <span class="muted">${g.items.length}마리 · 교배 가능 ${g.items.filter(m => m.lv >= BREED_LV).length}</span></div>
+          <div class="grid small">${g.items.map(cardOf).join('')}</div>
+        </div>`).join('')
+    : '<p class="muted">조건에 맞는 몬스터가 없어요.</p>';
+  return `<div class="breed-pick">
+    <div class="chips"><span class="chip-label">묶어 보기</span>${chip('group', 'rar', '⭐ 등급')}${chip('group', 'el', '🔥 속성')}${chip('group', 'none', '📋 전체')}${chip('ready', !v.ready, v.ready ? '✅ 교배 가능만' : '☐ 교배 가능만')}</div>
+    <div class="chips"><span class="chip-label">속성</span>${chip('el', 'all', '전체')}${EL.filter(e => owned.has(e.id)).map(e => chip('el', e.id, e.emoji + e.name)).join('')}</div>
+    ${body}
+  </div>`;
 }
 
 // ----- 교배 기록 -----
@@ -1742,7 +1778,9 @@ function pickBreed(uid) {
   if (k >= 0) sel.splice(k, 1);
   else if (sel.length < 2) sel.push(uid);
   else sel[1] = uid;
+  const box = $('#modalBox'), y = box.scrollTop;
   openBreed(curMtn);
+  box.scrollTop = y;
 }
 
 function startBreed(i = curMtn) {
@@ -3682,6 +3720,7 @@ const ACTIONS = {
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; drawBattle(); },
   typeChart: () => openTypeChart(),
+  breedView: (d) => { const v = breedView(); v[d.k] = d.k === 'ready' ? d.v === 'true' : d.v; save(); const box = $('#modalBox'); const y = box.scrollTop; openBreed(curMtn); box.scrollTop = y; },
   sellDups: (d) => openSellDups(d.type),
   sellDupsOk: (d) => sellDups(d.type),
   zoomIn: () => zoomAt(cam.z * 1.3),
