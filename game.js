@@ -483,7 +483,7 @@ function newState() {
     last: Date.now(),
   };
   // 처음엔 교배산과 부화장만 있는 빈 땅. 서식지와 알은 직접 사야 한다
-  s.plots[0] = { kind: 'mountain', breed: null };
+  s.plots[0] = { kind: 'mountain', breeds: [null] };
   s.plots[1] = { kind: 'hatchery' };
   return s;
 }
@@ -502,7 +502,14 @@ function load() {
     delete s.breed;
     s.monsters = s.monsters.filter(m => CAT[m.type]);
     s.hatch = (s.hatch || []).filter(t => CAT[t]);
-    s.plots.forEach(p => { if (p && p.kind === 'mountain' && p.breed && !CAT[p.breed.type]) p.breed = null; });
+    s.plots.forEach(p => {
+      if (!p || p.kind !== 'mountain') return;
+      // 예전 저장(칸 하나 = p.breed)을 칸 배열로 옮기고, 칸 수는 교배산 레벨만큼
+      if (!Array.isArray(p.breeds)) p.breeds = [p.breed || null];
+      delete p.breed;
+      p.breeds = p.breeds.map(b => (b && CAT[b.type] ? b : null));
+      while (p.breeds.length < (p.lv || 1)) p.breeds.push(null);
+    });
     s.daily = s.daily || { last: null, streak: 0 };
     s.bossCleared = s.bossCleared || {};
     s.breedLog = (s.breedLog || []).filter(e => CAT[e.at] && CAT[e.bt] && CAT[e.rt]);
@@ -633,7 +640,7 @@ function toast(msg) {
 function plotReady(i) {
   const p = S.plots[i];
   if (!p) return false;
-  if (p.kind === 'mountain') return !!p.breed && Date.now() >= p.breed.end;
+  if (p.kind === 'mountain') return mtnBusy(p).some(b => Date.now() >= b.end);
   if (p.kind === 'hatchery') return S.hatch.length > 0;
   if (p.kind === 'farm') return p.crop != null && Date.now() >= p.end;
   if (p.kind === 'hab') return p.gold >= 1;
@@ -646,8 +653,11 @@ function liveText(key) {
     const i = Number(arg), p = S.plots[i];
     if (!p) return '';
     if (p.kind === 'mountain') {
-      if (!p.breed) return '교배 가능';
-      return now >= p.breed.end ? '🥚 완료!' : `⏳ ${mmss((p.breed.end - now) / 1000)}`;
+      const busy = mtnBusy(p), n = mtnSlots(p).length;
+      const cnt = n > 1 ? ` ${busy.length}/${n}` : '';
+      if (!busy.length) return n > 1 ? `교배 가능 0/${n}` : '교배 가능';
+      if (busy.some(b => now >= b.end)) return `🥚 완료!${cnt}`;
+      return `⏳ ${mmss(Math.min(...busy.map(b => b.end - now)) / 1000)}${cnt}`;
     }
     if (p.kind === 'hatchery') return `🥚 ${S.hatch.length}/${hatchCap()}`;
     if (p.kind === 'farm') {
@@ -657,7 +667,8 @@ function liveText(key) {
     if (p.kind === 'hab') return `💰 ${fmt(p.gold)}`;
   }
   if (k === 'breed' || k === 'breedGem') {
-    const b = S.plots[Number(arg)] && S.plots[Number(arg)].breed;
+    const [pi, si] = arg.split('|').map(Number);
+    const b = S.plots[pi] && S.plots[pi].kind === 'mountain' ? mtnSlots(S.plots[pi])[si || 0] : null;
     if (!b) return k === 'breed' ? '' : '0';
     if (k === 'breedGem') return fmt(gemCost((b.end - now) / 1000, 10));
     return now >= b.end ? '완료!' : mmss((b.end - now) / 1000);
@@ -680,7 +691,7 @@ function liveText(key) {
 function liveBar(key) {
   const [k, arg] = key.split(':');
   const now = Date.now();
-  if (k === 'breed') { const b = S.plots[Number(arg)] && S.plots[Number(arg)].breed; if (b) return Math.min(1, 1 - (b.end - now) / 1000 / b.total); }
+  if (k === 'breed') { const [pi, si] = arg.split('|').map(Number); const b = S.plots[pi] && S.plots[pi].kind === 'mountain' ? mtnSlots(S.plots[pi])[si || 0] : null; if (b) return Math.min(1, 1 - (b.end - now) / 1000 / b.total); }
   if (k === 'farm') {
     const p = S.plots[Number(arg)];
     if (p && p.crop != null) return Math.min(1, 1 - (p.end - now) / 1000 / CROPS[p.crop].time);
@@ -906,10 +917,11 @@ function drawPlot(p, i, x, y, t, dt) {
     const lvUp = Math.min(40, ((p.lv || 1) - 1) * 12);
     emoji('🏔️', x, y - 42 - lvUp / 3, 118 + lvUp);
     if (!S.hideUI && (p.lv || 1) > 1) emoji('⭐', x + 52, y - 92, 24);
-    if (p.breed) {
-      const k = ready ? Math.abs(Math.sin(t * 5)) * -10 : 0;
-      emoji('🥚', x + 58, y + 6 + k, 42, ready ? 0 : Math.sin(t * (4 + rIdx(p.breed.type) * 2)) * 0.25);
-    }
+    // 교배 중인 칸마다 알을 하나씩 (최대 4개)
+    mtnBusy(p).slice(0, 4).forEach((br, bi) => {
+      const done = Date.now() >= br.end, kk = done ? Math.abs(Math.sin(t * 5 + bi)) * -10 : 0;
+      emoji('🥚', x + 58 - bi * 30, y + 6 + bi * 12 + kk, 38, done ? 0 : Math.sin(t * (4 + rIdx(br.type) * 2) + bi) * 0.25);
+    });
   } else if (p.kind === 'hatchery') {
     block(x, y, hw, hh, '#e2bd78', '#9e7434');
     shadow(x, y + 10, 60);
@@ -1116,8 +1128,7 @@ function dropResult(from, to) {
   if (!q) return { ok: true, kind: 'move', text: '🚚 여기로 옮기기' };
   if (p.kind === 'hatchery' && q.kind === 'hatchery') return { ok: true, kind: 'merge', text: `🔗 합치기 → ${(p.cap || HATCH_CAP) + (q.cap || HATCH_CAP) + 1}칸` };
   if (p.kind === 'mountain' && q.kind === 'mountain') {
-    if (p.breed || q.breed) return { ok: false, text: '교배 중인 교배산은 합칠 수 없어요' };
-    return { ok: true, kind: 'merge', text: `🔗 합치기 → 큰 교배산 Lv.${(p.lv || 1) + (q.lv || 1)}` };
+    return { ok: true, kind: 'merge', text: `🔗 합치기 → 큰 교배산 Lv.${(p.lv || 1) + (q.lv || 1)} (동시에 ${(p.lv || 1) + (q.lv || 1)}쌍)` };
   }
   return { ok: false, text: '같은 건물끼리만 합칠 수 있어요' };
 }
@@ -1340,7 +1351,7 @@ function build(i, what) {
     toast(`🪺 부화장을 하나 더 지었어요! 알을 ${hatchCap()}개까지 둘 수 있어요`);
   } else if (what === 'mountain') {
     if (!spend(MOUNTAIN_COST)) return;
-    S.plots[i] = { kind: 'mountain', breed: null };
+    S.plots[i] = { kind: 'mountain', breeds: [null] };
     toast('🏔️ 교배산을 하나 더 지었어요! 동시에 교배할 수 있어요');
   } else if (what === 'farm') {
     if (!spend(FARM_COST)) return;
@@ -1407,7 +1418,7 @@ function demolish(i) {
     if (hatcheries().length <= 1) { toast('하나뿐인 부화장은 철거할 수 없어요'); return; }
     if (S.hatch.length > hatchCap() - (p.cap || HATCH_CAP)) { toast('알이 너무 많아서 철거할 수 없어요. 먼저 부화시켜 주세요'); return; }
   }
-  if (p.kind === 'mountain' && (p.breed || mountains().length <= 1)) { toast('교배 중이거나 하나뿐인 교배산은 철거할 수 없어요'); return; }
+  if (p.kind === 'mountain' && (mtnBusy(p).length || mountains().length <= 1)) { toast('교배 중이거나 하나뿐인 교배산은 철거할 수 없어요'); return; }
   if (p.kind === 'hab' && habMons(i).length) {
     toast('안에 사는 몬스터를 먼저 다른 서식지로 이사시키거나 팔아 주세요');
     return;
@@ -1683,51 +1694,73 @@ const HATCHERY_COST = 2000;
 const hatcheries = () => S.plots.map((p, i) => (p && p.kind === 'hatchery' ? i : -1)).filter(i => i >= 0);
 // 부화장 하나에 3칸, 교배산이 하나 늘 때마다 2칸 더
 const mtnPower = () => mountains().reduce((s, k) => s + (S.plots[k].lv || 1), 0);   // 합친 교배산도 원래 개수만큼 센다
-const mtnSpeed = (p) => 1 + 0.25 * ((p.lv || 1) - 1);   // 교배산 레벨마다 교배 25% 빨라짐
+// 교배산 칸: 레벨만큼 동시에 교배할 수 있다 (2개 합치면 2쌍, 3개 합치면 3쌍)
+const mtnSlots = (p) => { if (!Array.isArray(p.breeds)) p.breeds = [p.breed || null]; while (p.breeds.length < (p.lv || 1)) p.breeds.push(null); return p.breeds; };
+const mtnBusy = (p) => mtnSlots(p).filter(Boolean);
+const mtnFreeSlot = (p) => mtnSlots(p).findIndex(b => !b);
+let curSlot = 0;
 const hatchCap = () => Math.max(HATCH_CAP, hatcheries().reduce((s, k) => s + (S.plots[k].cap || HATCH_CAP), 0)) + 2 * Math.max(0, mtnPower() - 1);
 
 function mountainFooter(i) {
   const n = mountains().length;
-  const canDemolish = n > 1 && !S.plots[i].breed;
+  const canDemolish = n > 1 && !mtnBusy(S.plots[i]).length;
   return `<div class="row">
     ${n > 1 ? `<span class="muted small-note">교배산 ${mountains().indexOf(i) + 1}/${n} ${islandLabel(i)}</span>` : ''}
-    ${(S.plots[i].lv || 1) > 1 ? `<span class="muted small-note">⭐ 큰 교배산 Lv.${S.plots[i].lv} · 교배 시간 -${Math.round((1 - 1 / mtnSpeed(S.plots[i])) * 100)}%</span>` : ''}
+    ${(S.plots[i].lv || 1) > 1 ? `<span class="muted small-note">⭐ 큰 교배산 Lv.${S.plots[i].lv} · 동시에 ${mtnSlots(S.plots[i]).length}쌍 교배</span>` : ''}
     ${n > 1 ? '<span class="muted small-note">💡 섬에서 교배산을 꾹 눌러 다른 교배산 위로 끌면 합쳐져요</span>' : ''}
     ${canDemolish ? `<button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 철거 (+💰 ${fmt(MOUNTAIN_COST / 2)})</button>` : ''}
     <button class="btn ghost small" data-act="close">닫기</button>
   </div>`;
 }
 
-function openBreed(i = curMtn) {
+// 칸 버튼 줄 (칸이 2개 이상일 때)
+function slotBarHTML(i) {
+  const slots = mtnSlots(S.plots[i]);
+  if (slots.length < 2) return '';
+  const now = Date.now();
+  return `<div class="slot-bar">${slots.map((b, s) => {
+    const st = !b ? '비어 있음' : now >= b.end ? '🥚 완료!' : `⏳ <span data-live="breed:${i}|${s}"></span>`;
+    return `<button class="slot-btn ${s === curSlot ? 'on' : ''} ${b ? (now >= b.end ? 'done' : 'busy') : 'free'}" data-act="mtnSlot" data-s="${s}">칸 ${s + 1}<small>${st}</small></button>`;
+  }).join('')}</div>`;
+}
+function openBreed(i = curMtn, slot) {
   i = Number(i);
   if (!S.plots[i] || S.plots[i].kind !== 'mountain') i = mountains()[0];
+  if (i !== curMtn && slot == null) slot = Math.max(0, mtnFreeSlot(S.plots[i]));
   curMtn = i;
   const p = S.plots[i];
-  if (p.breed) {
-    const b = p.breed;
+  const slots = mtnSlots(p);
+  if (slot != null) curSlot = Number(slot);
+  if (curSlot >= slots.length) curSlot = 0;
+  const big = slots.length > 1 ? ` <small class="muted">큰 교배산 Lv.${p.lv} · 동시에 ${slots.length}쌍</small>` : '';
+  const b = slots[curSlot];
+  if (b) {
     const done = Date.now() >= b.end;
+    const key = `${i}|${curSlot}`;
     showModal(`
-      <h3>🏔️ 교배산</h3>
+      <h3>🏔️ 교배산${big}</h3>
+      ${slotBarHTML(i)}
       <div class="egg ${done ? 'ready' : eggLv(b.type)}">🥚</div>
-      <div class="timer" data-live="breed:${i}"></div>
+      <div class="timer" data-live="breed:${key}"></div>
       <div class="hint">${breedHint(b.base || b.total)}</div>
       <div class="parents">${b.parents.join(' + ')}</div>
-      <div class="bar"><div data-bar="breed:${i}"></div></div>
+      <div class="bar"><div data-bar="breed:${key}"></div></div>
       <div class="row">
-        <button class="btn green" data-act="takeEgg" data-i="${i}">🥚 알 가져가기</button>
-        <button class="btn ghost" data-act="breedGem" data-i="${i}">💎 <span data-live="breedGem:${i}"></span> 즉시 완성</button>
+        <button class="btn green" data-act="takeEgg" data-i="${i}" data-s="${curSlot}">🥚 알 가져가기</button>
+        <button class="btn ghost" data-act="breedGem" data-i="${i}" data-s="${curSlot}">💎 <span data-live="breedGem:${key}"></span> 즉시 완성</button>
       </div>
       ${mountainFooter(i)}`);
     return;
   }
   sel = sel.filter(u => byUid(u));
   const [ma, mb] = sel.map(byUid);
-  const slot = (m) => m ? card(m, '', 'mini') : '?';
+  const slotCard = (m) => m ? card(m, '', 'mini') : '?';
   showModal(`
-    <h3>🏔️ 교배산</h3>
-    <p class="muted">Lv.${BREED_LV} 이상 몬스터 두 마리를 골라 섞어요. 타이머가 길게 뜰수록 높은 등급!</p>
+    <h3>🏔️ 교배산${big}</h3>
+    ${slotBarHTML(i)}
+    <p class="muted">${slots.length > 1 ? `<b>칸 ${curSlot + 1}</b>에서 교배해요. ` : ''}Lv.${BREED_LV} 이상 몬스터 두 마리를 골라 섞어요. 타이머가 길게 뜰수록 높은 등급!</p>
     <div class="slots">
-      <div class="slot">${slot(ma)}</div><div class="plus">+</div><div class="slot">${slot(mb)}</div>
+      <div class="slot">${slotCard(ma)}</div><div class="plus">+</div><div class="slot">${slotCard(mb)}</div>
     </div>
     <div class="row">
       <button class="btn big" data-act="breed" data-i="${i}" ${ma && mb ? '' : 'disabled'}>⛰️ 교배 시작${ma && mb ? ` (💰 ${fmt(breedCost(ma, mb))})` : ''}</button>
@@ -1795,7 +1828,7 @@ function logParents(e) {
 function breedLogHTML(i) {
   const log = S.breedLog || [];
   if (!log.length) return '';
-  const pending = new Set(S.plots.filter(p => p && p.kind === 'mountain' && p.breed).map(p => p.breed.logId));
+  const pending = new Set(S.plots.filter(p => p && p.kind === 'mountain').flatMap(p => mtnBusy(p).map(b => b.logId)));
   return `<div class="breed-log">
     <h4>📜 교배 기록 <small class="muted">최근 ${log.length}번 · 🔁 누르면 같은 조합으로 바로 교배해요</small></h4>
     ${log.map(e => {
@@ -1819,6 +1852,9 @@ function rebreed(i, id) {
   const pr = logParents(e);
   if (!pr) { toast('기록의 부모 몬스터가 없어요'); return; }
   sel = [pr[0].uid, pr[1].uid];
+  const fs0 = mtnFreeSlot(S.plots[Number(i)]);
+  if (fs0 < 0) { toast('비어 있는 칸이 없어요'); return; }
+  curSlot = fs0;
   startBreed(i);
 }
 
@@ -1837,41 +1873,47 @@ function startBreed(i = curMtn) {
   i = Number(i);
   const p = S.plots[i];
   const [a, b] = sel.map(byUid);
-  if (!p || p.kind !== 'mountain' || !a || !b || p.breed) return;
+  if (!p || p.kind !== 'mountain' || !a || !b || mtnSlots(p)[curSlot]) return;
   if (a.lv < BREED_LV || b.lv < BREED_LV) { toast(`두 마리 모두 Lv.${BREED_LV} 이상이어야 해요`); return; }
   if (!spend(breedCost(a, b))) return;
   const type = breedResult(a.type, b.type);
   const base = RAR[CAT[type].rarity].time;
-  const total = Math.max(1, Math.round(base / mtnSpeed(p)));
+  const total = base;
   const logId = S.nextLog = (S.nextLog || 0) + 1;
-  p.breed = { type, total, base, end: Date.now() + total * 1000, parents: [CAT[a.type].name, CAT[b.type].name], logId };
+  mtnSlots(p)[curSlot] = { type, total, base, end: Date.now() + total * 1000, parents: [CAT[a.type].name, CAT[b.type].name], logId };
+  // 다음에 창을 열면 비어 있는 다음 칸으로
+  const nextFree = mtnFreeSlot(p);
   S.breedLog = [{ id: logId, a: a.uid, b: b.uid, at: a.type, bt: b.type, rt: type, t: Date.now() }, ...(S.breedLog || [])].slice(0, BREED_LOG_MAX);
   sel = [];
   save();
-  openBreed(i);
+  openBreed(i, nextFree >= 0 && mtnSlots(p).length > 1 ? nextFree : curSlot);
+  if (nextFree >= 0 && mtnSlots(p).length > 1) toast(`⛰️ 칸 ${curSlot + 1}에서 교배를 시작했어요! 비어 있는 칸이 더 있어요`);
   refreshLive();
   updateHud();
 }
 
-function breedGem(i = curMtn) {
+function breedGem(i = curMtn, sl = curSlot) {
   const p = S.plots[Number(i)];
-  if (!p || !p.breed) return;
-  const left = (p.breed.end - Date.now()) / 1000;
+  const br = p && p.kind === 'mountain' ? mtnSlots(p)[Number(sl)] : null;
+  if (!br) return;
+  const left = (br.end - Date.now()) / 1000;
   if (left <= 0) return;
   if (!spend(gemCost(left, 10), 'gems')) return;
-  p.breed.end = Date.now();
+  br.end = Date.now();
   save();
-  openBreed(i);
+  openBreed(i, sl);
   updateHud();
 }
 
-function takeEgg(i = curMtn) {
+function takeEgg(i = curMtn, sl = curSlot) {
   const p = S.plots[Number(i)];
-  if (!p || !p.breed) return;
-  if (Date.now() < p.breed.end) { toast('아직 알이 준비되지 않았어요 ⏳'); return; }
+  const slots = p && p.kind === 'mountain' ? mtnSlots(p) : null;
+  const br = slots ? slots[Number(sl)] : null;
+  if (!br) return;
+  if (Date.now() < br.end) { toast('아직 알이 준비되지 않았어요 ⏳'); return; }
   if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
-  S.hatch.push(p.breed.type);
-  p.breed = null;
+  S.hatch.push(br.type);
+  slots[Number(sl)] = null;
   save();
   render();
   openHatchery();
@@ -1902,11 +1944,14 @@ function openHatchery(i = curHatch) {
 // 교배산 두 개를 합쳐 큰 교배산으로: 레벨이 합쳐지고 교배 시간이 빨라진다
 function mergeMountain(i, k) {
   const a = S.plots[i], b = S.plots[k];
-  if (!a || !b || a.kind !== 'mountain' || b.kind !== 'mountain' || i === k || a.breed || b.breed) return;
+  if (!a || !b || a.kind !== 'mountain' || b.kind !== 'mountain' || i === k) return;
+  // 칸을 이어 붙인다: 자라던 알도 그대로 옮겨 간다
+  const merged = mtnSlots(a).concat(mtnSlots(b));
   a.lv = (a.lv || 1) + (b.lv || 1);
+  a.breeds = merged;
   S.plots[k] = null;
   save();
-  toast(`🔗 큰 교배산 Lv.${a.lv} 완성! 교배 시간 -${Math.round((1 - 1 / mtnSpeed(a)) * 100)}%`);
+  toast(`🔗 큰 교배산 Lv.${a.lv} 완성! 이제 동시에 ${a.lv}쌍을 교배할 수 있어요`);
 }
 
 // 부화장 두 개를 합쳐 큰 부화장 하나로: 칸은 모두 합치고 보너스 1칸, 땅 한 칸이 비워진다
@@ -3468,11 +3513,11 @@ function goBreed(a, b) {
   closeModal();
   tab = 'island';
   render();
-  const free = mountains().find(k => !S.plots[k].breed);
+  const free = mountains().find(k => mtnFreeSlot(S.plots[k]) >= 0);
   if (free == null) { toast('모든 교배산에서 알이 자라고 있어요! 먼저 알을 가져가거나 교배산을 더 지어 보세요'); openBreed(mountains()[0]); return; }
   if (islandOf(free) !== (S.isl || 0)) { S.isl = islandOf(free); render(); }
   sel = [Number(a), Number(b)];
-  openBreed(free);
+  openBreed(free, mtnFreeSlot(S.plots[free]));
   toast('⛰️ 추천 조합을 골라 뒀어요. 교배 시작을 누르세요!');
 }
 
@@ -3553,7 +3598,7 @@ const TUT = [
   { text: '🌾 농장을 지어요. 먹이 🍖를 키우는 곳이에요', done: () => farmIdx().length > 0, go: () => goShop('shopHab') },
   { text: '🌱 농장을 눌러 작물을 심어요', done: () => farmIdx().some(k => S.plots[k].crop != null || S.plots[k].lastCrop != null), go: () => goPlot(farmIdx()[0]) },
   { text: `🍖 먹이를 줘서 두 마리를 Lv.${BREED_LV}까지 키워요`, done: () => S.monsters.filter(m => m.lv >= BREED_LV).length >= 2, go: () => { closeModal(); tab = 'mons'; render(); } },
-  { text: '🏔️ 교배산에서 두 마리를 섞어 새 몬스터를 만들어요!', done: () => (S.breedLog || []).length > 0, go: () => goPlot(mountains().find(k => !S.plots[k].breed) ?? mountains()[0]) },
+  { text: '🏔️ 교배산에서 두 마리를 섞어 새 몬스터를 만들어요!', done: () => (S.breedLog || []).length > 0, go: () => goPlot(mountains().find(k => mtnFreeSlot(S.plots[k]) >= 0) ?? mountains()[0]) },
   { text: '⚔️ 모험에서 팀을 짜고 첫 전투를 해 봐요', done: () => S.stage > 1 || Object.keys(S.bossCleared || {}).length > 0, go: () => { closeModal(); tab = 'adventure'; render(); } },
 ];
 // ----- 튜토리얼 손가락: 단계마다 지금 화면에서 눌러야 할 곳을 가리킨다 -----
@@ -3592,7 +3637,7 @@ function tutPoint(k) {
         if (sel.length < 2) return ['#modalBox [data-act=pick]:not(.sel)', '#modalBox [data-act=close]'];
         return ['#modalBox [data-act=breed]'];
       }
-      const m = mountains().find(i => !S.plots[i].breed) ?? mountains()[0];
+      const m = mountains().find(i => mtnFreeSlot(S.plots[i]) >= 0) ?? mountains()[0];
       return onIsland ? { plot: m } : [bottomBtn('island')];
     }
     case 8: // 모험
@@ -3796,8 +3841,9 @@ const ACTIONS = {
   farmGem: (d) => farmGem(d.i),
   pick: (d) => pickBreed(d.uid),
   breed: (d) => startBreed(d.i),
-  breedGem: (d) => breedGem(d.i),
-  takeEgg: (d) => takeEgg(d.i),
+  breedGem: (d) => breedGem(d.i, d.s),
+  takeEgg: (d) => takeEgg(d.i, d.s),
+  mtnSlot: (d) => { const box = $('#modalBox'), y = box.scrollTop; openBreed(curMtn, Number(d.s)); box.scrollTop = y; },
   openHatch: () => openHatchery(),
   hatchOne: (d) => hatchOne(d.idx),
   place: (d) => place(d.idx, d.i),
