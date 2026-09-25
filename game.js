@@ -3132,6 +3132,143 @@ const TUT = [
   { text: '🏔️ 교배산에서 두 마리를 섞어 새 몬스터를 만들어요!', done: () => (S.breedLog || []).length > 0, go: () => goPlot(mountains().find(k => !S.plots[k].breed) ?? mountains()[0]) },
   { text: '⚔️ 모험에서 팀을 짜고 첫 전투를 해 봐요', done: () => S.stage > 1 || Object.keys(S.bossCleared || {}).length > 0, go: () => { closeModal(); tab = 'adventure'; render(); } },
 ];
+// ----- 튜토리얼 손가락: 단계마다 지금 화면에서 눌러야 할 곳을 가리킨다 -----
+const modalOpen = () => !$('#modal').classList.contains('hidden');
+const bottomBtn = (t) => `.bottom-bar [data-tab="${t}"]`;
+const firstHabEl = () => (S.plots.find(p => p && p.kind === 'hab' && EGG_SHOP.includes('p:' + p.el)) || {}).el;
+// 돌려주는 값: CSS 선택자 배열(앞에서부터 보이는 것) 또는 { plot: 칸 번호 }
+function tutPoint(k) {
+  const inModal = modalOpen();
+  const onIsland = tab === 'island';
+  const need = (t) => (tab === t ? null : [bottomBtn(t)]);
+  switch (k) {
+    case 0: // 서식지 짓기
+      if (inModal) return ['#modalBox [data-act=build][data-what^="hab:"]', '#modalBox [data-act=close]'];
+      return need('shop') || ['[data-act=buyHab][data-el="fire"]'];
+    case 1: case 3: { // 알 사기 (4단계는 알이 있으면 부화)
+      if (k === 3 && S.hatch.length) return tutPoint(2);
+      if (inModal) return ['#modalBox [data-act=close]'];
+      const el = firstHabEl();
+      return need('shop') || [el ? `[data-act=buyMon][data-type="p:${el}"]` : '#shopEgg', '[data-act=buyMon]'];
+    }
+    case 2: // 부화
+      if (inModal) return ['#modalBox [data-act=place]', '#modalBox [data-act=hatchOne]', '#modalBox [data-act=close]'];
+      return onIsland ? { plot: hatcheries()[0] } : [bottomBtn('island')];
+    case 4: // 농장 짓기
+      if (inModal) return ['#modalBox [data-act=build][data-what="farm"]', '#modalBox [data-act=close]'];
+      return need('shop') || ['[data-act=buyHab][data-el="farm"]'];
+    case 5: // 작물 심기
+      if (inModal) return ['#modalBox [data-act=plant]', '#modalBox [data-act=close]'];
+      return onIsland ? { plot: farmIdx()[0] } : [bottomBtn('island')];
+    case 6: // Lv.4까지 키우기
+      if (inModal) return ['#modalBox [data-act=feed]', '#modalBox [data-act=close]'];
+      return need('mons') || ['[data-act=feedAll][data-mode="breed"]'];
+    case 7: { // 교배
+      if (inModal) {
+        if (sel.length < 2) return ['#modalBox [data-act=pick]:not(.sel)', '#modalBox [data-act=close]'];
+        return ['#modalBox [data-act=breed]'];
+      }
+      const m = mountains().find(i => !S.plots[i].breed) ?? mountains()[0];
+      return onIsland ? { plot: m } : [bottomBtn('island')];
+    }
+    case 8: // 모험
+      if (inModal) return ['#modalBox [data-act=close]'];
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return S.team.length ? ['[data-act=fight]'] : ['#view [data-act=team]'];
+  }
+  return null;
+}
+
+let fingerKey = '';
+let fingerScrollAt = 0;
+let glowEl = null;
+function setGlow(el) {
+  if (glowEl === el) return;
+  if (glowEl) glowEl.classList.remove('tut-glow');
+  glowEl = el;
+  if (el) el.classList.add('tut-glow');
+}
+function updateFinger() {
+  const f = $('#finger');
+  if (!f) return;
+  const k = tutShown();
+  // 튜토리얼 창·설명 슬라이드가 열려 있을 때는 손가락을 숨긴다
+  const reading = !!document.querySelector('#modalBox .tut-list, #modalBox .welcome');
+  const active = !B && !S.tutOff && k < TUT.length && !reading;
+  const target = active ? tutPoint(k) : null;
+  let x = null, y = null, down = false, glow = null;
+  if (target && target.plot != null && target.plot >= 0) {
+    if (islandOf(target.plot) !== (S.isl || 0)) {
+      const r = $('#islandBar .ib-name');
+      if (r) { const b = r.getBoundingClientRect(); x = b.left + b.width / 2; y = b.bottom; }
+    } else {
+      const { x: wx, y: wy } = plotPos(target.plot);
+      x = W / 2 + (wx - cam.x) * cam.z;
+      y = H / 2 + 10 + (wy - cam.y) * cam.z;
+      down = true;
+      y -= 30 * cam.z;
+    }
+  } else if (Array.isArray(target)) {
+    for (const sel of target) {
+      const el = [...document.querySelectorAll(sel)].find(e => e.offsetParent !== null);
+      if (!el) continue;
+      let b = el.getBoundingClientRect();
+      // 목록 아래쪽에 있어서 안 보이면 한 번만 스크롤해 준다
+      const key = k + sel;
+      // 목록 밖에 있으면 스크롤 (중간에 끊기면 1.5초 뒤 다시)
+      if ((b.bottom > innerHeight - 90 || b.top < 60) && (fingerKey !== key || Date.now() - fingerScrollAt > 1500)) {
+        el.scrollIntoView({ behavior: fingerKey === key ? 'auto' : 'smooth', block: 'center' });
+        fingerKey = key;
+        fingerScrollAt = Date.now();
+      }
+      b = el.getBoundingClientRect();
+      glow = el;
+      x = b.left + b.width / 2;
+      // 손가락 끝이 버튼 안쪽을 누르도록: 화면 아래쪽 버튼은 위에서, 나머지는 아래에서 가리킨다
+      down = b.bottom > innerHeight - 140;
+      y = down ? b.top + Math.min(18, b.height * 0.4) : b.bottom - Math.min(18, b.height * 0.4);
+      break;
+    }
+  }
+  const show = x != null;
+  setGlow(show ? glow : null);
+  f.classList.toggle('hidden', !show);
+  if (!show) return;
+  f.classList.toggle('down', down);
+  f.style.left = `${x}px`;
+  f.style.top = `${y}px`;
+}
+
+let tutFocus = null;   // 🎓 튜토리얼 창에서 "다시 보기"를 누른 단계
+const tutShown = () => (tutFocus != null ? tutFocus : tutStep());
+
+function openTutorial() {
+  const cur = tutStep();
+  showModal(`<h3>🎓 튜토리얼</h3>
+    <p class="muted">단계를 골라 <b>👉 다시 보기</b>를 누르면 손가락이 어디를 누를지 알려 줘요.</p>
+    <div class="row"><button class="btn" data-act="welcome" data-n="0">📖 게임 설명 보기</button></div>
+    <div class="tut-list">${TUT.map((t, k) => `<div class="tut-row ${k < cur ? 'done' : k === cur ? 'now' : ''}">
+        <span class="tut-num">${k < cur ? '✅' : k === cur ? '👉' : k + 1}</span>
+        <span class="tut-text">${t.text}</span>
+        <button class="btn small ${k === cur ? 'green' : 'ghost'}" data-act="tutFocus" data-k="${k}">👉 ${k === cur ? '지금 하기' : '다시 보기'}</button>
+      </div>`).join('')}</div>
+    <div class="row">
+      ${S.tutOff ? '<button class="btn ghost small" data-act="tutOn">💡 안내 말풍선 켜기</button>' : '<button class="btn ghost small" data-act="tutSkip">🔕 안내 말풍선 끄기</button>'}
+      <button class="btn ghost small danger" data-act="reset">🔄 처음부터 다시 하기</button>
+      <button class="btn ghost small" data-act="close">닫기</button>
+    </div>`);
+}
+function focusTutorial(k) {
+  k = Number(k);
+  S.tutOff = false;
+  tutFocus = k === tutStep() ? null : k;
+  closeModal();
+  const g = $('#guide');
+  if (g) g.dataset.k = '';
+  TUT[k].go();
+  updateGuide();
+}
+
 // 한 번 끝낸 단계는 다시 돌아가지 않는다
 function tutStep() {
   S.tutStep = S.tutStep || 0;
@@ -3140,7 +3277,8 @@ function tutStep() {
 }
 function updateGuide() {
   const g = $('#guide');
-  const k = tutStep();
+  tutStep();
+  const k = tutShown();
   if (k >= TUT.length && !S.tutCongrats) {
     S.tutCongrats = true;
     save();
@@ -3149,14 +3287,15 @@ function updateGuide() {
   const show = !B && !S.tutOff && k < TUT.length;
   g.classList.toggle('hidden', !show);
   if (!show) return;
-  const html = `<div class="g-step">튜토리얼 ${k + 1} / ${TUT.length}</div>
+  const html = `<div class="g-step">${tutFocus != null ? '🎓 다시 보기' : '튜토리얼'} ${k + 1} / ${TUT.length}</div>
     <div class="g-text">${TUT[k].text}</div>
     <div class="g-go">👉 여기를 누르면 바로 가요</div>
     <button class="g-x" data-act="tutSkip" title="튜토리얼 끄기">✕</button>`;
-  if (g.dataset.k !== String(k)) { g.innerHTML = html; g.dataset.k = k; }
+  const key = k + (tutFocus != null ? 'f' : '');
+  if (g.dataset.k !== key) { g.innerHTML = html; g.dataset.k = key; }
 }
 function tutGo() {
-  const k = tutStep();
+  const k = tutShown();
   if (k < TUT.length) TUT[k].go();
 }
 
@@ -3167,7 +3306,7 @@ const WELCOME = [
   { icon: '🌾', title: '농장과 먹이', text: '농장에 작물을 심으면 먹이 🍖가 생겨요.<br>몬스터에게 먹이를 주면 <b>레벨이 올라요</b>.' },
   { icon: '🏔️', title: '교배', text: '<b>Lv.4</b> 몬스터 두 마리를 교배산에 넣으면 <b>새 몬스터</b>가 태어나요!<br>타이머가 길수록 좋은 등급이에요.' },
   { icon: '⚔️', title: '모험', text: '몬스터 3마리로 팀을 짜서 싸워요.<br>📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!' },
-  { icon: '💡', title: '모르겠으면?', text: '화면 아래 <b>노란 말풍선</b>을 누르면 다음에 할 곳으로 바로 데려가 줘요.<br>오른쪽 위 <b>❓</b>로 이 설명을 다시 볼 수 있어요.' },
+  { icon: '💡', title: '모르겠으면?', text: '화면 아래 <b>노란 말풍선</b>을 누르면 다음에 할 곳으로 바로 데려가 줘요.<br>오른쪽 위 <b>🎓 튜토리얼</b> 버튼으로 언제든 다시 볼 수 있어요.' },
 ];
 function openWelcome(n = 0) {
   n = Math.max(0, Math.min(WELCOME.length - 1, Number(n)));
@@ -3267,10 +3406,12 @@ const ACTIONS = {
   mergePick: (d) => openMergePick(d.i),
   mergeHatch: (d) => mergeHatch(d.i, d.k),
   tutGo: () => tutGo(),
-  tutSkip: () => { S.tutOff = true; save(); updateGuide(); toast('튜토리얼을 껐어요. ❓ 버튼으로 다시 켤 수 있어요'); },
+  tutFocus: (d) => focusTutorial(d.k),
+  tutOn: () => { S.tutOff = false; tutFocus = null; save(); closeModal(); updateGuide(); toast('💡 안내 말풍선을 켰어요'); },
+  tutSkip: () => { if (tutFocus != null) { tutFocus = null; $('#guide').dataset.k = ''; updateGuide(); toast('다시 보기를 끝냈어요'); return; } S.tutOff = true; save(); updateGuide(); toast('튜토리얼을 껐어요. ❓ 버튼으로 다시 켤 수 있어요'); },
   welcome: (d) => openWelcome(d.n),
   welcomeDone: () => welcomeDone(),
-  help: () => openWelcome(0),
+  help: () => openTutorial(),
   rebreed: (d) => rebreed(d.i, d.id),
   monView: (d) => { monView()[d.k] = d.v; save(); renderMons(); },
   isl: (d) => goIsland((S.isl || 0) + Number(d.d)),
@@ -3318,4 +3459,5 @@ setTimeout(() => {
   else if (dailyReady()) openDaily();
 }, 900);
 setInterval(save, 3000);
+setInterval(updateFinger, 120);
 window.addEventListener('beforeunload', save);

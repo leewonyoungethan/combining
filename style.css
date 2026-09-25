@@ -601,3 +601,34 @@ h3.sub .btn.small { margin-left: 8px; vertical-align: middle; }
 
 /* 섬 꾸미기 */
 .deco-bonus { color: #ff9ad5; font-weight: 800; }
+
+/* 튜토리얼 손가락 */
+.finger {
+  position: fixed; z-index: 70; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center;
+  transform: translate(-50%, 4px); transition: left .25s, top .25s;
+}
+.finger.hidden { display: none; }
+.f-hand { font-size: 46px; line-height: 1; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .5)); animation: tapUp .9s ease-in-out infinite; }
+.f-tip {
+  margin-top: 2px; background: #ffe066; color: #3a2a00; font-weight: 900; font-size: 12px;
+  padding: 3px 9px; border-radius: 999px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
+}
+.finger.down { flex-direction: column-reverse; transform: translate(-50%, calc(-100% - 4px)); }
+.finger.down .f-hand { animation-name: tapDown; }
+.finger.down .f-hand::before { content: ""; }
+@keyframes tapUp { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(10px) scale(.92); } }
+@keyframes tapDown { 0%, 100% { transform: translateY(0) rotate(180deg); } 50% { transform: translateY(-10px) rotate(180deg) scale(.92); } }
+.tut-glow { position: relative; z-index: 3; animation: tutGlow 1s ease-in-out infinite !important; outline: 3px solid #ffe066 !important; outline-offset: 3px; border-radius: 14px; }
+@keyframes tutGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 224, 102, .9); } 50% { box-shadow: 0 0 18px 8px rgba(255, 224, 102, .75); } }
+
+/* 🎓 튜토리얼 창 */
+.tut-btn span { font-size: 12px; font-weight: 800; margin-left: 2px; }
+@media (max-width: 560px) { .tut-btn span { display: none; } }
+.tut-list { display: grid; gap: 6px; margin-top: 10px; text-align: left; }
+.tut-row { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; font-size: 13px; }
+.tut-row.done { opacity: .7; }
+.tut-row.now { border-color: #7dff8f; box-shadow: 0 0 12px rgba(125, 255, 143, .35); }
+.tut-num { font-weight: 900; text-align: center; }
+.tut-text { font-weight: 700; }
+.tut-row .btn.small { padding: 5px 9px; font-size: 11px; white-space: nowrap; }
