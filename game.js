@@ -279,7 +279,22 @@ function breedResult(ta, tb) {
   return entries[entries.length - 1][0];
 }
 // ===================== 건물 / 농장 / 룬 =====================
-const PLOTS = 25;
+// 섬 8개 × 25칸. 모든 칸은 한 배열(S.plots)에 들어 있고, 섬 k는 k*25 ~ k*25+24번 칸
+const ISLAND_PLOTS = 25;
+const ISLANDS = [
+  { name: '초원 섬', emoji: '🌳', grass: ['#6fd35e', '#3b9a3c'], sand: '#ecd592', decor: ['🌴', '🌳', '🌲', '🌼', '🍄', '🌷', '🪨'] },
+  { name: '사막 섬', emoji: '🏜️', grass: ['#f0cf7a', '#c9953a'], sand: '#f6e6b0', decor: ['🌵', '🪨', '🐫', '🌵', '🦂', '🏺'] },
+  { name: '눈의 섬', emoji: '❄️', grass: ['#f4f9ff', '#b9d3ea'], sand: '#dfe9f3', decor: ['⛄', '🌲', '❄️', '🐧', '🌲', '🧊'] },
+  { name: '화산 섬', emoji: '🌋', grass: ['#6a453b', '#2e1d1a'], sand: '#4a3530', decor: ['🌋', '🔥', '🪨', '🔥', '🦎', '🪨'] },
+  { name: '정글 섬', emoji: '🌴', grass: ['#33b457', '#146b2d'], sand: '#d8c27a', decor: ['🌴', '🌿', '🦜', '🌺', '🐒', '🍌'] },
+  { name: '밤의 섬', emoji: '🌙', grass: ['#454a98', '#1e2050'], sand: '#5b5f9f', decor: ['🌙', '🍄', '✨', '🦉', '🕯️', '⭐'] },
+  { name: '수정 섬', emoji: '💎', grass: ['#c9a6ff', '#7b5cff'], sand: '#eadcff', decor: ['💎', '🔮', '✨', '🦄', '💠', '🌸'] },
+  { name: '구름 섬', emoji: '☁️', grass: ['#ffffff', '#cfe3ff'], sand: '#eef5ff', decor: ['☁️', '🌈', '🕊️', '⭐', '🎈', '🌟'] },
+];
+const PLOTS = ISLAND_PLOTS * ISLANDS.length;
+const islandOf = (i) => Math.floor(i / ISLAND_PLOTS);
+const islandRange = (k) => Array.from({ length: ISLAND_PLOTS }, (_, n) => k * ISLAND_PLOTS + n);
+const islandLabel = (i) => ISLANDS[islandOf(i)].emoji + (islandOf(i) + 1);
 const HATCH_CAP = 3;
 const BREED_LV = 4;
 const MAX_LV = 20;
@@ -328,7 +343,9 @@ function load() {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const s = JSON.parse(raw);
-    if (!s || !Array.isArray(s.monsters) || !Array.isArray(s.plots) || s.plots.length !== PLOTS) return null;
+    if (!s || !Array.isArray(s.monsters) || !Array.isArray(s.plots)) return null;
+    while (s.plots.length < PLOTS) s.plots.push(null);   // 예전(섬 1개) 저장도 이어 하기
+    s.isl = s.isl || 0;
     s.monsters = s.monsters.filter(m => CAT[m.type]);
     s.hatch = (s.hatch || []).filter(t => CAT[t]);
     if (s.breed && !CAT[s.breed.type]) s.breed = null;
@@ -540,7 +557,8 @@ const floaters = [];
 let bubbles = [];
 
 const plotPos = (i) => {
-  const gx = i % GRID, gy = Math.floor(i / GRID);
+  const n = i % ISLAND_PLOTS;
+  const gx = n % GRID, gy = Math.floor(n / GRID);
   return { x: (gx - gy) * TW / 2, y: (gx + gy) * TH / 2 };
 };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -677,15 +695,16 @@ function drawIsland(t) {
   ctx.fill();
   ctx.beginPath();
   ctx.ellipse(x, y + 14, 780, 468, 0, 0, Math.PI * 2);
-  ctx.fillStyle = '#c9a85a';
+  const th = ISLANDS[S.isl || 0];
+  ctx.fillStyle = 'rgba(0,0,0,.18)';
   ctx.fill();
   ctx.beginPath();
   ctx.ellipse(x, y, 770, 455, 0, 0, Math.PI * 2);
-  ctx.fillStyle = '#ecd592';
+  ctx.fillStyle = th.sand;
   ctx.fill();
   const g = ctx.createRadialGradient(x, y - 60, 60, x, y, 760);
-  g.addColorStop(0, '#6fd35e');
-  g.addColorStop(1, '#3b9a3c');
+  g.addColorStop(0, th.grass[0]);
+  g.addColorStop(1, th.grass[1]);
   ctx.beginPath();
   ctx.ellipse(x, y - 6, 735, 428, 0, 0, Math.PI * 2);
   ctx.fillStyle = g;
@@ -817,6 +836,7 @@ function drawFloaters(t) {
   }
 }
 function floatAt(i, text) {
+  if (islandOf(i) !== (S.isl || 0)) return;   // 다른 섬 숫자는 띄우지 않기
   const { x, y } = plotPos(i);
   floaters.push({ x, y: y - TH * 0.8, text, t0: performance.now() / 1000 });
 }
@@ -838,14 +858,16 @@ function drawWorld(now) {
       emoji('⛵', b.x, b.y + Math.sin(t * 1.5 + b.y) * 4, 48, Math.sin(t * 1.2) * 0.06, b.v < 0 ? 1 : -1);
     });
     drawIsland(t);
-    const items = DECOR.map(d => ({ y: d.y, fn: () => { shadow(d.x, d.y + d.s * 0.4, d.s * 0.35); emoji(d.e, d.x, d.y, d.s); } }));
-    S.plots.forEach((p, i) => {
-      const { x, y } = plotPos(i);
+    const decor = ISLANDS[S.isl || 0].decor;
+    const items = DECOR.map((d, k) => ({ y: d.y, fn: () => { shadow(d.x, d.y + d.s * 0.4, d.s * 0.35); emoji(decor[k % decor.length], d.x, d.y, d.s); } }));
+    const here = islandRange(S.isl || 0);
+    here.forEach(i => {
+      const p = S.plots[i], { x, y } = plotPos(i);
       items.push({ y, fn: () => drawPlot(p, i, x, y, t, dt) });
     });
     items.sort((a, b) => a.y - b.y).forEach(it => it.fn());
     bubbles = [];
-    S.plots.forEach((p, i) => { const { x, y } = plotPos(i); drawLabel(p, i, x, y, t); });
+    here.forEach(i => { const { x, y } = plotPos(i); drawLabel(S.plots[i], i, x, y, t); });
     drawFloaters(t);
   }
   requestAnimationFrame(drawWorld);
@@ -860,7 +882,7 @@ function tapAt(sx, sy) {
   for (const b of bubbles) {
     if (Math.hypot(w.x - b.x, w.y - b.y) < b.r + 8) { collectHab(b.i, true); return; }
   }
-  const order = S.plots.map((p, i) => ({ i, ...plotPos(i) })).sort((a, b) => b.y - a.y);
+  const order = islandRange(S.isl || 0).map(i => ({ i, ...plotPos(i) })).sort((a, b) => b.y - a.y);
   for (const o of order) {
     const dx = Math.abs(w.x - o.x), dy = w.y - o.y;
     const inTile = dx / (TW / 2) + Math.abs(dy) / (TH / 2) <= 1;
@@ -893,6 +915,35 @@ cv.addEventListener('wheel', (e) => {
 }, { passive: false });
 window.addEventListener('resize', resize);
 resize();
+
+function renderIslandBar() {
+  const k = S.isl || 0, th = ISLANDS[k];
+  const used = islandRange(k).filter(i => S.plots[i]).length;
+  const bar = $('#islandBar');
+  bar.innerHTML = '<button class="ib-arrow" data-act="isl" data-d="-1">◀</button>' +
+    '<button class="ib-name" data-act="islList">' + th.emoji + ' ' + (k + 1) + '. ' + th.name + ' <small>' + used + '/' + ISLAND_PLOTS + '칸 · 🗺️</small></button>' +
+    '<button class="ib-arrow" data-act="isl" data-d="1">▶</button>';
+  bar.classList.toggle('hidden', tab !== 'island');
+}
+function goIsland(k) {
+  S.isl = (Number(k) + ISLANDS.length) % ISLANDS.length;
+  save();
+  closeModal();
+  render();
+}
+function openIslandList() {
+  const rows = ISLANDS.map((th, k) => {
+    const r = islandRange(k), used = r.filter(i => S.plots[i]).length;
+    const habs = r.filter(i => S.plots[i] && S.plots[i].kind === 'hab').length;
+    const mons = S.monsters.filter(m => islandOf(m.hab) === k).length;
+    return '<button class="build-opt ' + (k === (S.isl || 0) ? 'on' : '') + '" data-act="islGo" data-k="' + k + '" style="--hc:' + th.grass[1] + '">' +
+      '<span class="bo-ico">' + th.emoji + '</span>' +
+      '<span class="bo-nm">' + (k + 1) + '. ' + th.name + '<br><small>서식지 ' + habs + ' · 몬스터 ' + mons + '</small></span>' +
+      '<span class="bo-cost">' + used + '/' + ISLAND_PLOTS + '칸</span></button>';
+  }).join('');
+  showModal('<h3>🗺️ 섬 지도</h3><div class="build-list">' + rows + '</div>' +
+    '<div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>');
+}
 
 function collectAll() {
   let sum = 0;
@@ -1034,7 +1085,7 @@ function openMove(uid) {
       ? `<div class="build-list">${habs.map(({ p, i }) => `
           <button class="build-opt" data-act="move" data-uid="${m.uid}" data-i="${i}" style="--hc:${habColor(p.el)}">
             <span class="bo-ico">${habEmoji(p.el)}</span>
-            <span class="bo-nm">${habName(p.el)} Lv.${p.lv}</span>
+            <span class="bo-nm">${habName(p.el)} Lv.${p.lv} <small>${islandLabel(i)}</small></span>
             <span class="bo-cost">${habMons(i).length}/${habCap(i)}</span>
           </button>`).join('')}</div>`
       : '<p class="warn">옮겨 갈 수 있는 빈 서식지가 없어요.<br>같은 속성 서식지를 하나 더 지어 보세요.</p>'}
@@ -1386,7 +1437,7 @@ function hatchOne(idx) {
         ? `<div class="build-list">${habs.map(({ p, i }) => `
             <button class="build-opt" data-act="place" data-idx="${idx}" data-i="${i}" style="--hc:${habColor(p.el)}">
               <span class="bo-ico">${habEmoji(p.el)}</span>
-              <span class="bo-nm">${habName(p.el)} Lv.${p.lv}</span>
+              <span class="bo-nm">${habName(p.el)} Lv.${p.lv} <small>${islandLabel(i)}</small></span>
               <span class="bo-cost">${habMons(i).length}/${habCap(i)}</span>
             </button>`).join('')}</div>`
         : `<p class="warn">살 수 있는 빈 서식지가 없어요!<br>필요한 곳: ${need}<br>섬에 서식지를 짓거나 업그레이드한 뒤 다시 부화시켜 주세요.</p>`}
@@ -1629,10 +1680,16 @@ function waitText(price) {
 // 서식지/농장을 사면 섬 가운데에 가까운 빈 땅부터 채운다
 function buyHab(el) {
   const center = (GRID - 1) / 2;
+  const cur = S.isl || 0;
+  const dist = (i) => { const n = i % ISLAND_PLOTS; return Math.abs(n % GRID - center) + Math.abs(Math.floor(n / GRID) - center); };
+  // 지금 보고 있는 섬 먼저, 가득 차면 다음 섬
   const free = S.plots.map((p, i) => i).filter(i => !S.plots[i])
-    .sort((a, b) => (Math.abs(a % GRID - center) + Math.abs(Math.floor(a / GRID) - center)) -
-                    (Math.abs(b % GRID - center) + Math.abs(Math.floor(b / GRID) - center)) || a - b);
-  if (!free.length) { toast('섬에 빈 땅이 없어요!'); return; }
+    .sort((a, b) => (islandOf(a) !== cur) - (islandOf(b) !== cur) || islandOf(a) - islandOf(b) || dist(a) - dist(b) || a - b);
+  if (!free.length) { toast('모든 섬에 빈 땅이 없어요!'); return; }
+  if (islandOf(free[0]) !== cur) {
+    const th = ISLANDS[islandOf(free[0])];
+    setTimeout(() => toast('지금 섬이 가득 차서 ' + th.emoji + ' ' + th.name + '에 지었어요'), 50);
+  }
   build(free[0], el === 'farm' ? 'farm' : `hab:${el}`);
 }
 
@@ -2653,6 +2710,7 @@ function submitCode() {
 function render() {
   document.querySelectorAll('.bottom-bar [data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   $('#panel').classList.toggle('hidden', tab === 'island');
+  renderIslandBar();
   if (tab === 'island') view.innerHTML = '';
   else if (tab === 'adventure') renderAdventure();
   else if (tab === 'mons') renderMons();
@@ -2748,6 +2806,9 @@ const ACTIONS = {
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; drawBattle(); },
   typeChart: () => openTypeChart(),
+  isl: (d) => goIsland((S.isl || 0) + Number(d.d)),
+  islGo: (d) => goIsland(d.k),
+  islList: () => openIslandList(),
   bossFight: (d) => startBossBattle(d.i),
   daily: () => openDaily(),
   claimDaily: () => claimDaily(),
