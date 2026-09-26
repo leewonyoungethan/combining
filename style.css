@@ -709,3 +709,21 @@ body.ui-hidden .zoom-btns { opacity: .55; }
 /* 친구 대전 */
 .pvp-box { background: linear-gradient(180deg, #1f3a4a, #152535); border-color: #2f6a7a; text-align: center; }
 .pvp-code { font-size: 42px; font-weight: 900; letter-spacing: 8px; color: #ffe066; margin: 10px 0; font-variant-numeric: tabular-nums; }
+
+/* 👥 친구: 선물·섬 코드 */
+.friend-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; }
+.friend-grid .btn { display: flex; flex-direction: column; gap: 2px; align-items: center; }
+.friend-grid .btn small { font-size: 10px; font-weight: 700; opacity: .8; }
+.code-box { width: 100%; min-height: 90px; margin-top: 10px; padding: 10px; border-radius: 12px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; word-break: break-all; background: #11122a; color: var(--text); border: 1px solid var(--line); resize: vertical; -webkit-user-select: text; user-select: text; }
+.gift-res { display: grid; gap: 8px; margin-top: 10px; text-align: left; }
+.gift-res label { display: flex; align-items: center; gap: 8px; font-weight: 800; }
+.gift-res input { flex: 1; margin: 0 !important; }
+.visit-bar {
+  position: fixed; top: 112px; left: 50%; transform: translateX(-50%); z-index: 29;
+  background: rgba(31, 122, 46, .92); border: 1px solid #7dff8f; border-radius: 999px;
+  padding: 6px 8px 6px 16px; font-size: 13px; display: flex; align-items: center; gap: 8px; white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+}
+.visit-bar.hidden { display: none; }
+body.visiting .bottom-bar, body.visiting #hideBtn, body.visiting .guide, body.visiting .finger { display: none !important; }
+body.visiting .zoom-btns { top: 160px; }

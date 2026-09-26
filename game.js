@@ -525,6 +525,7 @@ function load() {
 }
 
 function save() {
+  if (VISIT) return;   // 친구 섬 구경 중에는 저장하지 않는다
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* 저장 불가 환경 */ }
 }
 
@@ -1131,6 +1132,7 @@ function plotAt(sx, sy) {
   return -1;
 }
 function tapAt(sx, sy) {
+  if (VISIT) { visitTap(plotAt(sx, sy)); return; }
   const w = toWorld(sx, sy);
   for (const bb of bubbles) {
     if (Math.hypot(w.x - bb.x, w.y - bb.y) < bb.r + 8) { collectHab(bb.i, true); return; }
@@ -1198,7 +1200,7 @@ cv.addEventListener('pointerdown', (e) => {
   }
   drag = { sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false, hold: null };
   const i = plotAt(e.clientX, e.clientY);
-  if (i >= 0 && S.plots[i]) {
+  if (i >= 0 && S.plots[i] && !VISIT) {
     drag.hold = setTimeout(() => {
       if (!drag || drag.moved || pinch) return;
       carry = { from: i, sx: drag.sx, sy: drag.sy, over: i };
@@ -2903,9 +2905,15 @@ function renderAdventure() {
       <div class="row"><button class="btn big" data-act="fight" ${team.length ? '' : 'disabled'}>⚔️ 전투 시작</button></div>
     </div>
     <div class="stage-box pvp-box">
-      <h3>👥 친구 대전</h3>
-      <p class="muted">방 코드로 친구와 연결해서 실시간으로 싸워요. 위의 내 팀으로 싸우고, 이기면 💰${fmt(PVP_REWARD.gold)} + 💎${PVP_REWARD.gems}!</p>
-      <div class="row"><button class="btn big" data-act="pvp">👥 친구와 대전하기</button></div>
+      <h3>👥 친구</h3>
+      <p class="muted">친구와 실시간으로 싸우거나, 코드로 선물을 주고받고 섬을 구경해요.</p>
+      <div class="friend-grid">
+        <button class="btn" data-act="pvp">⚔️ 실시간 대전<small>이기면 💰${fmt(PVP_REWARD.gold)} + 💎${PVP_REWARD.gems}</small></button>
+        <button class="btn" data-act="giftSend">🎁 선물 보내기<small>몬스터·골드·룬</small></button>
+        <button class="btn green" data-act="giftRecv">📥 선물 받기${(S.giftBox || []).length ? `<small>📦 보관함 ${S.giftBox.length}</small>` : '<small>코드 붙여넣기</small>'}</button>
+        <button class="btn" data-act="islandShare">🏝️ 내 섬 코드<small>친구에게 보여 주기</small></button>
+        <button class="btn green" data-act="visitOpen">👀 친구 섬 구경<small>코드 붙여넣기</small></button>
+      </div>
     </div>
     <h3 class="sub">👹 보스전 <small class="muted">위의 내 팀으로 싸워요. 보스를 이기면 다음 보스가 열려요</small></h3>
     ${renderBossList()}
@@ -3723,6 +3731,256 @@ function playPvpSkill(msg) {
   playSkill(att, sk, events).finally(() => { if (B) B.anim = Math.max(0, B.anim - 1); });
 }
 
+// ===================== 코드로 선물·섬 주고받기 =====================
+// 코드 = 접두어 + 압축 여부(0/1) + base64url(내용) + '.' + 검사 값 (잘못 복사하면 알아챈다)
+const GIFT_PREFIX = 'MHG1', ISLE_PREFIX = 'MHI1';
+const b64u = (bytes) => { let bin = ''; for (let k = 0; k < bytes.length; k += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(k, k + 8192)); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+const unb64u = (t) => { const bin = atob(t.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((t.length + 3) % 4)); const out = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) out[k] = bin.charCodeAt(k); return out; };
+const codeSum = (json) => (hashStr(json) % 46656).toString(36);
+async function packCode(prefix, obj) {
+  const json = JSON.stringify(obj);
+  let bytes = new TextEncoder().encode(json), z = '0';
+  if (window.CompressionStream) {
+    bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
+    z = '1';
+  }
+  return `${prefix}${z}${b64u(bytes)}.${codeSum(json)}`;
+}
+async function unpackCode(prefix, code) {
+  code = String(code || '').replace(/\s+/g, '');
+  if (!code.startsWith(prefix)) throw new Error('kind');
+  const body = code.slice(prefix.length), z = body[0];
+  const [data, sum] = body.slice(1).split('.');
+  let bytes = unb64u(data || '');
+  if (z === '1') bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+  const json = new TextDecoder().decode(bytes);
+  if (codeSum(json) !== sum) throw new Error('sum');
+  return JSON.parse(json);
+}
+function myPlayerId() {
+  if (!S.playerId) { S.playerId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36); save(); }
+  return S.playerId;
+}
+function codeBox(title, code, note) {
+  showModal(`<h3>${title}</h3>
+    <p class="muted">${note}</p>
+    <textarea class="code-box" readonly>${esc(code)}</textarea>
+    <div class="row">
+      <button class="btn big" data-act="copyCode">📋 코드 복사</button>
+      <button class="btn ghost" data-act="close">닫기</button>
+    </div>`);
+  const ta = $('#modalBox .code-box');
+  if (ta) { ta.focus(); ta.select(); }
+}
+
+// ----- 선물 보내기 -----
+let giftTab = 'mon';
+function openGiftSend(kind = giftTab) {
+  giftTab = kind;
+  const chip = (k, label) => `<button class="chip ${giftTab === k ? 'on' : ''}" data-act="giftSend" data-k="${k}">${label}</button>`;
+  let body = '';
+  if (kind === 'mon') {
+    const list = sortMons(S.monsters.filter(m => !S.team.includes(m.uid)));
+    body = list.length
+      ? `<p class="muted">보낼 몬스터를 눌러요. (모험 팀 몬스터는 보낼 수 없어요)</p>
+         <div class="grid small">${list.map(m => card(m, `data-act="giftMon" data-uid="${m.uid}"`)).join('')}</div>`
+      : '<p class="muted">보낼 수 있는 몬스터가 없어요.</p>';
+  } else if (kind === 'res') {
+    body = `<p class="muted">보낼 양을 적어요. 보낸 만큼 내 쪽에서 빠져요.</p>
+      <div class="gift-res">
+        <label>💰 골드 <input id="gGold" type="number" min="0" placeholder="0"></label>
+        <label>💎 보석 <input id="gGems" type="number" min="0" placeholder="0"></label>
+        <label>🍖 먹이 <input id="gFood" type="number" min="0" placeholder="0"></label>
+      </div>
+      <div class="row"><button class="btn big" data-act="giftRes">🎁 선물 코드 만들기</button></div>`;
+  } else {
+    const free = S.runes.filter(r => r.on == null).sort((a, b) => b.lv - a.lv);
+    body = free.length
+      ? `<p class="muted">보낼 룬을 눌러요. (끼워 둔 룬은 보낼 수 없어요)</p>
+         <div class="build-list">${free.map(r => `<button class="build-opt" data-act="giftRune" data-rid="${r.id}" style="--hc:#c28cff"><span class="bo-nm">${runeText(r)}</span></button>`).join('')}</div>`
+      : '<p class="muted">보낼 수 있는 룬이 없어요.</p>';
+  }
+  showModal(`<h3>🎁 선물 보내기</h3>
+    <div class="chips">${chip('mon', '🐾 몬스터')}${chip('res', '💰 골드·보석·먹이')}${chip('rune', '💠 룬')}</div>
+    ${body}
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+}
+async function makeGift(kind, data, label) {
+  const payload = { v: 1, g: kind, d: data, from: S.nick || '친구', pid: myPlayerId(), id: Math.random().toString(36).slice(2) + Date.now().toString(36) };
+  const code = await packCode(GIFT_PREFIX, payload);
+  save();
+  render();
+  codeBox('🎁 선물 코드', code, `<b>${label}</b>을(를) 담았어요. 코드를 친구에게 보내 주세요. 코드는 <b>한 번만</b> 받을 수 있어요.`);
+}
+function giftMon(uid) {
+  const m = byUid(uid);
+  if (!m || S.team.includes(m.uid)) return;
+  if (!confirm(`${CAT[m.type].name} Lv.${m.lv}을(를) 선물로 보낼까요? 내 몬스터에서 빠져요.`)) return;
+  m.runes.forEach(id => { const r = S.runes.find(x => x.id === id); if (r) r.on = null; });
+  S.monsters = S.monsters.filter(x => x.uid !== m.uid);
+  sel = sel.filter(u => u !== m.uid);
+  delete walkers[m.uid];
+  makeGift('mon', { type: m.type, lv: m.lv }, `${CAT[m.type].face} ${CAT[m.type].name} Lv.${m.lv}`);
+}
+function giftRes() {
+  const num = (id) => Math.max(0, Math.floor(Number(($(id) || {}).value) || 0));
+  const gold = num('#gGold'), gems = num('#gGems'), food = num('#gFood');
+  if (!gold && !gems && !food) { toast('보낼 양을 적어 주세요'); return; }
+  if (!S.infinite && (gold > S.gold || gems > S.gems)) { toast('가진 것보다 많이 보낼 수 없어요'); return; }
+  if (food > S.food) { toast('먹이가 부족해요'); return; }
+  if (!S.infinite) { S.gold -= gold; S.gems -= gems; }
+  S.food -= food;
+  updateHud();
+  makeGift('res', { gold, gems, food }, [gold && `💰${fmt(gold)}`, gems && `💎${fmt(gems)}`, food && `🍖${fmt(food)}`].filter(Boolean).join(' '));
+}
+function giftRune(rid) {
+  const r = S.runes.find(x => x.id === Number(rid));
+  if (!r || r.on != null) return;
+  S.runes = S.runes.filter(x => x.id !== r.id);
+  makeGift('rune', { t: r.t, lv: r.lv }, runeText(r));
+}
+
+// ----- 선물 받기 -----
+function giftBoxHTML() {
+  const box = S.giftBox || [];
+  if (!box.length) return '';
+  return `<h4 class="sub">📦 선물 보관함 <small class="muted">서식지에 자리가 생기면 보내요</small></h4>
+    <div class="grid small">${box.map((g, k) => card({ type: g.type, lv: g.lv }, `data-act="giftPlace" data-k="${k}"`, 'mini')).join('')}</div>`;
+}
+function openGiftRecv() {
+  showModal(`<h3>📥 선물 받기</h3>
+    <p class="muted">친구가 보낸 선물 코드를 붙여 넣어요.</p>
+    <textarea id="giftCode" class="code-box" placeholder="MHG1로 시작하는 코드"></textarea>
+    <div class="row"><button class="btn big green" data-act="giftRecvOk">🎁 받기</button><button class="btn ghost" data-act="close">닫기</button></div>
+    ${giftBoxHTML()}`);
+}
+function placeGiftMon(type, lv) {
+  const h = habsFor(type)[0];
+  S.dex[type] = true;
+  if (!h) { (S.giftBox = S.giftBox || []).push({ type, lv }); return false; }
+  S.monsters.push({ uid: S.nextUid++, type, lv, hab: h.i, runes: [null, null] });
+  return true;
+}
+async function giftRecvOk() {
+  let g;
+  try { g = await unpackCode(GIFT_PREFIX, $('#giftCode').value); } catch (e) { toast('❌ 올바른 선물 코드가 아니에요. 전부 복사했는지 확인해 주세요'); return; }
+  if (!g || g.v !== 1 || !g.id) { toast('❌ 올바른 선물 코드가 아니에요'); return; }
+  if (g.pid === myPlayerId()) { toast('내가 만든 선물은 내가 받을 수 없어요'); return; }
+  S.usedGifts = S.usedGifts || [];
+  if (S.usedGifts.includes(g.id)) { toast('이미 받은 선물이에요'); return; }
+  const from = esc(String(g.from || '친구').slice(0, 10));
+  let got = '';
+  if (g.g === 'mon' && g.d && CAT[g.d.type]) {
+    const lv = Math.max(1, Math.min(MAX_LV, Math.floor(g.d.lv) || 1));
+    const placed = placeGiftMon(g.d.type, lv);
+    got = `${CAT[g.d.type].face} ${CAT[g.d.type].name} Lv.${lv}${placed ? '' : ' (서식지에 자리가 없어서 📦 보관함으로)'}`;
+  } else if (g.g === 'res' && g.d) {
+    const n = (v) => Math.max(0, Math.min(1e13, Math.floor(Number(v) || 0)));
+    earn(n(g.d.gold)); earn(n(g.d.gems), 'gems'); S.food += n(g.d.food);
+    got = [n(g.d.gold) && `💰${fmt(n(g.d.gold))}`, n(g.d.gems) && `💎${fmt(n(g.d.gems))}`, n(g.d.food) && `🍖${fmt(n(g.d.food))}`].filter(Boolean).join(' ');
+  } else if (g.g === 'rune' && g.d && RUNE[g.d.t]) {
+    const r = { id: S.nextRune++, t: g.d.t, lv: Math.max(1, Math.min(3, Math.floor(g.d.lv) || 1)), on: null };
+    S.runes.push(r);
+    got = runeText(r);
+  } else { toast('❌ 알 수 없는 선물이에요'); return; }
+  S.usedGifts.push(g.id);
+  if (S.usedGifts.length > 500) S.usedGifts = S.usedGifts.slice(-500);
+  save();
+  updateHud();
+  render();
+  showModal(`<div class="reveal"><div class="egg-big">🎁</div><h3>${from}님의 선물!</h3><p>${got}</p>
+    <div class="row"><button class="btn" data-act="close">고마워!</button></div></div>`);
+}
+function giftPlace(k) {
+  const box = S.giftBox || [], g = box[Number(k)];
+  if (!g) return;
+  const h = habsFor(g.type)[0];
+  if (!h) { toast('살 수 있는 빈 서식지가 없어요. 서식지를 짓거나 업그레이드해 주세요'); return; }
+  box.splice(Number(k), 1);
+  S.monsters.push({ uid: S.nextUid++, type: g.type, lv: g.lv, hab: h.i, runes: [null, null] });
+  save();
+  toast(`${CAT[g.type].face} ${CAT[g.type].name}이(가) ${habName(S.plots[h.i].el)}으로 이사했어요!`);
+  render();
+  openGiftRecv();
+}
+
+// ----- 섬 코드 / 친구 섬 구경 -----
+async function openIslandShare() {
+  const plots = [];
+  S.plots.forEach((p, i) => {
+    if (!p) return;
+    if (p.kind === 'hab') plots.push([i, 'h', p.el, p.lv]);
+    else if (p.kind === 'farm') plots.push([i, 'f', p.crop ?? p.lastCrop ?? null]);
+    else if (p.kind === 'mountain') plots.push([i, 'm', p.lv || 1]);
+    else if (p.kind === 'hatchery') plots.push([i, 'c', p.cap || HATCH_CAP, p.lv || 1]);
+    else if (p.kind === 'deco') plots.push([i, 'd', p.id]);
+  });
+  const payload = { v: 1, nick: S.nick || '친구', isl: S.isl || 0, plots, mons: S.monsters.map(m => [m.hab, m.type, m.lv]), dex: Object.keys(S.dex).length };
+  const code = await packCode(ISLE_PREFIX, payload);
+  codeBox('🏝️ 내 섬 코드', code, `친구에게 이 코드를 보내면 내 섬 ${ISLANDS.length}개를 구경할 수 있어요. (몬스터 ${S.monsters.length}마리 · 코드 길이 ${fmt(code.length)}자)`);
+}
+function openVisit() {
+  showModal(`<h3>👀 친구 섬 구경</h3>
+    <p class="muted">친구가 보낸 섬 코드를 붙여 넣어요.</p>
+    <textarea id="isleCode" class="code-box" placeholder="MHI1로 시작하는 코드"></textarea>
+    <div class="row"><button class="btn big green" data-act="visitOk">👀 구경하기</button><button class="btn ghost" data-act="close">닫기</button></div>`);
+}
+var VISIT = null;       // { nick, real: 내 저장 상태 } (var: 파일 앞쪽 save()에서도 읽을 수 있게)
+const VISIT_OK = new Set(['isl', 'islList', 'islGo', 'visitExit', 'zoomIn', 'zoomOut', 'hideUI', 'close', 'copyCode']);
+async function visitOk() {
+  let d;
+  try { d = await unpackCode(ISLE_PREFIX, $('#isleCode').value); } catch (e) { toast('❌ 올바른 섬 코드가 아니에요. 전부 복사했는지 확인해 주세요'); return; }
+  if (!d || d.v !== 1 || !Array.isArray(d.plots)) { toast('❌ 올바른 섬 코드가 아니에요'); return; }
+  const plots = Array(PLOTS).fill(null);
+  const n = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.floor(Number(v)) || lo));
+  d.plots.forEach(([i, k, a, b]) => {
+    i = Number(i);
+    if (!(i >= 0 && i < PLOTS)) return;
+    if (k === 'h' && (a === 'legend' || ELI[a] != null)) plots[i] = { kind: 'hab', el: a, lv: n(b, 1, HAB_MAX_LV), gold: 0 };
+    else if (k === 'f') plots[i] = { kind: 'farm', crop: CROPS[a] ? Number(a) : null, lastCrop: null, end: 0 };
+    else if (k === 'm') plots[i] = { kind: 'mountain', lv: n(a, 1, 50), breeds: [] };
+    else if (k === 'c') plots[i] = { kind: 'hatchery', cap: n(a, 1, 999), lv: n(b, 1, 50), incs: [] };
+    else if (k === 'd' && decoById(a)) plots[i] = { kind: 'deco', id: a };
+  });
+  let uid = 1e7;
+  const mons = (d.mons || []).filter(([h, t]) => CAT[t] && plots[h] && plots[h].kind === 'hab')
+    .map(([h, t, lv]) => ({ uid: uid++, type: t, lv: n(lv, 1, MAX_LV), hab: Number(h), runes: [null, null] }));
+  const real = S;
+  VISIT = { nick: esc(String(d.nick || '친구').slice(0, 10)), real, count: mons.length, dex: n(d.dex, 0, 1e5) };
+  S = { ...real, plots, monsters: mons, hatch: [], team: [], isl: n(d.isl, 0, ISLANDS.length - 1), tutOff: true, hideUI: false, breedLog: [], giftBox: [] };
+  Object.keys(walkers).forEach(k => delete walkers[k]);
+  closeModal();
+  tab = 'island';
+  document.body.classList.add('visiting');
+  render();
+  renderVisitBar();
+  toast(`👀 ${VISIT.nick}님의 섬에 놀러 왔어요!`);
+}
+function renderVisitBar() {
+  const bar = $('#visitBar');
+  if (!bar) return;
+  bar.classList.toggle('hidden', !VISIT);
+  if (VISIT) bar.innerHTML = `👀 <b>${VISIT.nick}</b>님의 섬 · 몬스터 ${fmt(VISIT.count)}마리 · 도감 ${fmt(VISIT.dex)} <button class="btn small" data-act="visitExit">🏠 내 섬으로</button>`;
+}
+function visitTap(i) {
+  const p = i >= 0 ? S.plots[i] : null;
+  if (!p) return;
+  const name = p.kind === 'hab' ? `${habName(p.el)} Lv.${p.lv} · 몬스터 ${habMons(i).map(m => CAT[m.type].face).join('')}`
+    : p.kind === 'mountain' ? '🏔️ 교배산' : p.kind === 'hatchery' ? '🪺 부화장' : p.kind === 'farm' ? '🌾 농장' : `${(decoById(p.id) || {}).emoji || ''} ${(decoById(p.id) || {}).name || '장식'}`;
+  toast(name);
+}
+function visitExit() {
+  if (!VISIT) return;
+  S = VISIT.real;
+  VISIT = null;
+  Object.keys(walkers).forEach(k => delete walkers[k]);
+  document.body.classList.remove('visiting');
+  closeModal();
+  render();
+  renderVisitBar();
+  toast('🏠 내 섬으로 돌아왔어요');
+}
+
 // ===================== 속성 상성표 =====================
 const weakTo = (e) => EL.filter(x => BEATS[x.id].includes(e)).map(x => x.id);
 function typeChartHTML() {
@@ -4414,6 +4672,18 @@ const ACTIONS = {
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; drawBattle(); },
   typeChart: () => openTypeChart(),
+  giftSend: (d) => openGiftSend(d.k || giftTab),
+  giftMon: (d) => giftMon(d.uid),
+  giftRes: () => giftRes(),
+  giftRune: (d) => giftRune(d.rid),
+  giftRecv: () => openGiftRecv(),
+  giftRecvOk: () => giftRecvOk(),
+  giftPlace: (d) => giftPlace(d.k),
+  islandShare: () => openIslandShare(),
+  visitOpen: () => openVisit(),
+  visitOk: () => visitOk(),
+  visitExit: () => visitExit(),
+  copyCode: () => { const ta = $('#modalBox .code-box'); if (!ta) return; ta.select(); try { navigator.clipboard.writeText(ta.value).then(() => toast('📋 코드를 복사했어요! 친구에게 붙여 넣어 보내 주세요'), () => { document.execCommand('copy'); toast('📋 복사했어요'); }); } catch (e) { document.execCommand('copy'); toast('📋 복사했어요'); } },
   pvp: () => openPvp(),
   pvpHost: () => pvpHost(),
   pvpJoin: () => pvpJoin(),
@@ -4469,6 +4739,7 @@ document.addEventListener('click', (e) => {
   if (e.target.id === 'modal') { closeModal(); return; }
   const t = e.target.closest('[data-act]') || (e.target.closest('#guide') ? { dataset: { act: 'tutGo' }, disabled: false } : null);
   if (!t || t.disabled) return;
+  if (VISIT && !VISIT_OK.has(t.dataset.act)) { toast('👀 구경 중이에요. 🏠 내 섬으로 돌아간 뒤에 해 주세요'); return; }
   const fn = ACTIONS[t.dataset.act];
   if (fn) fn(t.dataset);
 });
