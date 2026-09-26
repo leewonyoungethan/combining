@@ -2902,6 +2902,11 @@ function renderAdventure() {
       <div class="team-row">${slots}</div>
       <div class="row"><button class="btn big" data-act="fight" ${team.length ? '' : 'disabled'}>⚔️ 전투 시작</button></div>
     </div>
+    <div class="stage-box pvp-box">
+      <h3>👥 친구 대전</h3>
+      <p class="muted">방 코드로 친구와 연결해서 실시간으로 싸워요. 위의 내 팀으로 싸우고, 이기면 💰${fmt(PVP_REWARD.gold)} + 💎${PVP_REWARD.gems}!</p>
+      <div class="row"><button class="btn big" data-act="pvp">👥 친구와 대전하기</button></div>
+    </div>
     <h3 class="sub">👹 보스전 <small class="muted">위의 내 팀으로 싸워요. 보스를 이기면 다음 보스가 열려요</small></h3>
     ${renderBossList()}
     <details class="chart-box"><summary>📘 속성 상성표 보기 (무슨 속성이 무슨 속성에게 강할까?)</summary>${typeChartHTML()}</details>
@@ -3164,6 +3169,8 @@ async function nextTurn() {
     if (!t || t.hp <= 0) b.target = aliveOf('foe')[0].id;
     b.waiting = true;
     drawBattle();
+  } else if (b.pvp) {
+    askRemote(u);
   } else {
     later(() => aiAct(u), 650);
   }
@@ -3242,6 +3249,7 @@ function useSkill(u, sk, tgt) {
   }
   logB(msg);
   const b = B;
+  if (b.pvp && b.pvp.role === 'host') netSend({ t: 'skill', att: u.id, sk: u.c.skills.indexOf(sk), events: events.map(e => ({ kind: e.kind, t: e.t.id, d: e.d, adv: e.adv, hp: e.hp, amount: e.amount, text: e.text })) });
   drawBattle();
   playSkill(u, sk, events).then(() => {
     if (B !== b) return;
@@ -3310,6 +3318,13 @@ function playerSkill(i) {
   if (!B || !B.waiting) return;
   const u = B.cur, sk = u.c.skills[Number(i)];
   if (!sk || sk.cost > u.sta) return;
+  if (B.pvp && B.pvp.role === 'guest') {
+    // 친구 대전의 친구 쪽: 계산은 방장이 하니까 고른 스킬만 보낸다
+    netSend({ t: 'act', i: Number(i), target: flipId(B.target) });
+    B.waiting = false;
+    drawBattle();
+    return;
+  }
   let tgt = unitById(B.target);
   if (!tgt || tgt.hp <= 0) tgt = aliveOf('foe')[0];
   useSkill(u, sk, tgt);
@@ -3334,7 +3349,10 @@ function endBattle(win) {
   B.waiting = false;
   clearTimeout(B.timer);
   const rewards = [];
-  if (B.bossIdx != null) rewards.push(...bossRewards(win));
+  if (B.pvp) {
+    if (win) { earn(PVP_REWARD.gold); earn(PVP_REWARD.gems, 'gems'); rewards.push(`💰 ${fmt(PVP_REWARD.gold)}`, `💎 ${PVP_REWARD.gems}`); }
+    if (B.pvp.role === 'host') netSend({ t: 'end', hostWin: win });
+  } else if (B.bossIdx != null) rewards.push(...bossRewards(win));
   else if (win) {
     const gold = Math.round(120 * Math.pow(1.25, B.stage - 1));
     earn(gold);
@@ -3356,8 +3374,9 @@ function endBattle(win) {
 
 function quitBattle() {
   if (!B) return;
-  if (!B.over && !confirm('전투를 포기할까요?')) return;
+  if (!B.over && !confirm(B.pvp ? '친구 대전에서 나갈까요? (지는 걸로 처리돼요)' : '전투를 포기할까요?')) return;
   clearTimeout(B.timer);
+  if (B.pvp) { netSend({ t: 'bye' }); netClose(); }
   B = null;
   $('#battle').classList.add('hidden');
   render();
@@ -3412,7 +3431,7 @@ function drawBattle() {
     $('#battle').innerHTML = `
       <div class="b-inner">
         <div class="b-top">
-          <b>${B.bossIdx != null ? `👹 보스전 · ${BOSSES[B.bossIdx].name}` : `스테이지 ${B.stage}`}</b><span class="muted" id="bRound"></span>
+          <b>${B.pvp ? `👥 친구 대전 · vs ${B.pvp.oppName}` : B.bossIdx != null ? `👹 보스전 · ${BOSSES[B.bossIdx].name}` : `스테이지 ${B.stage}`}</b><span class="muted" id="bRound"></span>
           <span class="spacer"></span>
           <button class="btn ghost small" data-act="typeChart">📘 상성표</button>
           <button class="btn ghost small" data-act="bFast" id="bFast"></button>
@@ -3458,6 +3477,250 @@ function drawBattle() {
     bottom = `<div class="b-turn muted">${B.cur ? `${B.cur.c.face} ${B.cur.c.name}의 차례…` : '전투 준비!'}</div>`;
   }
   $('#bBottom').innerHTML = bottom;
+  if (B.pvp && B.pvp.role === 'host') sendPvpState();
+}
+
+// ===================== 친구 대전 (방 코드, PeerJS) =====================
+// 방장이 전투를 계산하고, 상태를 친구에게 보낸다. 친구는 자기 몬스터 차례에 스킬만 골라서 보낸다.
+// 친구 화면에서는 편이 뒤집혀 보인다 (방장의 me0 = 친구 화면의 foe0)
+const PVP_PREFIX = 'monhap-';
+const PVP_REWARD = { gold: 300, gems: 5 };
+let NET = null;   // { peer, conn, role, code, oppName, oppTeam, started }
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const flipId = (id) => (!id ? id : id.startsWith('me') ? 'foe' + id.slice(2) : 'me' + id.slice(3));
+const newFx = () => ({ burn: 0, burnDmg: 0, poison: 0, poisonDmg: 0, stun: 0, shield: 0, buff: 0, curse: 0 });
+function pvpCode() {
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let c = '';
+  for (let k = 0; k < 6; k++) c += A[Math.floor(Math.random() * A.length)];
+  return c;
+}
+function netSend(msg) { try { if (NET && NET.conn && NET.conn.open) NET.conn.send(msg); } catch (e) { /* 끊김 */ } }
+function netClose() {
+  const n = NET;
+  NET = null;
+  try { n && n.conn && n.conn.close(); } catch (e) { /* 이미 닫힘 */ }
+  try { n && n.peer && n.peer.destroy(); } catch (e) { /* 이미 닫힘 */ }
+}
+function myTeamData() {
+  return S.team.map(byUid).filter(Boolean).slice(0, 3).map(m => {
+    const st = stats(m);
+    return { type: m.type, lv: m.lv, hp: st.hp, atk: st.atk, spd: st.spd };
+  });
+}
+function netUnit(d, side, idx) {
+  if (!d || !CAT[d.type]) return null;
+  const num = (v, lo, hi) => Math.max(lo, Math.min(hi, Number(v) || lo));
+  const hp = num(d.hp, 1, 1e7);
+  return { id: side + idx, side, c: CAT[d.type], lv: num(d.lv, 1, MAX_LV), maxHp: hp, hp, dispHp: hp, shownDead: false,
+    atk: num(d.atk, 1, 1e6), spd: num(d.spd, 1, 1e4), sta: 2, fx: newFx() };
+}
+
+function openPvp() {
+  if (!window.Peer) { toast('친구 대전 기능을 불러오지 못했어요. 인터넷 연결을 확인해 주세요'); return; }
+  if (NET) netClose();
+  const n = S.team.map(byUid).filter(Boolean).length;
+  showModal(`<h3>👥 친구 대전</h3>
+    <p class="muted">방 코드로 친구와 연결해서 실시간으로 싸워요. 모험 탭의 <b>내 팀</b>(${n}마리)으로 싸워요.</p>
+    ${n ? '' : '<p class="warn">먼저 모험 탭에서 팀을 짜 주세요!</p>'}
+    <input id="pvpName" maxlength="10" value="${esc(S.nick || '')}" placeholder="내 이름 (친구에게 보여요)">
+    <div class="row"><button class="btn big" data-act="pvpHost" ${n ? '' : 'disabled'}>🏠 방 만들기</button></div>
+    <p class="muted">또는 친구가 알려 준 방 코드 입력</p>
+    <input id="pvpCode" maxlength="6" placeholder="예: K7QM2P" style="text-transform:uppercase">
+    <div class="row">
+      <button class="btn green" data-act="pvpJoin" ${n ? '' : 'disabled'}>🔑 들어가기</button>
+      <button class="btn ghost" data-act="close">닫기</button>
+    </div>`);
+}
+function saveNick() {
+  const el = $('#pvpName');
+  if (el) S.nick = el.value.trim().slice(0, 10) || '플레이어';
+  if (!S.nick) S.nick = '플레이어';
+  save();
+}
+function pvpWaitModal(title, body) {
+  showModal(`<h3>${title}</h3>${body}
+    <div class="row"><button class="btn ghost" data-act="pvpCancel">취소</button></div>`);
+}
+function pvpHost(retry = 0) {
+  saveNick();
+  netClose();
+  const code = pvpCode();
+  const peer = new Peer(PVP_PREFIX + code);
+  NET = { peer, role: 'host', code };
+  pvpWaitModal('🏠 방을 만드는 중…', '<p class="muted">잠깐만 기다려 주세요</p>');
+  peer.on('open', () => {
+    pvpWaitModal('🏠 방을 만들었어요!', `<p class="muted">이 코드를 친구에게 알려 주세요</p>
+      <div class="pvp-code">${code}</div>
+      <div class="row"><button class="btn small" data-act="pvpCopy" data-code="${code}">📋 코드 복사</button></div>
+      <p class="muted">친구가 들어오면 바로 대전이 시작돼요… ⏳</p>`);
+  });
+  peer.on('connection', (conn) => {
+    if (NET && NET.conn) { conn.close(); return; }   // 한 명만
+    NET.conn = conn;
+    setupConn(conn);
+  });
+  peer.on('error', (e) => {
+    if (e.type === 'unavailable-id' && retry < 3) { pvpHost(retry + 1); return; }
+    toast('연결 오류: ' + e.type);
+  });
+}
+function pvpJoin() {
+  saveNick();
+  const code = ($('#pvpCode') ? $('#pvpCode').value : '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) { toast('방 코드 6자리를 입력해 주세요'); return; }
+  netClose();
+  const peer = new Peer();
+  NET = { peer, role: 'guest', code };
+  pvpWaitModal('🔑 방에 들어가는 중…', `<p class="muted">코드 <b>${code}</b> 방을 찾고 있어요</p>`);
+  peer.on('open', () => {
+    const conn = peer.connect(PVP_PREFIX + code, { reliable: true });
+    NET.conn = conn;
+    setupConn(conn);
+    setTimeout(() => { if (NET && NET.role === 'guest' && !NET.started && !(NET.conn && NET.conn.open)) { toast('방을 찾을 수 없어요. 코드를 확인해 주세요'); netClose(); openPvp(); } }, 12000);
+  });
+  peer.on('error', (e) => {
+    toast(e.type === 'peer-unavailable' ? '방을 찾을 수 없어요. 코드를 확인해 주세요' : '연결 오류: ' + e.type);
+    netClose();
+  });
+}
+function setupConn(conn) {
+  conn.on('open', () => {
+    netSend({ t: 'hello', name: S.nick || '플레이어', team: myTeamData() });
+    pvpWaitModal('🤝 연결됐어요!', '<p class="muted">대전을 준비하는 중…</p>');
+  });
+  conn.on('data', onNet);
+  conn.on('close', onNetClose);
+  conn.on('error', () => onNetClose());
+}
+function onNetClose() {
+  if (!NET) return;
+  NET = null;
+  if (B && B.pvp && !B.over) {
+    B.over = true;
+    B.waiting = false;
+    clearTimeout(B.timer);
+    B.result = { win: true, rewards: ['친구가 나갔어요'] };
+    drawBattle();
+  } else if (!B) {
+    closeModal();
+    toast('친구와 연결이 끊겼어요');
+  }
+}
+
+function onNet(msg) {
+  if (!msg || typeof msg !== 'object' || !NET) return;
+  switch (msg.t) {
+    case 'hello':
+      NET.oppName = esc(String(msg.name || '친구').slice(0, 10));
+      NET.oppTeam = Array.isArray(msg.team) ? msg.team.slice(0, 3) : [];
+      if (NET.role === 'host' && !NET.started) startPvpBattle();
+      break;
+    case 'start': if (NET.role === 'guest') startPvpGuest(msg); break;
+    case 'state': if (NET.role === 'guest') applyPvpState(msg); break;
+    case 'skill': if (NET.role === 'guest') playPvpSkill(msg); break;
+    case 'act': if (NET.role === 'host') remoteAct(msg); break;
+    case 'end':
+      if (NET.role === 'guest' && B && B.pvp && !B.over) {
+        const win = !msg.hostWin;
+        B.over = true;
+        B.waiting = false;
+        const rewards = [];
+        if (win) { earn(PVP_REWARD.gold); earn(PVP_REWARD.gems, 'gems'); rewards.push(`💰 ${fmt(PVP_REWARD.gold)}`, `💎 ${PVP_REWARD.gems}`); }
+        B.result = { win, rewards };
+        save();
+        drawBattle();
+        updateHud();
+      }
+      break;
+    case 'bye': onNetClose(); break;
+  }
+}
+
+// 방장: 전투 시작
+function startPvpBattle() {
+  const mine = S.team.map(byUid).filter(Boolean).slice(0, 3);
+  const opp = NET.oppTeam.map((d, k) => netUnit(d, 'foe', k)).filter(Boolean);
+  if (!mine.length || !opp.length) { toast('양쪽 모두 팀이 있어야 해요'); netSend({ t: 'bye' }); netClose(); closeModal(); return; }
+  NET.started = true;
+  closeModal();
+  B = {
+    stage: S.stage, pvp: { role: 'host', oppName: NET.oppName },
+    units: [...mine.map((m, k) => mkUnit(m, 'me', k)), ...opp.map((u, k) => ({ ...u, id: 'foe' + k }))],
+    order: [], cur: null, target: 'foe0', log: [], round: 0, remoteTurn: null,
+    waiting: false, over: false, fast: false, timer: null, result: null, built: false,
+  };
+  $('#battle').classList.remove('hidden');
+  updateGuide();
+  logB(`👥 ${NET.oppName}와(과)의 대전 시작!`);
+  netSend({ t: 'start', name: S.nick || '플레이어', units: B.units.map(u => ({ id: u.id, side: u.side, type: u.c.id, lv: u.lv, hp: u.maxHp, atk: u.atk, spd: u.spd })) });
+  drawBattle();
+  later(nextTurn, 1200);
+}
+function askRemote(u) {
+  B.remoteTurn = u.id;
+  B.waiting = false;
+  drawBattle();
+}
+function remoteAct(msg) {
+  if (!B || B.over || !B.remoteTurn) return;
+  const u = unitById(B.remoteTurn);
+  const sk = u && u.c.skills[Number(msg.i)];
+  if (!u || !sk || sk.cost > u.sta) return;
+  let tgt = unitById(msg.target);
+  if (!tgt || tgt.side !== 'me' || tgt.hp <= 0) tgt = aliveOf('me')[0];
+  B.remoteTurn = null;
+  useSkill(u, sk, tgt);
+}
+function sendPvpState() {
+  netSend({
+    t: 'state', round: B.round, cur: B.cur && B.cur.id, remote: B.remoteTurn || null, log: B.log.slice(-4),
+    units: B.units.map(u => ({ id: u.id, hp: u.hp, dispHp: u.dispHp, sta: u.sta, fx: u.fx, shownDead: u.shownDead })),
+  });
+}
+
+// 친구: 방장이 보낸 정보로 전투 화면 만들기 (편을 뒤집어서)
+function startPvpGuest(msg) {
+  if (!Array.isArray(msg.units)) return;
+  NET.started = true;
+  NET.oppName = esc(String(msg.name || NET.oppName || '친구').slice(0, 10));
+  closeModal();
+  B = {
+    stage: S.stage, pvp: { role: 'guest', oppName: NET.oppName }, anim: 0,
+    units: msg.units.map((d, k) => { const side = d.side === 'me' ? 'foe' : 'me'; const u = netUnit(d, side, 0); if (u) u.id = flipId(d.id); return u; }).filter(Boolean),
+    order: [], cur: null, target: 'foe0', log: [`👥 ${NET.oppName}와(과)의 대전 시작!`], round: 0,
+    waiting: false, over: false, fast: false, timer: null, result: null, built: false,
+  };
+  $('#battle').classList.remove('hidden');
+  updateGuide();
+  drawBattle();
+}
+function applyPvpState(msg) {
+  if (!B || !B.pvp || B.over) return;
+  (msg.units || []).forEach(su => {
+    const u = unitById(flipId(su.id));
+    if (!u) return;
+    u.hp = su.hp;
+    u.sta = su.sta;
+    u.fx = su.fx || newFx();
+    if (!B.anim) u.dispHp = su.dispHp;
+    if (su.shownDead) u.shownDead = true;
+  });
+  B.round = msg.round || 0;
+  B.log = Array.isArray(msg.log) ? msg.log.map(String) : B.log;
+  B.cur = unitById(flipId(msg.cur)) || null;
+  B.waiting = !!msg.remote && B.cur && B.cur.side === 'me';
+  if (B.waiting) { const t = unitById(B.target); if (!t || t.hp <= 0) { const f = aliveOf('foe')[0]; if (f) B.target = f.id; } }
+  drawBattle();
+}
+function playPvpSkill(msg) {
+  if (!B || !B.pvp) return;
+  const att = unitById(flipId(msg.att));
+  const sk = att && att.c.skills[Number(msg.sk)];
+  if (!att || !sk) return;
+  const events = (msg.events || []).map(e => ({ ...e, t: unitById(flipId(e.t)) })).filter(e => e.t);
+  B.anim++;
+  playSkill(att, sk, events).finally(() => { if (B) B.anim = Math.max(0, B.anim - 1); });
 }
 
 // ===================== 속성 상성표 =====================
@@ -4151,6 +4414,11 @@ const ACTIONS = {
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; drawBattle(); },
   typeChart: () => openTypeChart(),
+  pvp: () => openPvp(),
+  pvpHost: () => pvpHost(),
+  pvpJoin: () => pvpJoin(),
+  pvpCancel: () => { netClose(); closeModal(); toast('친구 대전을 취소했어요'); },
+  pvpCopy: (d) => { try { navigator.clipboard.writeText(d.code); toast('📋 코드를 복사했어요: ' + d.code); } catch (e) { toast('코드: ' + d.code); } },
   teamView: (d) => { const v = teamView(); v[d.k] = d.k === 'strong' ? d.v === 'true' : d.v; save(); const p = $('#panel'), y = p.scrollTop; renderAdventure(); p.scrollTop = y; },
   breedView: (d) => { const v = breedView(); v[d.k] = d.k === 'ready' ? d.v === 'true' : d.v; save(); const box = $('#modalBox'); const y = box.scrollTop; openBreed(curMtn); box.scrollTop = y; },
   sellDups: (d) => openSellDups(d.type),

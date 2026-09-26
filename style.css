@@ -705,3 +705,7 @@ body.ui-hidden .zoom-btns { opacity: .55; }
 
 .inc-empty { margin: 14px 0; }
 .egg-slot small { font-size: 10px; }
+
+/* 친구 대전 */
+.pvp-box { background: linear-gradient(180deg, #1f3a4a, #152535); border-color: #2f6a7a; text-align: center; }
+.pvp-code { font-size: 42px; font-weight: 900; letter-spacing: 8px; color: #ffe066; margin: 10px 0; font-variant-numeric: tabular-nums; }
