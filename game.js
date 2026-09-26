@@ -3999,6 +3999,7 @@ async function rankFetch() {
 }
 let rankCat = 'tr', rankCache = null;
 async function openRanking(cat) {
+  tutFlag('ranking', true);
   if (cat) rankCat = cat;
   const draw = (body) => {
     const c = RANK_CATS.find(x => x.id === rankCat);
@@ -5072,6 +5073,7 @@ function misClaimable() {
 }
 function updateMisDot() { const d = $('#misDot'); if (d) d.classList.toggle('on', misClaimable()); }
 function openMissions() {
+  tutFlag('missions', true);
   const m = misToday();
   const got = S.achGot || [];
   // 도전 과제: 받을 수 있는 것 → 진행 중인 것(종류마다 다음 하나) 순서
@@ -5455,9 +5457,14 @@ const TUT = [
   { text: '🎨 섬 꾸미기 장식을 하나 놓아요 (섬 골드가 올라요!)', done: () => S.plots.some(p => p && p.kind === 'deco'), go: () => goShop('shopDeco') },
   { text: '👹 모험 탭의 보스전에 도전해 봐요', done: () => tutFlag('boss') || Object.keys(S.bossCleared || {}).length > 0, go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.boss-list'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
   { text: '👤 오른쪽 위 👤를 눌러 계정 메뉴를 봐요 (계정·옮기기·비밀번호)', done: () => tutFlag('account'), go: () => { closeModal(); openAccountMenu(); } },
-  { text: '👥 친구 칸에서 대전·선물·섬 구경을 둘러봐요', done: () => tutFlag('friends'), go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
+  { text: '👥 모험 탭의 대전·친구 칸에서 🌍 랜덤 대전·선물·섬 구경을 둘러봐요', done: () => tutFlag('friends'), go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
 ];
 // 한 번 해 본 기능 기록 (튜토리얼 단계 확인용)
+TUT.push(
+  { text: '📋 위쪽 📋 버튼에서 오늘의 미션을 보고 💎 보석을 받아요', done: () => tutFlag('missions'), go: () => { closeModal(); openMissions(); } },
+  { text: '🏆 모험 탭의 🏆 랭킹에서 전 세계 순위를 봐요 (랜덤 대전에서 이기면 트로피!)', done: () => tutFlag('ranking'),
+    go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
+);
 function tutFlag(k, set) {
   S.tutFlags = S.tutFlags || {};
   if (set && !S.tutFlags[k]) { S.tutFlags[k] = true; save(); }
@@ -5522,10 +5529,17 @@ function tutPoint(k) {
     case 13: // 계정
       if (inModal) return ['#modalBox [data-act=accExport]', '#modalBox [data-act=close]'];
       return ['.hud [data-act=account]'];
-    case 14: // 친구
-      if (inModal) return ['#modalBox [data-act=close]'];
+    case 14: // 친구 · 랜덤 대전
+      if (inModal) return ['#modalBox [data-act=pvpCancel]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
-      return ['.pvp-box [data-act=giftSend]'];
+      return ['.pvp-box [data-act=pvpRandom]', '.pvp-box [data-act=giftSend]'];
+    case 15: // 미션
+      if (inModal) return ['#modalBox [data-act=misClaim]:not([disabled])', '#modalBox [data-act=achClaim]:not([disabled])', '#modalBox [data-act=close]'];
+      return ['.hud [data-act=missions]'];
+    case 16: // 랭킹
+      if (inModal) return ['#modalBox [data-act=rankCat]', '#modalBox [data-act=close]'];
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return ['.pvp-box [data-act=ranking]'];
   }
   return null;
 }
@@ -5658,8 +5672,10 @@ const WELCOME = [
   { icon: '🏔️', title: '교배', text: '<b>Lv.4</b> 몬스터 두 마리를 교배산에 넣으면 <b>새 몬스터</b>가 태어나요!<br>등급은 <b>일반 → … → 서사 → 전설 → 신화</b>까지 15단계. 타이머가 길수록 좋은 등급이에요.<br>📖 도감에서 몬스터를 누르면 <b>추천 교배 조합</b>을 알려 줘요.' },
   { icon: '🏝️', title: '섬 18개', text: '위쪽 <b>◀ ▶</b>로 섬을 옮겨 다녀요. 건물을 <b>꾹 눌러 끌면</b> 빈 땅으로 옮겨져요.<br>🎨 장식을 놓으면 그 섬 골드가 올라요.<br>두 손가락으로 <b>확대</b>, 🙈 숨기기로 이름표를 감출 수 있어요.' },
   { icon: '⚔️', title: '모험과 보스', text: '몬스터 3마리로 팀을 짜서 싸워요. 📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!<br>👹 보스전에서는 에너지가 엄청 많은 보스와 싸워요.' },
-  { icon: '👥', title: '친구와 함께', text: '모험 탭 <b>👥 친구</b> 칸에서<br>⚔️ 방 코드로 <b>실시간 대전</b>, 🎁 <b>선물</b> 주고받기, 👀 <b>친구 섬 구경</b>을 할 수 있어요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요. 친구가 받을 때까지 코드 창을 열어 두세요!' },
-  { icon: '👤', title: '계정과 오프라인', text: '오른쪽 위 <b>👤</b>에서 <b>계정</b>을 여러 개 만들 수 있어요. 계정마다 <b>자기 섬</b>이 따로 있고, 🔒 비밀번호도 걸 수 있어요.<br>다른 기기로는 <b>📤 옮기기 코드</b>로 섬을 옮겨요.<br>한 번 접속하면 <b>인터넷 없이도</b> 켜지고, 홈 화면에 앱처럼 설치할 수 있어요.' },
+  { icon: '👥', title: '대전과 친구', text: '모험 탭 <b>👥 대전 · 친구</b> 칸에서<br>🌍 <b>랜덤 대전</b>으로 모르는 사람과 바로 싸우고, ⚔️ 방 코드로 <b>친구 대전</b>, 🎁 <b>선물</b>, 👀 <b>친구 섬 구경</b>도 해요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요.' },
+  { icon: '🏆', title: '랭킹과 트로피', text: '🌍 랜덤 대전에서 이기면 <b>🏆 +30</b>, 지면 −15.<br>🥉브론즈 → 🥈실버 → 🥇골드 → 💠플래티넘 → 💎다이아 → 👑마스터 → 🏆챔피언!<br>모험 탭 <b>🏆 랭킹</b>에서 트로피·도감·모험·전투력 <b>전 세계 순위</b>를 봐요.' },
+  { icon: '📋', title: '미션과 도전 과제', text: '위쪽 <b>📋</b>에서 매일 <b>미션 3개</b>를 깨면 💎 보석! 셋 다 깨면 보너스 💎30.<br>🏆 <b>도전 과제</b>(도감·스테이지·등급·트로피)도 한 번씩 큰 보상을 줘요.<br>전투에서 <b>🤖 자동</b>을 켜면 알아서 싸워요.' },
+  { icon: '👤', title: '계정과 오프라인', text: '오른쪽 위 <b>👤</b>에서 <b>계정</b>을 여러 개 만들 수 있어요. 계정마다 <b>자기 섬</b>이 따로 있고, 🔒 비밀번호도 걸 수 있어요.<br>다른 기기로는 <b>📤 옮기기 코드</b>로 섬을 옮겨요.<br>한 번 접속하면 <b>인터넷 없이도</b> 켜지고, 홈 화면에 앱처럼 설치할 수 있어요.<br>👤 메뉴에서 <b>🎵 음악 · 🔊 소리</b>를 켜고 끄고, 폰에서는 <b>⛶ 전체화면</b>도 돼요.' },
   { icon: '🎁', title: '매일 들어오면', text: '오른쪽 위 <b>🎁</b>에서 매일 <b>일일 보상</b>을 받아요. 7일째엔 큰 보상!' },
   { icon: '💡', title: '모르겠으면?', text: '화면 아래 <b>노란 말풍선</b>을 누르면 다음에 할 곳으로 데려가 주고, <b>👆 손가락</b>이 누를 곳을 알려 줘요.<br>오른쪽 위 <b>🎓 튜토리얼</b> 버튼으로 언제든 다시 볼 수 있어요.' },
 ];
