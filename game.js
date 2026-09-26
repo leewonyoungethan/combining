@@ -5431,6 +5431,45 @@ document.addEventListener('click', (e) => {
   if (fn) { if (!/^(collect|buy|feed|breed|claim|mis)/.test(t.dataset.act)) sfx('tap'); fn(t.dataset); }
 });
 
+// ----- 🎬 오프닝 영상 -----
+// 소리 있는 영상은 브라우저가 자동 재생을 막는다 → 막히면 "화면을 눌러 시작"을 보여 주고, 누르면 소리와 함께 재생
+function runOpening() {
+  const box = $('#opening'), v = $('#openingVideo');
+  if (!box || !v) return;
+  let done = false;
+  const end = () => {
+    if (done) return;
+    done = true;
+    try { v.pause(); } catch (e) { /* 이미 멈춤 */ }
+    box.classList.add('fade');
+    setTimeout(() => box.remove(), 500);
+  };
+  const safety = (ms) => setTimeout(end, ms);
+  v.addEventListener('ended', end);
+  v.addEventListener('error', end);
+  $('#openingSkip').addEventListener('click', (e) => { e.stopPropagation(); end(); });
+  const tapToStart = () => {
+    $('#openingTap').classList.remove('hidden');
+    box.addEventListener('click', function go() {
+      box.removeEventListener('click', go);
+      $('#openingTap').classList.add('hidden');
+      v.muted = false;
+      v.currentTime = 0;
+      v.play().then(() => safety(8000)).catch(() => { v.muted = true; v.play().catch(end); safety(8000); });
+    });
+  };
+  if (!soundOn()) {
+    v.muted = true;
+    v.play().then(() => safety(8000)).catch(end);
+    return;
+  }
+  v.muted = false;
+  const p = v.play();
+  if (p && p.then) p.then(() => safety(8000)).catch(tapToStart);
+  else safety(8000);
+}
+runOpening();
+
 tick();
 render();
 requestAnimationFrame(drawWorld);
