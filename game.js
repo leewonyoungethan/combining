@@ -565,7 +565,7 @@ const habMons = (i) => S.monsters.filter(m => m.hab === i);
 // 서식지에 들어갈 수 있는 몬스터 수 = 레벨 (최소 2마리, Lv.10이면 10마리). 쌓이는 골드는 무제한
 const habCap = (i) => Math.max(2, S.plots[i].lv);
 const habLvBonus = (i) => (S.plots[i].lv - 1) * HAB_LV_BONUS;
-const habIncome = (i) => habMons(i).reduce((s, m) => s + monIncome(m), 0) * (1 + (habLvBonus(i) + decoPercent(islandOf(i))) / 100);
+const habIncome = (i) => habMons(i).reduce((s, m) => s + monIncome(m), 0) * (1 + (habLvBonus(i) + decoPercent(islandOf(i)) + guildPct()) / 100);
 const habGoldCap = () => Infinity;
 const feedCost = (m) => m.lv * 20;
 const sellPrice = (m) => Math.round(RAR[CAT[m.type].rarity].cost * 0.5 * (1 + m.lv * 0.2));
@@ -3313,6 +3313,7 @@ function renderAdventure() {
       <p class="muted"><b>🌍 랜덤 대전</b>으로 모르는 사람과 바로 싸우거나, 친구와 방 코드로 싸우고 선물·섬 구경도 해요.</p>
       <div class="friend-grid">
         <button class="btn big-rnd" data-act="pvpRandom">🌍 랜덤 대전<small>모르는 사람과 바로 매칭! 이기면 🏆 +${TROPHY_WIN}</small></button>
+        <button class="btn guild-btn" data-act="guildOpen">🛡️ 길드<small>${S.guild ? `${esc(S.guild.emblem)} ${esc(S.guild.name)} · 골드 +${guildPct()}%` : '길드원과 함께 골드 보너스!'}</small></button>
         <button class="btn rank-btn" data-act="ranking">🏆 랭킹<small>${tierOf(S.trophies).icon} ${tierOf(S.trophies).name} · 🏆 ${fmt(S.trophies || 0)}</small></button>
         <button class="btn" data-act="pvp">⚔️ 친구 대전<small>이기면 💰${fmt(PVP_REWARD.gold)} + 💎${PVP_REWARD.gems}</small></button>
         <button class="btn" data-act="giftSend">🎁 선물 보내기<small>몬스터·골드·룬</small></button>
@@ -3962,6 +3963,7 @@ function myRankData() {
     f: top[0] ? CAT[top[0].type].face : '🥚',
     tr: S.trophies || 0, dex: Object.keys(S.dex).length, st: S.stage || 1,
     pw: top.reduce((s, m) => s + monPower(m), 0),
+    ...(S.guild ? { g: S.guild.id, gn: S.guild.name, ge: S.guild.emblem, gl: S.guild.leader ? 1 : 0 } : {}),
   };
 }
 let rankBusy = false;
@@ -3969,7 +3971,7 @@ let rankBusy = false;
 async function rankSubmit(force) {
   // 몬스터가 한 마리도 없는 빈 계정은 올리지 않는다
   if (VISIT || !ACC || rankBusy || !navigator.onLine || !S.monsters.length) return;
-  const d = myRankData(), key = JSON.stringify([d.n, d.f, d.tr, d.dex, d.st, d.pw]);
+  const d = myRankData(), key = JSON.stringify([d.n, d.f, d.tr, d.dex, d.st, d.pw, d.g || '']);
   const last = S.rankLast || {};
   const age = Date.now() - (last.t || 0);
   if (age < 60000) return;
@@ -3995,7 +3997,8 @@ async function rankFetch() {
       if (!d || d.v !== 1 || typeof d.id !== 'string' || RANK_HIDE.has(d.id)) return;
       const num = (x, hi) => Math.max(0, Math.min(hi, Math.floor(Number(x) || 0)));
       const p = { id: d.id.slice(0, 20), n: String(d.n || '플레이어').slice(0, 10), f: String(d.f || '🥚').slice(0, 4),
-        tr: num(d.tr, 99999), dex: num(d.dex, CAT_LIST.length), st: num(d.st, 9999), pw: num(d.pw, 1e8), t: ev.time };
+        tr: num(d.tr, 99999), dex: num(d.dex, CAT_LIST.length), st: num(d.st, 9999), pw: num(d.pw, 1e8), t: ev.time,
+        g: typeof d.g === 'string' ? d.g.slice(0, 12) : '', gn: String(d.gn || '').slice(0, 12), ge: String(d.ge || '🛡️').slice(0, 4), gl: d.gl ? 1 : 0 };
       if (!best[p.id] || best[p.id].t <= p.t) best[p.id] = p;   // 한 사람은 가장 최근 기록만
     } catch (e) { /* 잘못된 줄은 건너뛴다 */ }
   });
@@ -4041,6 +4044,183 @@ async function openRanking(cat) {
   const shown = list.slice(0, 50);
   draw(`<p class="rank-mypos">내 순위: <b>${myPos}위</b> / ${list.length}명</p>${shown.map(row).join('')}${myPos > 50 ? '<div class="rank-gap">⋯</div>' + row(list[myPos - 1], myPos - 1) : ''}`);
 }
+// ===================== 🛡️ 길드 =====================
+// 서버가 없어서: 길드원 각자가 랭킹 기록에 "내 길드"를 같이 올리고, 모두의 기록을 모아서 길드를 만든다.
+// 채팅은 길드마다 ntfy 주제 하나. 모르는 사람과도 대화하니까 정해진 말과 이모지만 보낼 수 있다.
+const GUILD_COST = 5000, GUILD_MAX = 30, GUILD_PCT = 2;
+const GUILD_EMBLEMS = ['🛡️', '⚔️', '🐉', '🦁', '🦅', '🐺', '🔥', '💧', '⚡', '🌿', '🌙', '☀️', '💎', '👑', '🌈', '🍀'];
+const GUILD_LV = [0, 600, 1500, 3000, 5500, 9000, 14000, 21000, 30000, 45000];
+const GUILD_CHAT = ['👋 안녕하세요!', '🤝 같이 해요!', '🙏 고마워요!', '👍 대단해요!', '🆘 도와주세요!', '🎉 축하해요!', '⚔️ 대전 한 판 해요!', '🐣 새 몬스터 얻었어요!', '🌙 잘 자요!', '😄', '😭', '🔥', '❤️', '👑'];
+const GUILD_TOPIC = (id) => 'https://ntfy.sh/monhap-guild-v1-' + id;
+const guildPts = (members) => members.reduce((s, p) => s + p.tr + p.dex * 2 + 100, 0);
+const guildLvOf = (pts) => GUILD_LV.filter(x => pts >= x).length;
+function guildPct() { return S.guild ? Math.min(10, S.guild.lv || 1) * GUILD_PCT : 0; }
+// 랭킹 기록을 길드별로 묶기
+function guildsFrom(list) {
+  const map = {};
+  list.forEach(p => {
+    if (!p.g) return;
+    const g = map[p.g] = map[p.g] || { id: p.g, members: [], name: '', emblem: '🛡️', t: 0 };
+    g.members.push(p);
+    // 이름·문양은 길드장 기록을 우선, 없으면 가장 최근 기록
+    if (p.gl || (!g.leaderSeen && p.t >= g.t)) { g.name = p.gn || g.name; g.emblem = p.ge || g.emblem; g.t = p.t; if (p.gl) g.leaderSeen = true; }
+  });
+  return Object.values(map).map(g => ({ ...g, pts: guildPts(g.members), lv: guildLvOf(guildPts(g.members)) }))
+    .sort((a, b) => b.pts - a.pts);
+}
+let guildTab = 'home', guildCache = null;
+async function guildData(force) {
+  if (force || !guildCache || Date.now() - guildCache.t > 30000) {
+    await rankSubmit(true);
+    const list = await rankFetch();
+    const me = myRankData();
+    const all = list.filter(p => p.id !== me.id).concat([{ ...me, t: Date.now() / 1000, g: me.g || '', gn: me.gn || '', ge: me.ge || '', gl: me.gl || 0 }]);
+    guildCache = { t: Date.now(), guilds: guildsFrom(all) };
+  }
+  // 내 길드 레벨을 저장해 둔다 (골드 보너스용)
+  if (S.guild) {
+    const mine = guildCache.guilds.find(g => g.id === S.guild.id);
+    if (mine && mine.lv !== S.guild.lv) { S.guild.lv = mine.lv; save(); }
+  }
+  return guildCache.guilds;
+}
+async function openGuild(t) {
+  tutFlag('guild', true);
+  if (t) guildTab = t;
+  showModal('<h3>🛡️ 길드</h3><p class="muted rank-loading">⏳ 길드 정보를 불러오는 중…</p>');
+  let guilds;
+  try { guilds = await guildData(); } catch (e) {
+    showModal('<h3>🛡️ 길드</h3><p class="warn">길드 정보를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.</p><div class="row"><button class="btn ghost" data-act="close">닫기</button></div>');
+    return;
+  }
+  if (!S.guild) return guildBrowse(guilds);
+  const g = guilds.find(x => x.id === S.guild.id) || { id: S.guild.id, name: S.guild.name, emblem: S.guild.emblem, members: [], pts: 0, lv: 1 };
+  const me = myRankData();
+  const tabs = [['home', '👥 길드원'], ['chat', '💬 채팅'], ['rank', '🏆 길드 순위']];
+  let body = '';
+  if (guildTab === 'home') {
+    const mem = g.members.slice().sort((a, b) => b.gl - a.gl || b.tr - a.tr);
+    body = `<div class="rank-list">${mem.map(p => `<div class="rank-row ${p.id === me.id ? 'me' : ''}">
+        <span class="rk-pos">${p.gl ? '👑' : '🛡️'}</span><span class="rk-face">${esc(p.f)}</span>
+        <span class="rk-name">${esc(p.n)}${p.id === me.id ? ' <small>(나)</small>' : ''}${p.gl ? ' <small>길드장</small>' : ''}<br>${tierBadge(p.tr)}</span>
+        <span class="rk-val">🏆${fmt(p.tr)}<br><small>📖${fmt(p.dex)}</small></span></div>`).join('')}</div>
+      <p class="muted">최근 12시간 동안 게임을 한 길드원만 보여요</p>`;
+  } else if (guildTab === 'chat') {
+    body = `<div class="gchat" id="gChat"><p class="muted">⏳ 불러오는 중…</p></div>
+      <div class="gchat-send">${GUILD_CHAT.map((m, k) => `<button class="chip" data-act="gSay" data-k="${k}">${m}</button>`).join('')}</div>
+      <p class="muted">모르는 사람과도 이야기하니까 정해진 말과 이모지만 보낼 수 있어요</p>`;
+  } else {
+    body = `<div class="rank-list">${guilds.slice(0, 50).map((x, k) => `<div class="rank-row ${x.id === g.id ? 'me' : ''} ${k < 3 ? 'top' : ''}">
+        <span class="rk-pos">${k === 0 ? '🥇' : k === 1 ? '🥈' : k === 2 ? '🥉' : `<small>${k + 1}</small>`}</span><span class="rk-face">${esc(x.emblem)}</span>
+        <span class="rk-name">${esc(x.name)}<br><small>Lv.${x.lv} · 👥 ${x.members.length}명</small></span>
+        <span class="rk-val">${fmt(x.pts)}<small>점</small></span></div>`).join('')}</div>`;
+  }
+  const next = GUILD_LV[g.lv] ;
+  showModal(`<div class="guild-head"><span class="gh-emb">${esc(g.emblem)}</span>
+      <div><h3>${esc(g.name)} <small class="muted">Lv.${g.lv}</small></h3>
+      <div class="muted">👥 ${g.members.length}/${GUILD_MAX}명 · 길드 점수 ${fmt(g.pts)}${next ? ` (다음 레벨 ${fmt(next)})` : ' (최고 레벨!)'}</div>
+      <div class="guild-bonus">💰 길드 보너스: 서식지 골드 +${guildPct()}%</div></div></div>
+    <div class="chips">${tabs.map(([id, nm]) => `<button class="chip ${guildTab === id ? 'on' : ''}" data-act="guildTab" data-t="${id}">${nm}</button>`).join('')}</div>
+    ${body}
+    <div class="row"><button class="btn ghost small" data-act="guildRefresh">🔄 새로고침</button><button class="btn ghost small danger" data-act="guildLeave">🚪 길드 나가기</button><button class="btn ghost small" data-act="close">닫기</button></div>`);
+  if (guildTab === 'chat') guildChatLoad();
+}
+function guildBrowse(guilds) {
+  showModal(`<h3>🛡️ 길드</h3>
+    <p class="muted">길드에 들어가면 길드원들과 함께 <b>길드 레벨</b>을 올려요. 레벨마다 <b>서식지 골드 +${GUILD_PCT}%</b>! 길드 채팅도 할 수 있어요.</p>
+    <div class="row"><button class="btn big green" data-act="guildNew">✨ 길드 만들기 (💰 ${fmt(GUILD_COST)})</button></div>
+    <h3 class="sub">🔎 길드 찾기 <small class="muted">최근 12시간 동안 활동한 길드</small></h3>
+    <div class="rank-list">${guilds.length ? guilds.slice(0, 50).map(g => `<div class="rank-row">
+        <span class="rk-face">${esc(g.emblem)}</span>
+        <span class="rk-name" style="grid-column: span 2">${esc(g.name)}<br><small>Lv.${g.lv} · 👥 ${g.members.length}/${GUILD_MAX}명 · ${fmt(g.pts)}점</small></span>
+        <button class="btn small green" data-act="guildJoin" data-id="${g.id}" ${g.members.length >= GUILD_MAX ? 'disabled' : ''}>${g.members.length >= GUILD_MAX ? '가득' : '가입'}</button></div>`).join('')
+      : '<p class="muted">아직 활동 중인 길드가 없어요. 첫 길드를 만들어 봐요!</p>'}</div>
+    <div class="row"><button class="btn ghost small" data-act="guildRefresh">🔄 새로고침</button><button class="btn ghost small" data-act="close">닫기</button></div>`);
+}
+let guildEmblem = '🛡️';
+function guildNew() {
+  showModal(`<h3>✨ 길드 만들기</h3>
+    <input id="guildName" maxlength="12" placeholder="길드 이름 (12자까지)">
+    <p class="muted">문양 고르기</p>
+    <div class="emblem-pick">${GUILD_EMBLEMS.map(e => `<button class="chip ${e === guildEmblem ? 'on' : ''}" data-act="guildEmb" data-e="${e}">${e}</button>`).join('')}</div>
+    <div class="row"><button class="btn big green" data-act="guildCreate">만들기 (💰 ${fmt(GUILD_COST)})</button><button class="btn ghost" data-act="guildOpen">← 뒤로</button></div>`);
+}
+async function guildCreate() {
+  const name = ($('#guildName') ? $('#guildName').value : '').trim().slice(0, 12);
+  if (!name) { toast('길드 이름을 적어 주세요'); return; }
+  if (!S.monsters.length) { toast('몬스터가 한 마리는 있어야 길드를 만들 수 있어요'); return; }
+  if (!spend(GUILD_COST)) return;
+  const id = Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
+  S.guild = { id, name, emblem: guildEmblem, leader: true, lv: 1, joined: Date.now() };
+  save(); updateHud(); sfx('yay');
+  toast(`🛡️ ${name} 길드를 만들었어요!`);
+  S.rankLast = null;
+  guildSay(`🎉 ${S.nick || ACC.name}님이 길드를 만들었어요!`, true);
+  guildCache = null; guildTab = 'home';
+  openGuild();
+}
+async function guildJoin(id) {
+  if (!S.monsters.length) { toast('몬스터가 한 마리는 있어야 길드에 들어갈 수 있어요'); return; }
+  const g = (guildCache && guildCache.guilds || []).find(x => x.id === id);
+  if (!g) return;
+  if (g.members.length >= GUILD_MAX) { toast('길드가 가득 찼어요'); return; }
+  S.guild = { id: g.id, name: g.name, emblem: g.emblem, leader: false, lv: g.lv, joined: Date.now() };
+  save(); sfx('yay');
+  toast(`🛡️ ${g.name} 길드에 들어갔어요!`);
+  S.rankLast = null;
+  guildSay(`👋 ${S.nick || ACC.name}님이 길드에 들어왔어요!`, true);
+  guildCache = null; guildTab = 'home';
+  openGuild();
+}
+function guildLeave() {
+  if (!S.guild || !confirm(`${S.guild.name} 길드에서 나갈까요?${S.guild.leader ? ' (길드장이 나가도 길드원이 남아 있으면 길드는 계속돼요)' : ''}`)) return;
+  guildSay(`🚪 ${S.nick || ACC.name}님이 길드를 떠났어요`, true);
+  S.guild = null;
+  S.rankLast = null;
+  save(); guildCache = null;
+  toast('길드에서 나왔어요');
+  setTimeout(() => { rankSubmit(true); openGuild(); }, 300);
+}
+// ----- 길드 채팅 -----
+async function guildSay(text, system) {
+  if (!S.guild) return;
+  const d = { v: 1, id: S.rankId, n: String(S.nick || (ACC && ACC.name) || '플레이어').slice(0, 10), f: myRankData().f, m: text, sys: system ? 1 : 0 };
+  try { await fetch(GUILD_TOPIC(S.guild.id), { method: 'POST', body: JSON.stringify(d) }); } catch (e) { toast('메시지를 보내지 못했어요'); }
+}
+let gSayAt = 0;
+async function gSay(k) {
+  const m = GUILD_CHAT[Number(k)];
+  if (!m) return;
+  if (Date.now() - gSayAt < 3000) { toast('조금 천천히 보내 주세요 😊'); return; }
+  gSayAt = Date.now();
+  await guildSay(m);
+  guildChatLoad();
+}
+let gChatTimer = null;
+async function guildChatLoad() {
+  clearTimeout(gChatTimer);
+  const box = $('#gChat');
+  if (!box || !S.guild) return;
+  try {
+    const txt = await (await fetch(GUILD_TOPIC(S.guild.id) + '/json?poll=1&since=12h')).text();
+    const msgs = txt.split('\n').filter(Boolean).map(l => { try { const e = JSON.parse(l); const d = JSON.parse(e.message); return { ...d, t: e.time }; } catch (e) { return null; } })
+      .filter(d => d && d.v === 1 && typeof d.m === 'string')
+      // 정해진 말과 시스템 알림만 보여 준다 (다른 글은 무시)
+      .filter(d => GUILD_CHAT.includes(d.m) || (d.sys && /^(🎉|👋|🚪) .{1,20}님이 (길드를 만들었어요!|길드에 들어왔어요!|길드를 떠났어요)$/.test(d.m)))
+      .slice(-60);
+    const b = $('#gChat');
+    if (!b) return;
+    const me = S.rankId;
+    b.innerHTML = msgs.length ? msgs.map(d => d.sys
+      ? `<div class="gc-sys">${esc(d.m)}</div>`
+      : `<div class="gc-msg ${d.id === me ? 'mine' : ''}"><span class="gc-face">${esc(String(d.f || '🥚').slice(0, 4))}</span><div><b>${esc(String(d.n || '').slice(0, 10))}</b><span>${esc(d.m)}</span></div><small>${new Date(d.t * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</small></div>`).join('')
+      : '<p class="muted">아직 메시지가 없어요. 첫 인사를 해 봐요! 👋</p>';
+    b.scrollTop = b.scrollHeight;
+  } catch (e) { box.innerHTML = '<p class="warn">채팅을 불러오지 못했어요</p>'; }
+  // 채팅 창이 열려 있는 동안 8초마다 새 메시지 확인
+  gChatTimer = setTimeout(() => { if ($('#gChat')) guildChatLoad(); }, 8000);
+}
+
 // 켜 있는 동안 가끔 점수 올리기
 setInterval(() => rankSubmit(false), 120000);
 let NET = null;   // { peer, conn, role, code, oppName, oppTeam, started }
@@ -4854,6 +5034,7 @@ function openAccountMenu() {
   showModal(`<h3>👤 ${esc(ACC.name)}</h3>
     <p class="muted">${accSummary(ACC)}</p>
     <div class="build-list">
+      <button class="build-opt" data-act="guildOpen" style="--hc:#7dff8f"><span class="bo-ico">🛡️</span><span class="bo-nm">길드<br><small>${S.guild ? `${esc(S.guild.emblem)} ${esc(S.guild.name)}` : '길드에 들어가거나 만들기'}</small></span></button>
       <button class="build-opt" data-act="ranking" style="--hc:#ffd24a"><span class="bo-ico">🏆</span><span class="bo-nm">전 세계 랭킹<br><small>${tierOf(S.trophies).icon} ${tierOf(S.trophies).name} · 🏆 ${fmt(S.trophies || 0)}</small></span></button>
       <button class="build-opt" data-act="accSwitch" style="--hc:#6f8cff"><span class="bo-ico">🔄</span><span class="bo-nm">계정 바꾸기 / 새 계정</span></button>
       <button class="build-opt" data-act="accExport" style="--hc:#3fd6a4"><span class="bo-ico">📤</span><span class="bo-nm">이 계정 옮기기 코드<br><small>다른 기기에서 📥 가져오기에 붙여 넣으면 내 섬이 그대로 가요</small></span></button>
@@ -5066,6 +5247,7 @@ const ACH = [
   ...[5, 10, 25, 50, 100, 200, 400, 700, 1000, 1500, 2000].map((n, k) => ({ id: 'dex' + n, text: `📖 도감 ${fmt(n)}마리 모으기`, now: () => Object.keys(S.dex).length, need: n, gems: [5, 10, 15, 25, 40, 60, 80, 100, 150, 200, 500][k] })),
   ...[3, 5, 10, 15, 20, 30, 40, 50].map((n, k) => ({ id: 'stage' + n, text: `⚔️ 모험 스테이지 ${n} 도착`, now: () => S.stage, need: n, gems: [5, 10, 20, 30, 40, 60, 80, 100][k] })),
   ...['rare', 'epic', 'legendary', 'mythic', 'divine', 'holy', 'absolute', 'origin'].map((r, k) => ({ id: 'rank' + r, text: `✨ ${RAR[r].name} 등급 몬스터 얻기`, now: () => (S.monsters.some(m => RANK[CAT[m.type].rarity] >= RANK[r]) ? 1 : 0), need: 1, gems: [5, 10, 30, 60, 100, 150, 200, 300][k] })),
+  { id: 'guild1', text: '🛡️ 길드에 들어가거나 만들기', now: () => (S.guild ? 1 : 0), need: 1, gems: 20 },
   ...[200, 500, 900, 1400].map((n, k) => ({ id: 'troph' + n, text: `🏆 트로피 ${fmt(n)} 모으기`, now: () => S.trophies || 0, need: n, gems: [10, 20, 40, 60][k] })),
   ...[3, 6, 10, 20].map((n, k) => ({ id: 'habs' + n, text: `🏠 서식지 ${n}개 짓기`, now: () => S.plots.filter(p => p && p.kind === 'hab').length, need: n, gems: [5, 10, 20, 30][k] })),
 ];
@@ -5466,6 +5648,8 @@ const TUT = [
 // 한 번 해 본 기능 기록 (튜토리얼 단계 확인용)
 TUT.push(
   { text: '📋 위쪽 📋 버튼에서 오늘의 미션을 보고 💎 보석을 받아요', done: () => tutFlag('missions'), go: () => { closeModal(); openMissions(); } },
+  { text: '🛡️ 모험 탭의 🛡️ 길드에 들어가거나 만들어 봐요 (골드 보너스!)', done: () => tutFlag('guild') || !!S.guild,
+    go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
   { text: '🏆 모험 탭의 🏆 랭킹에서 전 세계 순위를 봐요 (랜덤 대전에서 이기면 트로피!)', done: () => tutFlag('ranking'),
     go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
 );
@@ -5540,7 +5724,11 @@ function tutPoint(k) {
     case 15: // 미션
       if (inModal) return ['#modalBox [data-act=misClaim]:not([disabled])', '#modalBox [data-act=achClaim]:not([disabled])', '#modalBox [data-act=close]'];
       return ['.hud [data-act=missions]'];
-    case 16: // 랭킹
+    case 16: // 길드
+      if (inModal) return ['#modalBox [data-act=guildJoin]:not([disabled])', '#modalBox [data-act=guildNew]', '#modalBox [data-act=close]'];
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return ['.pvp-box [data-act=guildOpen]'];
+    case 17: // 랭킹
       if (inModal) return ['#modalBox [data-act=rankCat]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=ranking]'];
@@ -5678,6 +5866,7 @@ const WELCOME = [
   { icon: '⚔️', title: '모험과 보스', text: '몬스터 3마리로 팀을 짜서 싸워요. 📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!<br>👹 보스전에서는 에너지가 엄청 많은 보스와 싸워요.' },
   { icon: '👥', title: '대전과 친구', text: '모험 탭 <b>👥 대전 · 친구</b> 칸에서<br>🌍 <b>랜덤 대전</b>으로 모르는 사람과 바로 싸우고, ⚔️ 방 코드로 <b>친구 대전</b>, 🎁 <b>선물</b>, 👀 <b>친구 섬 구경</b>도 해요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요.' },
   { icon: '🏆', title: '랭킹과 트로피', text: '🌍 랜덤 대전에서 이기면 <b>🏆 +30</b>, 지면 −15.<br>🥉브론즈 → 🥈실버 → 🥇골드 → 💠플래티넘 → 💎다이아 → 👑마스터 → 🏆챔피언!<br>모험 탭 <b>🏆 랭킹</b>에서 트로피·도감·모험·전투력 <b>전 세계 순위</b>를 봐요.' },
+  { icon: '🛡️', title: '길드', text: '모험 탭 <b>🛡️ 길드</b>에서 길드에 들어가거나 직접 만들어요 (💰5,000).<br>길드원이 트로피·도감을 모을수록 <b>길드 레벨</b>이 올라가고, 레벨마다 <b>서식지 골드 +2%</b>!<br>💬 길드 채팅은 정해진 말과 이모지로 안전하게 해요.' },
   { icon: '📋', title: '미션과 도전 과제', text: '위쪽 <b>📋</b>에서 매일 <b>미션 3개</b>를 깨면 💎 보석! 셋 다 깨면 보너스 💎30.<br>🏆 <b>도전 과제</b>(도감·스테이지·등급·트로피)도 한 번씩 큰 보상을 줘요.<br>전투에서 <b>🤖 자동</b>을 켜면 알아서 싸워요.' },
   { icon: '👤', title: '계정과 오프라인', text: '오른쪽 위 <b>👤</b>에서 <b>계정</b>을 여러 개 만들 수 있어요. 계정마다 <b>자기 섬</b>이 따로 있고, 🔒 비밀번호도 걸 수 있어요.<br>다른 기기로는 <b>📤 옮기기 코드</b>로 섬을 옮겨요.<br>한 번 접속하면 <b>인터넷 없이도</b> 켜지고, 홈 화면에 앱처럼 설치할 수 있어요.<br>👤 메뉴에서 <b>🎵 음악 · 🔊 소리</b>를 켜고 끄고, 폰에서는 <b>⛶ 전체화면</b>도 돼요.' },
   { icon: '🎁', title: '매일 들어오면', text: '오른쪽 위 <b>🎁</b>에서 매일 <b>일일 보상</b>을 받아요. 7일째엔 큰 보상!' },
@@ -5839,6 +6028,15 @@ const ACTIONS = {
   copyCode: () => { const ta = $('#modalBox .code-box'); if (!ta) return; ta.select(); try { navigator.clipboard.writeText(ta.value).then(() => toast('📋 코드를 복사했어요! 친구에게 붙여 넣어 보내 주세요'), () => { document.execCommand('copy'); toast('📋 복사했어요'); }); } catch (e) { document.execCommand('copy'); toast('📋 복사했어요'); } },
   pvp: () => openPvp(),
   ranking: () => openRanking(),
+  guildOpen: () => openGuild(),
+  guildTab: (d) => openGuild(d.t),
+  guildRefresh: () => { guildCache = null; openGuild(); },
+  guildNew: () => guildNew(),
+  guildEmb: (d) => { guildEmblem = d.e; const nm = $('#guildName') ? $('#guildName').value : ''; guildNew(); $('#guildName').value = nm; },
+  guildCreate: () => guildCreate(),
+  guildJoin: (d) => guildJoin(d.id),
+  guildLeave: () => guildLeave(),
+  gSay: (d) => gSay(d.k),
   rankCat: (d) => openRanking(d.c),
   rankRefresh: () => { rankCache = null; openRanking(); },
   rankName: () => {

@@ -931,3 +931,24 @@ body.visiting .zoom-btns { top: 160px; }
 .rank-mypos { text-align: center; margin: 4px 0; }
 .rank-gap { text-align: center; color: var(--muted); }
 .rank-loading { text-align: center; padding: 20px 0; }
+
+/* 🛡️ 길드 */
+.friend-grid .guild-btn { background: linear-gradient(135deg, #3fd6a4, #1f8a6a); color: #fff; }
+.guild-head { display: flex; gap: 12px; align-items: center; text-align: left; margin-bottom: 6px; }
+.guild-head h3 { margin: 0; }
+.gh-emb { font-size: 44px; width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; border-radius: 18px; background: radial-gradient(circle, rgba(125, 255, 143, .35), rgba(0, 0, 0, .2)); flex: none; }
+.guild-bonus { color: #ffe066; font-weight: 800; font-size: 13px; margin-top: 2px; }
+.emblem-pick { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 8px; }
+.emblem-pick .chip { font-size: 22px; padding: 4px 8px; }
+.gchat { height: 40vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; background: rgba(0, 0, 0, .25); border-radius: 12px; padding: 8px; margin: 8px 0; text-align: left; }
+.gc-msg { display: flex; gap: 8px; align-items: flex-end; }
+.gc-msg.mine { flex-direction: row-reverse; }
+.gc-msg > div { background: rgba(255, 255, 255, .09); border-radius: 12px; padding: 5px 10px; max-width: 70%; }
+.gc-msg.mine > div { background: rgba(125, 255, 143, .18); }
+.gc-msg b { display: block; font-size: 11px; color: var(--muted); }
+.gc-msg small { font-size: 10px; color: var(--muted); }
+.gc-face { font-size: 22px; }
+.gc-sys { text-align: center; font-size: 12px; color: #ffe066; }
+.gchat-send { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+.gchat-send .chip { font-size: 13px; }
+@media (max-width: 560px) { .gchat { height: 28vh; } .gh-emb { width: 52px; height: 52px; font-size: 34px; } }
