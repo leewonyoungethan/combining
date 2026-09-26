@@ -625,7 +625,7 @@ const SFX = {
 function sfx(kind) {
   if (!soundOn() || !SFX[kind]) return;
   try {
-    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (!audioCtx()) return;
     if (AC.state === 'suspended') AC.resume();
     const t0 = AC.currentTime + 0.01;
     SFX[kind].forEach(([f, d, type, vol, at = 0]) => {
@@ -679,6 +679,152 @@ document.addEventListener('pointerup', function autoFull() {
   document.removeEventListener('pointerup', autoFull, true);
   if (isPhone() && canFull() && !isFull() && !isStandalone() && lsGet('combining-full') === 'on') enterFull().catch(() => {});
 }, true);
+
+// ----- 🎵 배경음악: 파일 없이 직접 연주한다 (섬 / 전투 두 곡) -----
+const musicOn = () => lsGet('combining-music') !== 'off';
+const CH = { C: [48, 60, 64, 67], G: [43, 59, 62, 67], Am: [45, 60, 64, 69], F: [41, 60, 65, 69], Em: [40, 59, 64, 67], E: [40, 56, 59, 64] };
+// 멜로디는 [음 높이(MIDI), 8분음표 몇 개]  (0 = 쉼표)
+const SONGS = {
+  island: {
+    bpm: 100, drums: 'soft', vol: 1,
+    chords: ['C', 'G', 'Am', 'F', 'C', 'G', 'F', 'G'],
+    melody: [
+      [76, 2], [79, 2], [81, 1], [79, 1], [76, 2],
+      [74, 2], [79, 2], [83, 2], [81, 2],
+      [84, 3], [83, 1], [81, 2], [76, 2],
+      [77, 2], [81, 2], [79, 4],
+      [76, 1], [79, 1], [84, 2], [83, 1], [81, 1], [79, 2],
+      [74, 2], [71, 2], [74, 2], [79, 2],
+      [81, 2], [79, 1], [77, 1], [76, 2], [74, 2],
+      [74, 2], [76, 2], [72, 4],
+    ],
+  },
+  battle: {
+    bpm: 140, drums: 'hard', vol: 0.9,
+    chords: ['Am', 'F', 'C', 'G', 'Am', 'F', 'G', 'E'],
+    melody: [
+      [69, 1], [72, 1], [76, 1], [81, 1], [79, 2], [76, 2],
+      [77, 1], [76, 1], [74, 1], [72, 1], [69, 2], [72, 2],
+      [76, 1], [79, 1], [84, 2], [83, 1], [79, 1], [76, 2],
+      [74, 2], [79, 2], [83, 2], [86, 2],
+      [81, 2], [79, 1], [76, 1], [81, 2], [84, 2],
+      [81, 1], [79, 1], [77, 2], [76, 2], [72, 2],
+      [74, 1], [76, 1], [79, 1], [83, 1], [86, 2], [83, 2],
+      [80, 2], [83, 2], [88, 4],
+    ],
+  },
+};
+const MUS = { cur: null, gain: null, timer: null, next: 0, step: 0, started: false, noise: null };
+const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+function audioCtx() {
+  try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
+  return AC;
+}
+function mTone(dest, t, midi, dur, type, vol, attack = 0.01) {
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.value = hz(midi);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(vol, t + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(dest);
+  o.start(t); o.stop(t + dur + 0.05);
+}
+function mNoise(dest, t, dur, vol, freq) {
+  if (!MUS.noise) {
+    MUS.noise = AC.createBuffer(1, AC.sampleRate * 0.5, AC.sampleRate);
+    const d = MUS.noise.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  s.buffer = MUS.noise; f.type = 'highpass'; f.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f); f.connect(g); g.connect(dest);
+  s.start(t); s.stop(t + dur + 0.02);
+}
+function mKick(dest, t, vol) {
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.12);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+  o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.2);
+}
+// 곡을 8분음표 단위 사건 목록으로 풀어 둔다
+function songEvents(song) {
+  if (song.ev) return song.ev;
+  const ev = [];
+  let pos = 0;
+  song.melody.forEach(([m, len]) => { if (m) ev.push({ at: pos, k: 'mel', m, len }); pos += len; });
+  song.chords.forEach((c, bar) => {
+    const ch = CH[c], b0 = bar * 8;
+    for (let s = 0; s < 8; s++) {
+      ev.push({ at: b0 + s, k: 'arp', m: ch[1 + [0, 1, 2, 1][s % 4]] + (s >= 4 ? 12 : 0) });
+      if (song.drums === 'hard' ? true : s % 4 === 0) ev.push({ at: b0 + s, k: 'bass', m: ch[0] + (song.drums === 'hard' && s % 2 ? 12 : 0), len: song.drums === 'hard' ? 1 : 3 });
+      if (s % 4 === 0 || (song.drums === 'hard' && s % 2 === 0)) ev.push({ at: b0 + s, k: 'kick' });
+      if (song.drums === 'hard' && s % 4 === 2) ev.push({ at: b0 + s, k: 'snare' });
+      if (s % 2 === 1 || song.drums === 'hard') ev.push({ at: b0 + s, k: 'hat' });
+    }
+  });
+  song.len = song.chords.length * 8;
+  song.ev = ev;
+  return ev;
+}
+function musicTick() {
+  if (!AC || !MUS.cur || AC.state !== 'running') return;
+  const song = SONGS[MUS.cur], ev = songEvents(song), e8 = 60 / song.bpm / 2;
+  // 멈춰 있다가 다시 켜지면 밀린 음을 한꺼번에 치지 않게
+  if (MUS.next < AC.currentTime - 0.05) MUS.next = AC.currentTime + 0.05;
+  while (MUS.next < AC.currentTime + 0.35) {
+    const at = MUS.step % song.len, t = MUS.next, dest = MUS.gain, v = song.vol;
+    ev.forEach(x => {
+      if (x.at !== at) return;
+      if (x.k === 'mel') mTone(dest, t, x.m, x.len * e8 * 0.95, 'triangle', 0.09 * v, 0.02);
+      else if (x.k === 'arp') mTone(dest, t, x.m, e8 * 0.9, 'sine', 0.035 * v);
+      else if (x.k === 'bass') mTone(dest, t, x.m, x.len * e8 * 0.9, 'triangle', 0.1 * v, 0.01);
+      else if (x.k === 'kick') mKick(dest, t, (song.drums === 'hard' ? 0.22 : 0.14) * v);
+      else if (x.k === 'snare') mNoise(dest, t, 0.14, 0.09 * v, 1500);
+      else if (x.k === 'hat') mNoise(dest, t, 0.04, 0.025 * v, 7000);
+    });
+    MUS.step++;
+    MUS.next += e8;
+  }
+}
+// 곡 바꾸기 (전 곡은 살짝 줄이면서 끄고 새 곡을 키운다)
+function setMusic(name) {
+  if (!MUS.started) return;
+  if (!musicOn()) name = null;
+  if (name === MUS.cur) return;
+  if (!audioCtx()) return;
+  const old = MUS.gain;
+  if (old) { old.gain.setTargetAtTime(0.0001, AC.currentTime, 0.15); setTimeout(() => { try { old.disconnect(); } catch (e) { /* 이미 끊김 */ } }, 1200); }
+  MUS.cur = name;
+  MUS.gain = null;
+  if (!name) return;
+  MUS.gain = AC.createGain();
+  MUS.gain.gain.setValueAtTime(0.0001, AC.currentTime);
+  MUS.gain.gain.linearRampToValueAtTime(0.55, AC.currentTime + 1.2);
+  MUS.gain.connect(AC.destination);
+  MUS.step = 0;
+  MUS.next = AC.currentTime + 0.1;
+  if (!MUS.timer) MUS.timer = setInterval(musicTick, 60);
+}
+function startMusic() {
+  MUS.started = true;
+  setMusic('island');
+}
+// 전투 중이면 전투 곡, 아니면 섬 곡
+setInterval(() => { if (MUS.started) setMusic(B && !B.over ? 'battle' : 'island'); }, 400);
+// 소리가 막혀 있으면 화면을 처음 누를 때 켠다
+['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, () => { if (AC && AC.state === 'suspended' && !document.hidden) AC.resume(); }, true));
+document.addEventListener('visibilitychange', () => {
+  if (!AC) return;
+  if (document.hidden) AC.suspend();
+  else { AC.resume(); MUS.next = Math.max(MUS.next, AC.currentTime + 0.1); }
+});
+function toggleMusic() {
+  lsSet('combining-music', musicOn() ? 'off' : 'on');
+  if (musicOn()) { MUS.started = true; audioCtx(); if (AC && AC.state === 'suspended') AC.resume(); setMusic(B && !B.over ? 'battle' : 'island'); } else setMusic(null);
+  toast(musicOn() ? '🎵 배경음악을 켰어요' : '🎵 배경음악을 껐어요');
+  openAccountMenu();
+}
 
 function toggleSound() {
   lsSet('combining-sound', soundOn() ? 'off' : 'on');
@@ -4402,6 +4548,7 @@ function openAccountMenu() {
       <button class="build-opt" data-act="accRename" style="--hc:#ffb020"><span class="bo-ico">✏️</span><span class="bo-nm">이름 바꾸기</span></button>
       <button class="build-opt" data-act="accPinSet" style="--hc:#ff5ce1"><span class="bo-ico">🔒</span><span class="bo-nm">비밀번호 ${ACC.pin ? '바꾸기 / 없애기' : '만들기'}</span></button>
       ${isPhone() && !isStandalone() ? `<button class="build-opt" data-act="fullscreen" style="--hc:#ffb020"><span class="bo-ico">⛶</span><span class="bo-nm">전체화면 ${isFull() ? '끄기' : '켜기'}<br><small>주소창·상태바 없이 게임만 꽉 차게</small></span></button>` : ''}
+      <button class="build-opt" data-act="music" style="--hc:#b388ff"><span class="bo-ico">${musicOn() ? '🎵' : '🔈'}</span><span class="bo-nm">배경음악 ${musicOn() ? '켜짐 (누르면 끄기)' : '꺼짐 (누르면 켜기)'}</span></button>
       <button class="build-opt" data-act="sound" style="--hc:#7dff8f"><span class="bo-ico">${soundOn() ? '🔊' : '🔇'}</span><span class="bo-nm">소리 ${soundOn() ? '켜짐 (누르면 끄기)' : '꺼짐 (누르면 켜기)'}</span></button>
       <button class="build-opt" data-act="code" style="--hc:#a8b2c1"><span class="bo-ico">🔑</span><span class="bo-nm">비밀코드 입력</span></button>
       <button class="build-opt" data-act="hardRefresh" style="--hc:#5cc8ff"><span class="bo-ico">🔄</span><span class="bo-nm">최신 버전으로 새로고침<br><small>앱이 옛날 모습이면 눌러 보세요 (섬은 그대로예요)</small></span></button>
@@ -5398,6 +5545,7 @@ const ACTIONS = {
   misBonus: () => misBonus(),
   achClaim: (d) => achClaim(d.id),
   sound: () => toggleSound(),
+  music: () => toggleMusic(),
   fullscreen: () => toggleFullscreen(),
   wbCollect: () => { collectAll(); closeModal(); if (dailyReady() && tutStep() >= 8) setTimeout(openDaily, 300); },
   wbClose: () => { closeModal(); if (dailyReady() && tutStep() >= 8) setTimeout(openDaily, 300); },
@@ -5487,7 +5635,7 @@ async function startLoading() {
   if (loadingStarted) return;
   loadingStarted = true;
   const box = $('#loader');
-  if (!box) { setTimeout(afterEnter, 200); return; }
+  if (!box) { setTimeout(afterEnter, 200); startMusic(); return; }
   $('#ldTip').textContent = pick(LOAD_TIPS);
   let shown = 0, target = 0;
   const bar = setInterval(() => {
@@ -5524,6 +5672,7 @@ async function startLoading() {
   box.classList.add('fade');
   setTimeout(() => box.remove(), 600);
   setTimeout(afterEnter, 350);
+  startMusic();
 }
 
 runOpening();
