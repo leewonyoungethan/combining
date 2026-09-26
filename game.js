@@ -4111,7 +4111,7 @@ function openLogin() {
   const list = accounts();
   const el = $('#login');
   el.innerHTML = `<div class="login-box">
-    <div class="login-logo">🧬 몬스터 합치기</div>
+    <div class="login-logo"><img src="icon.svg" alt=""><br>몬스터 합치기</div>
     <p class="muted">어느 계정으로 들어갈까요?</p>
     <div class="acc-list">${list.map(a => `
       <div class="acc-row">

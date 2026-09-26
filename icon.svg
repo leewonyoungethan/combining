@@ -1,21 +1,67 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <radialGradient id="sea" cx="50%" cy="40%" r="70%">
-      <stop offset="0" stop-color="#2b8fe0"/>
-      <stop offset="1" stop-color="#0b4f8a"/>
+    <radialGradient id="bg" cx="50%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#7b5cff"/>
+      <stop offset="0.55" stop-color="#3b2a8f"/>
+      <stop offset="1" stop-color="#150f3d"/>
     </radialGradient>
-    <radialGradient id="grass" cx="50%" cy="40%" r="60%">
-      <stop offset="0" stop-color="#6fd35e"/>
-      <stop offset="1" stop-color="#3b9a3c"/>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ffe066" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#ffe066" stop-opacity="0"/>
     </radialGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7dff8f"/>
+      <stop offset="1" stop-color="#1f9e45"/>
+    </linearGradient>
+    <linearGradient id="shell" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffaf0"/>
+      <stop offset="1" stop-color="#e8c98a"/>
+    </linearGradient>
+    <linearGradient id="horn" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe066"/>
+      <stop offset="1" stop-color="#ff9a3d"/>
+    </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#sea)"/>
-  <ellipse cx="256" cy="300" rx="200" ry="120" fill="#ecd592"/>
-  <ellipse cx="256" cy="292" rx="182" ry="104" fill="url(#grass)"/>
-  <path d="M176 280 L256 150 L336 280 Z" fill="#8d82d8"/>
-  <path d="M226 198 L256 150 L286 198 L268 190 L256 206 L244 190 Z" fill="#ffffff"/>
-  <ellipse cx="330" cy="300" rx="42" ry="52" fill="#fff6e0" stroke="#e8c98a" stroke-width="6"/>
-  <circle cx="318" cy="288" r="8" fill="#ffb020"/>
-  <circle cx="342" cy="314" r="6" fill="#ff5ce1"/>
-  <text x="256" y="455" font-size="64" text-anchor="middle" font-family="sans-serif" font-weight="900" fill="#ffe066">🧬</text>
+
+  <!-- 배경 -->
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <circle cx="256" cy="250" r="210" fill="url(#glow)"/>
+  <!-- 반짝이 -->
+  <g fill="#fff">
+    <path d="M92 118 l8 22 22 8 -22 8 -8 22 -8 -22 -22 -8 22 -8z" opacity=".9"/>
+    <path d="M412 96 l6 16 16 6 -16 6 -6 16 -6 -16 -16 -6 16 -6z" opacity=".8"/>
+    <path d="M430 330 l5 13 13 5 -13 5 -5 13 -5 -13 -13 -5 13 -5z" opacity=".7"/>
+    <circle cx="140" cy="360" r="5" opacity=".6"/>
+    <circle cx="380" cy="190" r="4" opacity=".7"/>
+  </g>
+
+  <!-- 몬스터 뿔 -->
+  <path d="M190 150 Q170 90 205 70 Q205 120 228 142 Z" fill="url(#horn)" stroke="#b35a10" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M322 150 Q342 90 307 70 Q307 120 284 142 Z" fill="url(#horn)" stroke="#b35a10" stroke-width="6" stroke-linejoin="round"/>
+  <!-- 몬스터 몸 -->
+  <ellipse cx="256" cy="250" rx="130" ry="118" fill="url(#body)" stroke="#0f5a26" stroke-width="8"/>
+  <ellipse cx="220" cy="180" rx="46" ry="22" fill="#fff" opacity=".35" transform="rotate(-20 220 180)"/>
+  <!-- 눈 -->
+  <ellipse cx="212" cy="238" rx="30" ry="36" fill="#fff" stroke="#0f5a26" stroke-width="6"/>
+  <ellipse cx="300" cy="238" rx="30" ry="36" fill="#fff" stroke="#0f5a26" stroke-width="6"/>
+  <circle cx="220" cy="246" r="16" fill="#1a1a3d"/>
+  <circle cx="292" cy="246" r="16" fill="#1a1a3d"/>
+  <circle cx="226" cy="238" r="6" fill="#fff"/>
+  <circle cx="298" cy="238" r="6" fill="#fff"/>
+  <!-- 볼 -->
+  <ellipse cx="176" cy="284" rx="18" ry="11" fill="#ff7aa8" opacity=".7"/>
+  <ellipse cx="336" cy="284" rx="18" ry="11" fill="#ff7aa8" opacity=".7"/>
+  <!-- 입 -->
+  <path d="M226 292 Q256 322 286 292" fill="#8a1c3a" stroke="#0f5a26" stroke-width="6" stroke-linecap="round"/>
+  <path d="M240 296 l6 12 6 -10 z" fill="#fff"/>
+  <path d="M272 296 l-6 12 -6 -10 z" fill="#fff"/>
+
+  <!-- 알 껍데기 (아래) -->
+  <path d="M112 318 L148 290 L182 322 L218 288 L256 324 L294 288 L330 322 L364 290 L400 318
+           Q404 440 256 452 Q108 440 112 318 Z"
+        fill="url(#shell)" stroke="#b58a3c" stroke-width="8" stroke-linejoin="round"/>
+  <circle cx="186" cy="386" r="14" fill="#7b5cff" opacity=".85"/>
+  <circle cx="262" cy="408" r="11" fill="#ff5ce1" opacity=".85"/>
+  <circle cx="332" cy="372" r="13" fill="#3da5ff" opacity=".85"/>
+  <circle cx="222" cy="360" r="7" fill="#ffb020" opacity=".9"/>
 </svg>

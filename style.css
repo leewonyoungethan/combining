@@ -772,3 +772,27 @@ body.visiting .zoom-btns { top: 160px; }
   .g-text { font-size: 14px; }
   .bottom-bar { padding: 5px; bottom: 6px; }
 }
+
+/* ✨ 아래쪽 게임 버튼: 버튼마다 색 + 반짝이는 광택 + 누르면 톡 */
+.round { overflow: hidden; transition: transform .12s, box-shadow .12s; }
+.round::after {
+  content: ""; position: absolute; left: 12%; right: 12%; top: 6%; height: 38%;
+  border-radius: 50% 50% 45% 45%; background: linear-gradient(180deg, rgba(255, 255, 255, .55), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+.round > * , .round { text-shadow: 0 2px 3px rgba(0, 0, 0, .35); }
+.round[data-tab="island"]    { background: linear-gradient(180deg, #5fd36b, #1f8a3b); border-color: #a8f5b4; box-shadow: 0 4px 0 #125a26, 0 6px 14px rgba(0, 0, 0, .35); }
+.round[data-tab="adventure"] { background: linear-gradient(180deg, #ff7a7a, #c9283f); border-color: #ffc2c8; box-shadow: 0 4px 0 #7a1424, 0 6px 14px rgba(0, 0, 0, .35); }
+.round[data-tab="mons"]      { background: linear-gradient(180deg, #b58cff, #6a3fd6); border-color: #dcc8ff; box-shadow: 0 4px 0 #3e2489, 0 6px 14px rgba(0, 0, 0, .35); }
+.round[data-tab="shop"]      { background: linear-gradient(180deg, #5cc8ff, #1f6fd1); border-color: #bfe8ff; box-shadow: 0 4px 0 #13428a, 0 6px 14px rgba(0, 0, 0, .35); }
+.round[data-tab="dex"]       { background: linear-gradient(180deg, #ffb35c, #d9701f); border-color: #ffe0b8; box-shadow: 0 4px 0 #8a4312, 0 6px 14px rgba(0, 0, 0, .35); }
+.round.gold { box-shadow: 0 4px 0 #a86700, 0 6px 14px rgba(0, 0, 0, .35); }
+.round span { color: #fff !important; font-weight: 900; }
+.round.gold span { color: #3a2400 !important; text-shadow: none; }
+.round.on { transform: translateY(-4px) scale(1.06); border-color: #fff; outline: 3px solid rgba(255, 224, 102, .9); outline-offset: 2px; }
+.round:active { transform: translateY(3px) scale(.94); box-shadow: 0 1px 0 rgba(0, 0, 0, .4); }
+.round { font-size: 26px; }
+@media (max-width: 560px) { .round { font-size: 22px; } }
+.logo { display: flex; align-items: center; gap: 8px; }
+.logo img { width: 32px; height: 32px; border-radius: 9px; box-shadow: 0 2px 6px rgba(0, 0, 0, .4); }
+.login-logo img { width: 110px; height: 110px; border-radius: 26px; box-shadow: 0 8px 24px rgba(123, 92, 255, .5); margin-bottom: 8px; animation: ready 2s ease-in-out infinite; }
