@@ -3941,7 +3941,10 @@ function pvpTrophy(win) {
 }
 
 // ----- 전 세계 랭킹 (ntfy.sh에 점수를 올리고 읽는다. 12시간 동안 남아서 "최근 12시간 동안 접속한 사람" 순위) -----
-const RANK_TOPIC = 'monhap-rank-v1-q7x2k9';
+// 내 컴퓨터에서 시험할 때(localhost)는 진짜 랭킹을 건드리지 않게 따로 쓴다
+const RANK_TOPIC = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) ? 'monhap-rank-dev-q7x2k9' : 'monhap-rank-v1-q7x2k9';
+// 랭킹에서 숨길 기록 (시험하다가 잘못 올라간 것)
+const RANK_HIDE = new Set(['7d7sb06fon1l', 'ut7q8bq5onn3']);
 const RANK_URL = 'https://ntfy.sh/' + RANK_TOPIC;
 const RANK_CATS = [
   { id: 'tr',  name: '🏆 트로피',  unit: '', desc: '🌍 랜덤 대전에서 이기면 올라가요' },
@@ -3964,7 +3967,8 @@ function myRankData() {
 let rankBusy = false;
 // 점수가 바뀌었거나 3시간이 지났으면 올린다 (1분에 한 번까지)
 async function rankSubmit(force) {
-  if (VISIT || !ACC || rankBusy || !navigator.onLine) return;
+  // 몬스터가 한 마리도 없는 빈 계정은 올리지 않는다
+  if (VISIT || !ACC || rankBusy || !navigator.onLine || !S.monsters.length) return;
   const d = myRankData(), key = JSON.stringify([d.n, d.f, d.tr, d.dex, d.st, d.pw]);
   const last = S.rankLast || {};
   const age = Date.now() - (last.t || 0);
@@ -3988,7 +3992,7 @@ async function rankFetch() {
       const ev = JSON.parse(line);
       if (ev.event !== 'message') return;
       const d = JSON.parse(ev.message);
-      if (!d || d.v !== 1 || typeof d.id !== 'string') return;
+      if (!d || d.v !== 1 || typeof d.id !== 'string' || RANK_HIDE.has(d.id)) return;
       const num = (x, hi) => Math.max(0, Math.min(hi, Math.floor(Number(x) || 0)));
       const p = { id: d.id.slice(0, 20), n: String(d.n || '플레이어').slice(0, 10), f: String(d.f || '🥚').slice(0, 4),
         tr: num(d.tr, 99999), dex: num(d.dex, CAT_LIST.length), st: num(d.st, 9999), pw: num(d.pw, 1e8), t: ev.time };
