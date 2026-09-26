@@ -3312,7 +3312,8 @@ function renderAdventure() {
       <h3>👥 대전 · 친구</h3>
       <p class="muted"><b>🌍 랜덤 대전</b>으로 모르는 사람과 바로 싸우거나, 친구와 방 코드로 싸우고 선물·섬 구경도 해요.</p>
       <div class="friend-grid">
-        <button class="btn big-rnd" data-act="pvpRandom">🌍 랜덤 대전<small>모르는 사람과 바로 매칭!</small></button>
+        <button class="btn big-rnd" data-act="pvpRandom">🌍 랜덤 대전<small>모르는 사람과 바로 매칭! 이기면 🏆 +${TROPHY_WIN}</small></button>
+        <button class="btn rank-btn" data-act="ranking">🏆 랭킹<small>${tierOf(S.trophies).icon} ${tierOf(S.trophies).name} · 🏆 ${fmt(S.trophies || 0)}</small></button>
         <button class="btn" data-act="pvp">⚔️ 친구 대전<small>이기면 💰${fmt(PVP_REWARD.gold)} + 💎${PVP_REWARD.gems}</small></button>
         <button class="btn" data-act="giftSend">🎁 선물 보내기<small>몬스터·골드·룬</small></button>
         <button class="btn green" data-act="giftRecv">📥 선물 받기${(S.giftBox || []).length ? `<small>📦 보관함 ${S.giftBox.length}</small>` : '<small>코드 붙여넣기</small>'}</button>
@@ -3767,6 +3768,7 @@ function endBattle(win) {
   const rewards = [];
   if (B.pvp) {
     if (win) { earn(PVP_REWARD.gold); earn(PVP_REWARD.gems, 'gems'); rewards.push(`💰 ${fmt(PVP_REWARD.gold)}`, `💎 ${PVP_REWARD.gems}`); }
+        if (B.pvp.random) rewards.push(...pvpTrophy(win));
     if (B.pvp.role === 'host') netSend({ t: 'end', hostWin: win });
   } else if (B.bossIdx != null) rewards.push(...bossRewards(win));
   else if (win) {
@@ -3905,6 +3907,137 @@ function drawBattle() {
 // 친구 화면에서는 편이 뒤집혀 보인다 (방장의 me0 = 친구 화면의 foe0)
 const PVP_PREFIX = 'monhap-';
 const PVP_REWARD = { gold: 300, gems: 5 };
+
+// ===================== 🏆 트로피 · 티어 · 랭킹 =====================
+const TIERS = [
+  { min: 0,    name: '브론즈',   icon: '🥉', color: '#cd7f32', gems: 0 },
+  { min: 200,  name: '실버',     icon: '🥈', color: '#c0c8d8', gems: 20 },
+  { min: 500,  name: '골드',     icon: '🥇', color: '#ffd24a', gems: 40 },
+  { min: 900,  name: '플래티넘', icon: '💠', color: '#5ce1e6', gems: 60 },
+  { min: 1400, name: '다이아',   icon: '💎', color: '#7fb2ff', gems: 100 },
+  { min: 2000, name: '마스터',   icon: '👑', color: '#ff7ad9', gems: 150 },
+  { min: 3000, name: '챔피언',   icon: '🏆', color: '#ff5c5c', gems: 300 },
+];
+const TROPHY_WIN = 30, TROPHY_LOSE = 15;
+const tierOf = (tr) => TIERS.filter(t => (tr || 0) >= t.min).pop();
+const tierBadge = (tr) => { const t = tierOf(tr); return `<span class="tier" style="--tc:${t.color}">${t.icon} ${t.name}</span>`; };
+function pvpTrophy(win) {
+  const before = S.trophies || 0;
+  S.trophies = Math.max(0, before + (win ? TROPHY_WIN : -TROPHY_LOSE));
+  const out = [win ? `🏆 +${TROPHY_WIN}` : `🏆 -${Math.min(before, TROPHY_LOSE)}`];
+  // 처음 올라간 티어는 보석 보상
+  const t0 = tierOf(before), t1 = tierOf(S.trophies);
+  S.tierBest = Math.max(S.tierBest || 0, 0);
+  const idx = TIERS.indexOf(t1);
+  if (t1 !== t0 && idx > (S.tierBest || 0)) {
+    S.tierBest = idx;
+    earn(t1.gems, 'gems');
+    out.push(`${t1.icon} ${t1.name} 승급! 💎 ${t1.gems}`);
+    setTimeout(() => sfx('yay'), 600);
+  }
+  save();
+  setTimeout(() => rankSubmit(true), 1500);
+  return out;
+}
+
+// ----- 전 세계 랭킹 (ntfy.sh에 점수를 올리고 읽는다. 12시간 동안 남아서 "최근 12시간 동안 접속한 사람" 순위) -----
+const RANK_TOPIC = 'monhap-rank-v1-q7x2k9';
+const RANK_URL = 'https://ntfy.sh/' + RANK_TOPIC;
+const RANK_CATS = [
+  { id: 'tr',  name: '🏆 트로피',  unit: '', desc: '🌍 랜덤 대전에서 이기면 올라가요' },
+  { id: 'dex', name: '📖 도감',    unit: '마리', desc: '모은 몬스터 종류' },
+  { id: 'st',  name: '⚔️ 모험',    unit: '스테이지', desc: '모험 스테이지' },
+  { id: 'pw',  name: '💪 전투력',  unit: '', desc: '가장 센 몬스터 3마리의 힘' },
+];
+const monPower = (m) => { const s = stats(m); return Math.round(s.hp / 5 + s.atk * 2 + s.spd); };
+function myRankData() {
+  if (!S.rankId) { S.rankId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); save(); }
+  const top = S.monsters.slice().sort((a, b) => monPower(b) - monPower(a)).slice(0, 3);
+  return {
+    v: 1, id: S.rankId,
+    n: String(S.nick || (ACC && ACC.name) || '플레이어').slice(0, 10),
+    f: top[0] ? CAT[top[0].type].face : '🥚',
+    tr: S.trophies || 0, dex: Object.keys(S.dex).length, st: S.stage || 1,
+    pw: top.reduce((s, m) => s + monPower(m), 0),
+  };
+}
+let rankBusy = false;
+// 점수가 바뀌었거나 3시간이 지났으면 올린다 (1분에 한 번까지)
+async function rankSubmit(force) {
+  if (VISIT || !ACC || rankBusy || !navigator.onLine) return;
+  const d = myRankData(), key = JSON.stringify([d.n, d.f, d.tr, d.dex, d.st, d.pw]);
+  const last = S.rankLast || {};
+  const age = Date.now() - (last.t || 0);
+  if (age < 60000) return;
+  if (!force && last.key === key && age < 3 * 3600 * 1000) return;
+  rankBusy = true;
+  try {
+    const r = await fetch(RANK_URL, { method: 'POST', body: JSON.stringify(d) });
+    if (r.ok) { S.rankLast = { key, t: Date.now() }; save(); }
+  } catch (e) { /* 인터넷 없음 */ }
+  rankBusy = false;
+}
+async function rankFetch() {
+  const r = await fetch(RANK_URL + '/json?poll=1&since=12h');
+  if (!r.ok) throw new Error('http ' + r.status);
+  const txt = await r.text();
+  const best = {};
+  txt.split('\n').forEach(line => {
+    if (!line.trim()) return;
+    try {
+      const ev = JSON.parse(line);
+      if (ev.event !== 'message') return;
+      const d = JSON.parse(ev.message);
+      if (!d || d.v !== 1 || typeof d.id !== 'string') return;
+      const num = (x, hi) => Math.max(0, Math.min(hi, Math.floor(Number(x) || 0)));
+      const p = { id: d.id.slice(0, 20), n: String(d.n || '플레이어').slice(0, 10), f: String(d.f || '🥚').slice(0, 4),
+        tr: num(d.tr, 99999), dex: num(d.dex, CAT_LIST.length), st: num(d.st, 9999), pw: num(d.pw, 1e8), t: ev.time };
+      if (!best[p.id] || best[p.id].t <= p.t) best[p.id] = p;   // 한 사람은 가장 최근 기록만
+    } catch (e) { /* 잘못된 줄은 건너뛴다 */ }
+  });
+  return Object.values(best);
+}
+let rankCat = 'tr', rankCache = null;
+async function openRanking(cat) {
+  if (cat) rankCat = cat;
+  const draw = (body) => {
+    const c = RANK_CATS.find(x => x.id === rankCat);
+    showModal(`<h3>🏆 랭킹</h3>
+      <div class="rank-me">
+        <div class="rm-tier">${tierBadge(S.trophies)} <b>🏆 ${fmt(S.trophies || 0)}</b></div>
+        <div class="rm-name">내 이름 <input id="rankName" maxlength="10" value="${esc(S.nick || (ACC && ACC.name) || '')}"><button class="btn small" data-act="rankName">저장</button></div>
+      </div>
+      <div class="chips">${RANK_CATS.map(x => `<button class="chip ${x.id === rankCat ? 'on' : ''}" data-act="rankCat" data-c="${x.id}">${x.name}</button>`).join('')}</div>
+      <p class="muted">${c.desc} · 최근 12시간 동안 게임을 한 플레이어 순위예요</p>
+      <div class="rank-list">${body}</div>
+      <div class="row"><button class="btn ghost small" data-act="rankRefresh">🔄 새로고침</button><button class="btn ghost small" data-act="close">닫기</button></div>`);
+  };
+  if (!rankCache || Date.now() - rankCache.t > 30000) {
+    draw('<p class="muted rank-loading">⏳ 전 세계 순위를 불러오는 중…</p>');
+    await rankSubmit(true);
+    try { rankCache = { t: Date.now(), list: await rankFetch() }; } catch (e) {
+      draw('<p class="warn">순위를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.</p>');
+      return;
+    }
+  }
+  // 내 기록은 항상 최신으로 넣어 둔다 (방금 올린 게 아직 안 보일 수 있어서)
+  const me = myRankData();
+  const list = rankCache.list.filter(p => p.id !== me.id).concat([{ ...me, t: Date.now() / 1000 }]);
+  const c = RANK_CATS.find(x => x.id === rankCat);
+  list.sort((a, b) => b[rankCat] - a[rankCat] || a.t - b.t);
+  const myPos = list.findIndex(p => p.id === me.id) + 1;
+  const medal = (k) => (k === 0 ? '🥇' : k === 1 ? '🥈' : k === 2 ? '🥉' : `<small>${k + 1}</small>`);
+  const row = (p, k) => `<div class="rank-row ${p.id === me.id ? 'me' : ''} ${k < 3 ? 'top' : ''}">
+      <span class="rk-pos">${medal(k)}</span>
+      <span class="rk-face">${esc(p.f)}</span>
+      <span class="rk-name">${esc(p.n)}${p.id === me.id ? ' <small>(나)</small>' : ''}<br>${tierBadge(p.tr)}</span>
+      <span class="rk-val">${fmt(p[rankCat])}<small>${c.unit}</small></span>
+    </div>`;
+  const shown = list.slice(0, 50);
+  draw(`<p class="rank-mypos">내 순위: <b>${myPos}위</b> / ${list.length}명</p>${shown.map(row).join('')}${myPos > 50 ? '<div class="rank-gap">⋯</div>' + row(list[myPos - 1], myPos - 1) : ''}`);
+}
+// 켜 있는 동안 가끔 점수 올리기
+setInterval(() => rankSubmit(false), 120000);
 let NET = null;   // { peer, conn, role, code, oppName, oppTeam, started }
 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const flipId = (id) => (!id ? id : id.startsWith('me') ? 'foe' + id.slice(2) : 'me' + id.slice(3));
@@ -4125,7 +4258,8 @@ function onNetClose() {
     B.over = true;
     B.waiting = false;
     clearTimeout(B.timer);
-    B.result = { win: true, rewards: [B.pvp.random ? '상대가 나갔어요' : '친구가 나갔어요'] };
+    B.result = { win: true, rewards: [B.pvp.random ? '상대가 나갔어요' : '친구가 나갔어요', ...(B.pvp.random ? pvpTrophy(true) : [])] };
+    save();
     drawBattle();
   } else if (!B) {
     closeModal();
@@ -4152,6 +4286,7 @@ function onNet(msg) {
         B.waiting = false;
         const rewards = [];
         if (win) { earn(PVP_REWARD.gold); earn(PVP_REWARD.gems, 'gems'); rewards.push(`💰 ${fmt(PVP_REWARD.gold)}`, `💎 ${PVP_REWARD.gems}`); }
+        if (B.pvp.random) rewards.push(...pvpTrophy(win));
         B.result = { win, rewards };
         save();
         drawBattle();
@@ -4714,6 +4849,7 @@ function openAccountMenu() {
   showModal(`<h3>👤 ${esc(ACC.name)}</h3>
     <p class="muted">${accSummary(ACC)}</p>
     <div class="build-list">
+      <button class="build-opt" data-act="ranking" style="--hc:#ffd24a"><span class="bo-ico">🏆</span><span class="bo-nm">전 세계 랭킹<br><small>${tierOf(S.trophies).icon} ${tierOf(S.trophies).name} · 🏆 ${fmt(S.trophies || 0)}</small></span></button>
       <button class="build-opt" data-act="accSwitch" style="--hc:#6f8cff"><span class="bo-ico">🔄</span><span class="bo-nm">계정 바꾸기 / 새 계정</span></button>
       <button class="build-opt" data-act="accExport" style="--hc:#3fd6a4"><span class="bo-ico">📤</span><span class="bo-nm">이 계정 옮기기 코드<br><small>다른 기기에서 📥 가져오기에 붙여 넣으면 내 섬이 그대로 가요</small></span></button>
       <button class="build-opt" data-act="accRename" style="--hc:#ffb020"><span class="bo-ico">✏️</span><span class="bo-nm">이름 바꾸기</span></button>
@@ -4925,6 +5061,7 @@ const ACH = [
   ...[5, 10, 25, 50, 100, 200, 400, 700, 1000, 1500, 2000].map((n, k) => ({ id: 'dex' + n, text: `📖 도감 ${fmt(n)}마리 모으기`, now: () => Object.keys(S.dex).length, need: n, gems: [5, 10, 15, 25, 40, 60, 80, 100, 150, 200, 500][k] })),
   ...[3, 5, 10, 15, 20, 30, 40, 50].map((n, k) => ({ id: 'stage' + n, text: `⚔️ 모험 스테이지 ${n} 도착`, now: () => S.stage, need: n, gems: [5, 10, 20, 30, 40, 60, 80, 100][k] })),
   ...['rare', 'epic', 'legendary', 'mythic', 'divine', 'holy', 'absolute', 'origin'].map((r, k) => ({ id: 'rank' + r, text: `✨ ${RAR[r].name} 등급 몬스터 얻기`, now: () => (S.monsters.some(m => RANK[CAT[m.type].rarity] >= RANK[r]) ? 1 : 0), need: 1, gems: [5, 10, 30, 60, 100, 150, 200, 300][k] })),
+  ...[200, 500, 900, 1400].map((n, k) => ({ id: 'troph' + n, text: `🏆 트로피 ${fmt(n)} 모으기`, now: () => S.trophies || 0, need: n, gems: [10, 20, 40, 60][k] })),
   ...[3, 6, 10, 20].map((n, k) => ({ id: 'habs' + n, text: `🏠 서식지 ${n}개 짓기`, now: () => S.plots.filter(p => p && p.kind === 'hab').length, need: n, gems: [5, 10, 20, 30][k] })),
 ];
 const achReady = (a) => !(S.achGot || []).includes(a.id) && a.now() >= a.need;
@@ -5681,6 +5818,14 @@ const ACTIONS = {
   giftUndo: () => { if (!SHARE || !SHARE.undo || SHARE.done) return; const u = SHARE.undo; SHARE.undo = null; stopShare(); u(); closeModal(); toast('↩️ 선물을 취소하고 돌려받았어요'); },
   copyCode: () => { const ta = $('#modalBox .code-box'); if (!ta) return; ta.select(); try { navigator.clipboard.writeText(ta.value).then(() => toast('📋 코드를 복사했어요! 친구에게 붙여 넣어 보내 주세요'), () => { document.execCommand('copy'); toast('📋 복사했어요'); }); } catch (e) { document.execCommand('copy'); toast('📋 복사했어요'); } },
   pvp: () => openPvp(),
+  ranking: () => openRanking(),
+  rankCat: (d) => openRanking(d.c),
+  rankRefresh: () => { rankCache = null; openRanking(); },
+  rankName: () => {
+    const v = ($('#rankName') ? $('#rankName').value : '').trim().slice(0, 10);
+    if (!v) { toast('이름을 적어 주세요'); return; }
+    S.nick = v; save(); toast('✏️ 이름을 바꿨어요'); rankSubmit(true).then(() => { rankCache = null; openRanking(); });
+  },
   pvpRandom: () => { if ($('#pvpName')) saveNick(); if (!S.nick) { openPvp(); toast('상대에게 보일 이름을 적고 🌍 랜덤 대전을 눌러요'); return; } tutFlag('friends', true); pvpRandom(); },
   pvpHost: () => pvpHost(),
   pvpJoin: () => pvpJoin(),
@@ -5845,6 +5990,7 @@ async function startLoading() {
   setTimeout(() => box.remove(), 600);
   setTimeout(afterEnter, 350);
   startMusic();
+  setTimeout(() => rankSubmit(false), 5000);
 }
 
 runOpening();

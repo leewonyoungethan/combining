@@ -910,3 +910,24 @@ body.visiting .zoom-btns { top: 160px; }
 .rnd-radar::after { animation-delay: .8s; }
 .rnd-radar span { animation: ldBob 1s ease-in-out infinite alternate; }
 @keyframes rndPing { from { transform: scale(.4); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
+
+/* 🏆 랭킹 */
+.friend-grid .rank-btn { grid-column: 1 / -1; background: linear-gradient(135deg, #ffd24a, #ff9a3d); color: #3a2200; }
+.tier { display: inline-block; font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 99px; color: var(--tc); border: 1px solid var(--tc); background: rgba(0, 0, 0, .25); }
+.rank-me { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, .06); border-radius: 12px; padding: 8px 10px; margin: 6px 0; }
+.rank-me .rm-name { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.rank-me input { width: 110px; padding: 5px 8px; font-size: 14px; margin: 0; }
+.rank-list { display: flex; flex-direction: column; gap: 6px; max-height: 52vh; overflow-y: auto; margin: 8px 0; text-align: left; }
+.rank-row { display: grid; grid-template-columns: 34px 34px 1fr auto; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 12px; background: rgba(255, 255, 255, .05); border: 2px solid transparent; }
+.rank-row.top { background: linear-gradient(90deg, rgba(255, 210, 74, .18), rgba(255, 255, 255, .04)); }
+.rank-row.me { border-color: #7dff8f; background: rgba(125, 255, 143, .12); }
+.rk-pos { font-size: 20px; text-align: center; font-weight: 900; }
+.rk-pos small { font-size: 14px; color: var(--muted); }
+.rk-face { font-size: 24px; text-align: center; }
+.rk-name { font-weight: 800; line-height: 1.35; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rk-name small { color: var(--muted); }
+.rk-val { font-weight: 900; font-size: 16px; color: #ffe066; white-space: nowrap; }
+.rk-val small { font-size: 11px; color: var(--muted); margin-left: 2px; }
+.rank-mypos { text-align: center; margin: 4px 0; }
+.rank-gap { text-align: center; color: var(--muted); }
+.rank-loading { text-align: center; padding: 20px 0; }
