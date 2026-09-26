@@ -3525,6 +3525,7 @@ function netUnit(d, side, idx) {
 }
 
 function openPvp() {
+  tutFlag('friends', true);
   if (!window.Peer) { toast('친구 대전 기능을 불러오지 못했어요. 인터넷 연결을 확인해 주세요'); return; }
   if (NET) netClose();
   const n = S.team.map(byUid).filter(Boolean).length;
@@ -3776,6 +3777,7 @@ function codeBox(title, code, note) {
 // ----- 선물 보내기 -----
 let giftTab = 'mon';
 function openGiftSend(kind = giftTab) {
+  tutFlag('friends', true);
   giftTab = kind;
   const chip = (k, label) => `<button class="chip ${giftTab === k ? 'on' : ''}" data-act="giftSend" data-k="${k}">${label}</button>`;
   let body = '';
@@ -3848,6 +3850,7 @@ function giftBoxHTML() {
     <div class="grid small">${box.map((g, k) => card({ type: g.type, lv: g.lv }, `data-act="giftPlace" data-k="${k}"`, 'mini')).join('')}</div>`;
 }
 function openGiftRecv() {
+  tutFlag('friends', true);
   showModal(`<h3>📥 선물 받기</h3>
     <p class="muted">친구가 보낸 선물 코드를 붙여 넣어요.</p>
     <textarea id="giftCode" class="code-box" placeholder="MHG1로 시작하는 코드"></textarea>
@@ -3906,6 +3909,7 @@ function giftPlace(k) {
 
 // ----- 섬 코드 / 친구 섬 구경 -----
 async function openIslandShare() {
+  tutFlag('friends', true);
   const plots = [];
   S.plots.forEach((p, i) => {
     if (!p) return;
@@ -3920,6 +3924,7 @@ async function openIslandShare() {
   codeBox('🏝️ 내 섬 코드', code, `친구에게 이 코드를 보내면 내 섬 ${ISLANDS.length}개를 구경할 수 있어요. (몬스터 ${S.monsters.length}마리 · 코드 길이 ${fmt(code.length)}자)`);
 }
 function openVisit() {
+  tutFlag('friends', true);
   showModal(`<h3>👀 친구 섬 구경</h3>
     <p class="muted">친구가 보낸 섬 코드를 붙여 넣어요.</p>
     <textarea id="isleCode" class="code-box" placeholder="MHI1로 시작하는 코드"></textarea>
@@ -4044,6 +4049,7 @@ function mkBossUnit(b) {
 }
 
 function startBossBattle(i) {
+  tutFlag('boss', true);
   i = Number(i);
   if (!bossUnlocked(i) || B) return;
   const team = S.team.map(byUid).filter(Boolean);
@@ -4230,6 +4236,7 @@ function idealParents(target) {
 const pctText = (p) => p >= 0.1 ? `${Math.round(p * 100)}%` : p >= 0.01 ? `${(p * 100).toFixed(1)}%` : `${(p * 100).toFixed(2)}%`;
 
 function openDexMon(type) {
+  tutFlag('dex', true);
   const c = CAT[type];
   if (!c) return;
   const r = RAR[c.rarity], st = stats({ type, lv: 1 });
@@ -4389,7 +4396,19 @@ const TUT = [
   { text: `🍖 먹이를 줘서 두 마리를 Lv.${BREED_LV}까지 키워요`, done: () => S.monsters.filter(m => m.lv >= BREED_LV).length >= 2, go: () => { closeModal(); tab = 'mons'; render(); } },
   { text: '🏔️ 교배산에서 두 마리를 섞어 새 몬스터를 만들어요!', done: () => (S.breedLog || []).length > 0, go: () => goPlot(mountains().find(k => mtnFreeSlot(S.plots[k]) >= 0) ?? mountains()[0]) },
   { text: '⚔️ 모험에서 팀을 짜고 첫 전투를 해 봐요', done: () => S.stage > 1 || Object.keys(S.bossCleared || {}).length > 0, go: () => { closeModal(); tab = 'adventure'; render(); } },
+  // --- 새로 추가된 기능 둘러보기 ---
+  { text: '🎁 오른쪽 위 🎁 버튼으로 일일 보상을 받아요', done: () => !!(S.daily && S.daily.last), go: () => { closeModal(); openDaily(); } },
+  { text: '📖 도감에서 몬스터를 눌러 추천 교배 조합을 봐요', done: () => tutFlag('dex'), go: () => { closeModal(); tab = 'dex'; render(); } },
+  { text: '🎨 섬 꾸미기 장식을 하나 놓아요 (섬 골드가 올라요!)', done: () => S.plots.some(p => p && p.kind === 'deco'), go: () => goShop('shopDeco') },
+  { text: '👹 모험 탭의 보스전에 도전해 봐요', done: () => tutFlag('boss') || Object.keys(S.bossCleared || {}).length > 0, go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.boss-list'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
+  { text: '👥 친구 칸에서 대전·선물·섬 구경을 둘러봐요', done: () => tutFlag('friends'), go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
 ];
+// 한 번 해 본 기능 기록 (튜토리얼 단계 확인용)
+function tutFlag(k, set) {
+  S.tutFlags = S.tutFlags || {};
+  if (set && !S.tutFlags[k]) { S.tutFlags[k] = true; save(); }
+  return !!S.tutFlags[k];
+}
 // ----- 튜토리얼 손가락: 단계마다 지금 화면에서 눌러야 할 곳을 가리킨다 -----
 const modalOpen = () => !$('#modal').classList.contains('hidden');
 const bottomBtn = (t) => `.bottom-bar [data-tab="${t}"]`;
@@ -4433,6 +4452,23 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return S.team.length ? ['[data-act=fight]'] : ['#view [data-act=team]'];
+    case 9: // 일일 보상
+      if (inModal) return ['#modalBox [data-act=claimDaily]', '#modalBox [data-act=close]'];
+      return ['.hud [data-act=daily]'];
+    case 10: // 도감 추천
+      if (inModal) return ['#modalBox [data-act=goBreed]', '#modalBox [data-act=close]'];
+      return need('dex') || ['#view [data-act=dexMon]'];
+    case 11: // 섬 꾸미기
+      if (inModal) return ['#modalBox [data-act=build][data-what^="deco:"]', '#modalBox [data-act=decoPick]', '#modalBox [data-act=close]'];
+      return need('shop') || ['[data-act=buyDeco]'];
+    case 12: // 보스전
+      if (inModal) return ['#modalBox [data-act=close]'];
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return S.team.length ? ['[data-act=bossFight]:not([disabled])'] : ['#view [data-act=team]'];
+    case 13: // 친구
+      if (inModal) return ['#modalBox [data-act=close]'];
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return ['.pvp-box [data-act=giftSend]'];
   }
   return null;
 }
@@ -4537,10 +4573,10 @@ function updateGuide() {
   const g = $('#guide');
   tutStep();
   const k = tutShown();
-  if (k >= TUT.length && !S.tutCongrats) {
-    S.tutCongrats = true;
+  if (k >= TUT.length && S.tutDoneN !== TUT.length) {
+    S.tutDoneN = TUT.length;
     save();
-    toast('🎉 튜토리얼 완료! 이제 도감 500마리를 모두 모아 보세요!');
+    toast(`🎉 튜토리얼 완료! 이제 도감 ${fmt(CAT_LIST.length)}마리를 모두 모아 보세요!`);
   }
   const show = !B && !S.tutOff && !(S.hideUI && tab === 'island') && k < TUT.length;
   g.classList.toggle('hidden', !show);
@@ -4559,12 +4595,15 @@ function tutGo() {
 
 // ----- 처음 온 사람을 위한 설명 슬라이드 -----
 const WELCOME = [
-  { icon: '🧬', title: '몬스터 합치기에 온 걸 환영해요!', text: '몬스터를 <b>모으고</b>, <b>섞고</b>, <b>키워서</b> 싸우는 게임이에요.' },
-  { icon: '🏠', title: '서식지와 알', text: '몬스터는 <b>같은 속성 서식지</b>에서 살아요.<br>🔥 불 몬스터 → 🔥 불 서식지<br>서식지에서는 골드 💰가 계속 쌓여요.' },
-  { icon: '🌾', title: '농장과 먹이', text: '농장에 작물을 심으면 먹이 🍖가 생겨요.<br>몬스터에게 먹이를 주면 <b>레벨이 올라요</b>.' },
-  { icon: '🏔️', title: '교배', text: '<b>Lv.4</b> 몬스터 두 마리를 교배산에 넣으면 <b>새 몬스터</b>가 태어나요!<br>타이머가 길수록 좋은 등급이에요.' },
-  { icon: '⚔️', title: '모험', text: '몬스터 3마리로 팀을 짜서 싸워요.<br>📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!' },
-  { icon: '💡', title: '모르겠으면?', text: '화면 아래 <b>노란 말풍선</b>을 누르면 다음에 할 곳으로 바로 데려가 줘요.<br>오른쪽 위 <b>🎓 튜토리얼</b> 버튼으로 언제든 다시 볼 수 있어요.' },
+  { icon: '🧬', title: '몬스터 합치기에 온 걸 환영해요!', text: `몬스터를 <b>모으고</b>, <b>섞고</b>, <b>키워서</b> 싸우는 게임이에요.<br>도감에는 <b>${fmt(CAT_LIST.length)}마리</b>의 몬스터가 기다리고 있어요!` },
+  { icon: '🏠', title: '서식지와 알', text: '몬스터는 <b>같은 속성 서식지</b>에서 살아요. 🔥 불 몬스터 → 🔥 불 서식지<br>🛒 상점에서 서식지와 알(💰500)을 사고, 🪺 부화장에서 알을 누르면 <b>바로 깨어나요</b>.<br>서식지 레벨만큼 몬스터가 살고, 골드 💰가 계속 쌓여요.' },
+  { icon: '🌾', title: '농장과 먹이', text: '농장에 작물을 심으면 먹이 🍖가 생겨요. 오래 걸리는 작물일수록 효율이 좋아요.<br>작물을 고를 때 <b>🌾 모든 농장에</b>를 누르면 한 번에 심어요.<br>몬스터에게 먹이를 주면 <b>레벨이 올라요</b>.' },
+  { icon: '🏔️', title: '교배', text: '<b>Lv.4</b> 몬스터 두 마리를 교배산에 넣으면 <b>새 몬스터</b>가 태어나요!<br>등급은 <b>일반 → … → 서사 → 전설 → 신화</b>까지 15단계. 타이머가 길수록 좋은 등급이에요.<br>📖 도감에서 몬스터를 누르면 <b>추천 교배 조합</b>을 알려 줘요.' },
+  { icon: '🏝️', title: '섬 18개', text: '위쪽 <b>◀ ▶</b>로 섬을 옮겨 다녀요. 건물을 <b>꾹 눌러 끌면</b> 빈 땅으로 옮겨져요.<br>🎨 장식을 놓으면 그 섬 골드가 올라요.<br>두 손가락으로 <b>확대</b>, 🙈 숨기기로 이름표를 감출 수 있어요.' },
+  { icon: '⚔️', title: '모험과 보스', text: '몬스터 3마리로 팀을 짜서 싸워요. 📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!<br>👹 보스전에서는 에너지가 엄청 많은 보스와 싸워요.' },
+  { icon: '👥', title: '친구와 함께', text: '모험 탭 <b>👥 친구</b> 칸에서<br>⚔️ 방 코드로 <b>실시간 대전</b>, 🎁 <b>선물 코드</b> 주고받기, 👀 <b>친구 섬 구경</b>을 할 수 있어요.' },
+  { icon: '🎁', title: '매일 들어오면', text: '오른쪽 위 <b>🎁</b>에서 매일 <b>일일 보상</b>을 받아요. 7일째엔 큰 보상!' },
+  { icon: '💡', title: '모르겠으면?', text: '화면 아래 <b>노란 말풍선</b>을 누르면 다음에 할 곳으로 데려가 주고, <b>👆 손가락</b>이 누를 곳을 알려 줘요.<br>오른쪽 위 <b>🎓 튜토리얼</b> 버튼으로 언제든 다시 볼 수 있어요.' },
 ];
 function openWelcome(n = 0) {
   n = Math.max(0, Math.min(WELCOME.length - 1, Number(n)));
