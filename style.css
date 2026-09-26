@@ -952,3 +952,20 @@ body.visiting .zoom-btns { top: 160px; }
 .gchat-send { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
 .gchat-send .chip { font-size: 13px; }
 @media (max-width: 560px) { .gchat { height: 28vh; } .gh-emb { width: 52px; height: 52px; font-size: 34px; } }
+
+/* ⚔️ 길드전 */
+.gwar-vs { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; margin: 8px 0; padding: 10px; border-radius: 14px;
+  background: linear-gradient(90deg, rgba(125, 255, 143, .15), rgba(255, 77, 109, .15)); }
+.gw-side { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.gw-side b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.gw-emb { font-size: 34px; }
+.gw-stars { font-weight: 900; color: #ffe066; font-size: 18px; }
+.gw-mid { font-weight: 900; font-size: 22px; color: #ff6b6b; text-shadow: 0 2px 6px rgba(0, 0, 0, .5); }
+.rank-row.gw-def { grid-template-columns: 34px 1fr auto auto; }
+.gw-best { font-size: 12px; letter-spacing: -1px; color: #ffe066; }
+.gw-chests { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
+.gw-chest { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 12px; border: 2px solid var(--line); background: rgba(255, 255, 255, .05); color: var(--text); font: inherit; }
+.gw-chest span { font-size: 26px; }
+.gw-chest small { font-size: 10px; color: var(--muted); }
+.gw-chest.ok { border-color: #ffe066; background: rgba(255, 224, 102, .15); cursor: pointer; animation: ready 1.2s ease-in-out infinite; }
+.gw-chest.got { opacity: .55; }
