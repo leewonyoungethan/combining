@@ -810,3 +810,33 @@ body.visiting .zoom-btns { top: 160px; }
 @media (max-width: 760px), (pointer: coarse) {
   .card.r-holy, .card.r-origin, .card.r-divine { animation: none !important; }
 }
+
+/* ===== 📋 미션 ===== */
+.mis-btn { position: relative; }
+.mis-btn .dot { position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; border-radius: 50%; background: #ff4d6d; border: 2px solid #fff; display: none; }
+.mis-btn .dot.on { display: block; animation: lowHp 1s ease-in-out infinite; }
+.mis-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; text-align: left; }
+.mis-row { display: flex; align-items: center; gap: 10px; background: rgba(255, 255, 255, .05); border: 2px solid var(--line); border-radius: 12px; padding: 8px 10px; }
+.mis-row.done { border-color: #7dff8f; background: rgba(125, 255, 143, .08); }
+.mis-row.taken { opacity: .55; }
+.mis-row.bonus { border-style: dashed; }
+.mis-info { flex: 1; min-width: 0; }
+.mis-info small { color: var(--muted); font-weight: 700; }
+.mis-info .bar { height: 7px; background: rgba(255, 255, 255, .1); border-radius: 99px; margin-top: 5px; overflow: hidden; }
+.mis-info .bar i { display: block; height: 100%; background: linear-gradient(90deg, #7dff8f, #ffe066); border-radius: 99px; }
+.mis-ok { font-size: 20px; }
+.wb-list { display: flex; flex-direction: column; gap: 6px; margin: 10px auto; font-size: 17px; }
+#bAuto.on { background: #7dff8f; color: #0d3316; border-color: #7dff8f; }
+
+/* 📱 폰: 큰 제목 줄을 숨겨서 섬 이름표·창 윗부분이 가려지지 않게, 안내 말풍선은 작게 */
+@media (max-width: 560px) {
+  .hud .logo { display: none; }
+  .guide { font-size: 13px; padding: 6px 30px 6px 10px !important; max-width: min(330px, calc(100% - 24px)); border-width: 2px; }
+  .g-text { font-size: 13px; }
+}
+
+/* ⛶ 전체화면 버튼 */
+.full-btn { font-size: 16px; font-weight: 900; }
+.full-btn.hidden { display: none; }
+.full-steps { text-align: left; margin: 10px auto; padding-left: 22px; line-height: 1.9; max-width: 280px; }
+.ios-share { display: inline-block; border: 2px solid currentColor; border-radius: 6px; padding: 0 4px; font-size: 13px; }

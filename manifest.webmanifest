@@ -5,8 +5,8 @@
   "description": "몬스터를 모으고, 섞고, 키워서 싸우는 게임",
   "start_url": "./",
   "scope": "./",
-  "display": "standalone",
-  "orientation": "any",
+  "display": "fullscreen",
+  "orientation": "portrait",
   "background_color": "#150f3d",
   "theme_color": "#150f3d",
   "lang": "ko",
@@ -24,7 +24,7 @@
       "purpose": "any"
     },
     {
-      "src": "icon-512.png",
+      "src": "icon-maskable.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -35,5 +35,9 @@
       "type": "image/svg+xml",
       "purpose": "any"
     }
+  ],
+  "display_override": [
+    "fullscreen",
+    "standalone"
   ]
 }

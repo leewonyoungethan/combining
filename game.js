@@ -46,12 +46,12 @@ const RAR_TABLE = [
   ['masterwork', '명품', '#9b7bff',   25,    6,     200,   520,  77,  112],
   ['hero',       '영웅', '#c28cff',   32,    8,     250,   560,  83,  114],
   ['epic',       '서사', '#e45cff',   40,    10,    300,   600,  90,  116],
-  ['legendary',  '전설', '#ffb020',   90,    40,    800,   900,  130, 126],
-  ['mythic',     '신화', '#ff4d6d',   180,   200,   2000,  1400, 190, 140],
-  ['divine',     '초월', '#3dffd8',   300,   1000,  5000,  2400, 320, 160],
-  ['holy',       '신성', '#fff27a',   420,   2500,  8000,  3200, 420, 168],
-  ['absolute',   '절대', '#ffffff',   600,   6000,  12000, 4200, 540, 176],
-  ['origin',     '근원', '#ff8a3d',   900,   15000, 20000, 5500, 700, 185],
+  ['legendary',  '전설', '#ffb020',   90,    25,    800,   900,  130, 126],
+  ['mythic',     '신화', '#ff4d6d',   180,   60,   2000,  1400, 190, 140],
+  ['divine',     '초월', '#3dffd8',   300,   150,  5000,  2400, 320, 160],
+  ['holy',       '신성', '#fff27a',   420,   300,  8000,  3200, 420, 168],
+  ['absolute',   '절대', '#ffffff',   600,   600,  12000, 4200, 540, 176],
+  ['origin',     '근원', '#ff8a3d',   900,   1200, 20000, 5500, 700, 185],
 ];
 const RAR_ORDER = RAR_TABLE.map(r => r[0]);
 const RAR = Object.fromEntries(RAR_TABLE.map(([key, name, color, time, income, cost, hp, atk, spd]) =>
@@ -555,6 +555,8 @@ function save() {
 }
 
 let S = load() || newState();
+// 돌아왔을 때 "없는 동안 쌓인 골드"를 보여 주려고 켤 때의 상태를 기억
+const AWAY = { sec: (Date.now() - (S.last || Date.now())) / 1000, gold0: S.plots.reduce((s, p) => s + (p && p.kind === 'hab' ? p.gold || 0 : 0), 0) };
 
 // ===================== 계산 =====================
 const byUid = (uid) => S.monsters.find(m => m.uid === Number(uid));
@@ -599,11 +601,91 @@ function stats(m) {
 
 function spend(cost, cur = 'gold') {
   if (S.infinite) return true;
-  if (S[cur] < cost) { toast(cur === 'gold' ? '💰 골드가 부족해요' : '💎 보석이 부족해요'); return false; }
+  if (S[cur] < cost) { sfx('err'); toast(cur === 'gold' ? '💰 골드가 부족해요' : '💎 보석이 부족해요'); return false; }
   S[cur] -= cost;
   return true;
 }
 function earn(n, cur = 'gold') { if (!S.infinite) S[cur] += n; }
+
+// ----- 효과음 -----
+let AC = null;
+const soundOn = () => lsGet('combining-sound') !== 'off';
+const SFX = {
+  tap:   [[660, 0.04, 'triangle', 0.05]],
+  coin:  [[988, 0.07, 'square', 0.05], [1319, 0.12, 'square', 0.05, 0.07]],
+  buy:   [[523, 0.07, 'triangle', 0.08], [784, 0.1, 'triangle', 0.08, 0.07]],
+  level: [[523, 0.08, 'triangle', 0.08], [659, 0.08, 'triangle', 0.08, 0.08], [784, 0.14, 'triangle', 0.08, 0.16]],
+  hatch: [[392, 0.1, 'triangle', 0.09], [523, 0.1, 'triangle', 0.09, 0.1], [659, 0.1, 'triangle', 0.09, 0.2], [1047, 0.25, 'triangle', 0.09, 0.3]],
+  breed: [[330, 0.12, 'sine', 0.1], [494, 0.18, 'sine', 0.1, 0.1]],
+  win:   [[523, 0.1, 'square', 0.06], [659, 0.1, 'square', 0.06, 0.1], [784, 0.1, 'square', 0.06, 0.2], [1047, 0.3, 'square', 0.06, 0.3]],
+  lose:  [[392, 0.15, 'sawtooth', 0.05], [311, 0.15, 'sawtooth', 0.05, 0.15], [262, 0.3, 'sawtooth', 0.05, 0.3]],
+  err:   [[180, 0.12, 'sawtooth', 0.05]],
+  yay:   [[784, 0.08, 'triangle', 0.08], [988, 0.08, 'triangle', 0.08, 0.08], [1175, 0.08, 'triangle', 0.08, 0.16], [1568, 0.25, 'triangle', 0.08, 0.24]],
+};
+function sfx(kind) {
+  if (!soundOn() || !SFX[kind]) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === 'suspended') AC.resume();
+    const t0 = AC.currentTime + 0.01;
+    SFX[kind].forEach(([f, d, type, vol, at = 0]) => {
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.type = type; o.frequency.value = f;
+      g.gain.setValueAtTime(vol, t0 + at);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + d);
+      o.connect(g); g.connect(AC.destination);
+      o.start(t0 + at); o.stop(t0 + at + d + 0.02);
+    });
+  } catch (e) { /* 소리를 못 내는 기기 */ }
+}
+// ----- ⛶ 전체화면 (휴대폰) -----
+const isStandalone = () => matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const canFull = () => !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+const isFull = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+const isPhone = () => matchMedia('(pointer: coarse)').matches;
+function enterFull() {
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!req) return Promise.reject();
+  const r = req.call(el, { navigationUI: 'hide' });
+  return r && r.then ? r : Promise.resolve();
+}
+function exitFull() {
+  const ex = document.exitFullscreen || document.webkitExitFullscreen;
+  if (ex) ex.call(document);
+}
+function toggleFullscreen() {
+  if (isFull()) { exitFull(); lsSet('combining-full', 'off'); return; }
+  if (!canFull()) {
+    // 아이폰 사파리는 웹페이지 전체화면이 안 된다 → 홈 화면에 추가하면 주소창 없이 앱처럼 켜진다
+    showModal(`<div class="welcome"><div class="w-icon">📱</div><h3>전체화면으로 하려면</h3>
+      <p>아이폰·아이패드는 <b>홈 화면에 추가</b>하면 주소창 없이 <b>앱처럼 꽉 찬 화면</b>으로 켜져요!</p>
+      <ol class="full-steps"><li>아래쪽 <b>공유 버튼</b> <span class="ios-share">⬆️</span> 누르기</li><li><b>홈 화면에 추가</b> 누르기</li><li>홈 화면의 <b>몬스터 합치기</b> 아이콘으로 켜기</li></ol>
+      <div class="row"><button class="btn" data-act="close">알겠어요</button></div></div>`);
+    return;
+  }
+  enterFull().then(() => lsSet('combining-full', 'on')).catch(() => toast('이 브라우저는 전체화면이 안 돼요'));
+}
+function updateFullBtn() {
+  const b = $('#fullBtn');
+  if (!b) return;
+  b.classList.toggle('hidden', !isPhone() || isStandalone());
+  b.textContent = isFull() ? '🗗' : '⛶';
+  b.title = isFull() ? '전체화면 끄기' : '전체화면';
+}
+['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => { updateFullBtn(); setTimeout(resize, 150); }));
+// 전에 전체화면으로 했으면, 다음에 켤 때 처음 화면을 누르는 순간 다시 전체화면으로
+document.addEventListener('pointerup', function autoFull() {
+  document.removeEventListener('pointerup', autoFull, true);
+  if (isPhone() && canFull() && !isFull() && !isStandalone() && lsGet('combining-full') === 'on') enterFull().catch(() => {});
+}, true);
+
+function toggleSound() {
+  lsSet('combining-sound', soundOn() ? 'off' : 'on');
+  toast(soundOn() ? '🔊 소리를 켰어요' : '🔇 소리를 껐어요');
+  sfx('tap');
+  openAccountMenu();
+}
 
 function advantage(att, def) {
   let m = 1;
@@ -1376,6 +1458,8 @@ function collectAll() {
   });
   if (!sum) { toast('아직 걷을 골드가 없어요'); return; }
   earn(sum);
+  sfx('coin');
+  mission('collect');
   if (tab !== 'island') toast(`💰 ${fmt(sum)} 골드를 걷었어요!`);
   save();
   refreshLive();
@@ -1562,6 +1646,8 @@ function collectHab(i, quiet = false) {
   if (!n) { toast('아직 걷을 골드가 없어요'); return; }
   p.gold -= n;
   earn(n);
+  sfx('coin');
+  mission('collect');
   floatAt(i, `+${fmt(n)}`);
   if (!quiet) toast(`💰 ${fmt(n)} 골드!`);
   save();
@@ -1747,6 +1833,8 @@ function harvest(i) {
   const food = CROPS[p.crop].food;
   S.food += food;
   p.crop = null;
+  sfx('coin');
+  mission('harvest');
   toast(`🍖 먹이 ${fmt(food)}개 수확!`);
   save();
   closeModal();
@@ -1975,6 +2063,8 @@ function startBreed(i = curMtn) {
   const nextFree = mtnFreeSlot(p);
   S.breedLog = [{ id: logId, a: a.uid, b: b.uid, at: a.type, bt: b.type, rt: type, t: Date.now() }, ...(S.breedLog || [])].slice(0, BREED_LOG_MAX);
   sel = [];
+  sfx('breed');
+  mission('breed');
   save();
   openBreed(i, nextFree >= 0 && mtnSlots(p).length > 1 ? nextFree : curSlot);
   if (nextFree >= 0 && mtnSlots(p).length > 1) toast(`⛰️ 칸 ${curSlot + 1}에서 교배를 시작했어요! 비어 있는 칸이 더 있어요`);
@@ -2023,7 +2113,7 @@ function takeEgg(i = curMtn, sl = curSlot) {
   slots[Number(sl)] = null;
   save();
   render();
-  openHatchery();
+  oldHatchReveal(S.hatch.length - 1);
 }
 
 // ----- 부화장 -----
@@ -2147,6 +2237,7 @@ function crack(i, sl) {
   const type = b.type;
   const isNew = !S.dex[type];
   S.dex[type] = true;
+  sfx(isNew ? 'yay' : 'hatch');
   save();
   const c = CAT[type], r = RAR[c.rarity];
   const habs = habsFor(type);
@@ -2179,6 +2270,7 @@ function placeInc(i, sl, h) {
   if (!b || Date.now() < b.end || !habsFor(b.type).some(x => x.i === h)) return;
   incs[sl] = null;
   S.monsters.push({ uid: S.nextUid++, type: b.type, lv: 1, hab: h, runes: [null, null] });
+  mission('hatch');
   toast(`${CAT[b.type].face} ${CAT[b.type].name}이(가) ${habName(S.plots[h].el)}으로 이사했어요!`);
   save();
   closeModal();
@@ -2205,6 +2297,7 @@ function crackAll() {
     if (h) {
       hatchIncs(S.plots[k])[s] = null;
       S.monsters.push({ uid: S.nextUid++, type: b.type, lv: 1, hab: h.i, runes: [null, null] });
+      mission('hatch');
       born.push({ type: b.type, isNew });
     } else stuck.push(b.type);
   });
@@ -2325,6 +2418,7 @@ function oldHatchAll() {
     const h = habsFor(type)[0];
     if (h) {
       S.monsters.push({ uid: S.nextUid++, type, lv: 1, hab: h.i, runes: [null, null] });
+      mission('hatch');
       born.push({ type, isNew, where: habName(S.plots[h.i].el) });
     } else {
       S.hatch.push(type);
@@ -2370,7 +2464,7 @@ function oldHatchReveal(idx) {
               <span class="bo-nm">${habName(p.el)} Lv.${p.lv} <small>${islandLabel(i)}</small></span>
               <span class="bo-cost">${habMons(i).length}/${habCap(i)}</span>
             </button>`).join('')}</div>`
-        : `<p class="warn">살 수 있는 빈 서식지가 없어요!<br>필요한 곳: ${need}<br>섬에 서식지를 짓거나 업그레이드한 뒤 다시 부화시켜 주세요.</p>`}
+        : `<p class="warn">살 수 있는 빈 서식지가 없어요! 필요한 곳: ${need}</p>${roomOptions(idx, type)}`}
       <div class="row">
         <button class="btn ghost small" data-act="sellEgg" data-idx="${idx}">팔기 (+💰 ${fmt(RAR[c.rarity].cost / 2)})</button>
         <button class="btn ghost small" data-act="close">나중에</button>
@@ -2384,6 +2478,7 @@ function place(idx, i) {
   if (!type || !habsFor(type).some(h => h.i === i)) return;
   S.hatch.splice(idx, 1);
   S.monsters.push({ uid: S.nextUid++, type, lv: 1, hab: i, runes: [null, null] });
+  mission('hatch');
   toast(`${CAT[type].face} ${CAT[type].name}이(가) ${habName(S.plots[i].el)}으로 이사했어요!`);
   save();
   closeModal();
@@ -2441,6 +2536,33 @@ function openMon(uid) {
   modalStack = back;
 }
 
+// 살 곳이 없을 때 고를 수 있는 것: 새 서식지 짓기 / 가득 찬 서식지 업그레이드 (둘 다 바로 이사)
+function roomOptions(idx, type) {
+  const els = isLegend(type) ? ['legend'] : CAT[type].els;
+  const ups = S.plots.map((p, i) => ({ p, i })).filter(({ p }) => p && p.kind === 'hab' && els.includes(p.el) && p.lv < HAB_MAX_LV)
+    .sort((a, b) => a.p.lv - b.p.lv).slice(0, 2);
+  return `<div class="build-list">${els.map(el => `
+    <button class="build-opt" data-act="buildPlace" data-idx="${idx}" data-el="${el}" style="--hc:${habColor(el)}">
+      <span class="bo-ico">${habEmoji(el)}</span><span class="bo-nm">${habName(el)} 새로 짓고 바로 넣기</span><span class="bo-cost">💰 ${fmt(habBuildCost(el))}</span>
+    </button>`).join('')}${ups.map(({ p, i }) => `
+    <button class="build-opt" data-act="upPlace" data-idx="${idx}" data-i="${i}" style="--hc:${habColor(p.el)}">
+      <span class="bo-ico">⬆️</span><span class="bo-nm">${habName(p.el)} Lv.${p.lv} → ${p.lv + 1} 올리고 넣기</span><span class="bo-cost">💰 ${fmt(habUpCost(p.lv))}</span>
+    </button>`).join('')}</div>`;
+}
+function buildPlace(idx, el) {
+  const i = findFreePlot();
+  if (i < 0 || !spend(habBuildCost(el))) return;
+  S.plots[i] = { kind: 'hab', el, lv: 1, gold: 0 };
+  place(idx, i);
+}
+function upPlace(idx, i) {
+  i = Number(i);
+  const p = S.plots[i];
+  if (!p || p.lv >= HAB_MAX_LV || !spend(habUpCost(p.lv))) return;
+  p.lv++;
+  place(idx, i);
+}
+
 function feed(uid) {
   const m = byUid(uid);
   if (!m || m.lv >= MAX_LV) return;
@@ -2448,6 +2570,8 @@ function feed(uid) {
   if (S.food < cost) { toast('🍖 먹이가 부족해요. 농장에서 키워 보세요!'); return; }
   S.food -= cost;
   m.lv++;
+  sfx('level');
+  mission('feed');
   if (m.lv === BREED_LV) toast(`🎉 Lv.${BREED_LV}! 이제 교배할 수 있어요`);
   save();
   openMon(uid);
@@ -2683,22 +2807,7 @@ function renderShop() {
   });
   const list = Object.values(groups).sort((a, b) => b.lv - a.lv || a.t.localeCompare(b.t));
   view.innerHTML = `
-    <div class="sec-head"><h2>상점</h2><p>룬을 뽑아 몬스터를 강하게 만들고, 먹이와 골드를 살 수 있어요.</p></div>
-    <div class="shop">
-      <button class="shop-item" data-act="buyRune" data-kind="gold"><span class="si-ico">📦</span><span class="si-nm">룬 상자<small>★ 70% · ★★ 25% · ★★★ 5%</small></span><span class="si-cost">💰 1,000</span></button>
-      <button class="shop-item" data-act="buyRune" data-kind="gem"><span class="si-ico">🎁</span><span class="si-nm">고급 룬 상자<small>★★ 60% · ★★★ 40%</small></span><span class="si-cost">💎 20</span></button>
-      <button class="shop-item" data-act="buyFood" data-n="100"><span class="si-ico">🍖</span><span class="si-nm">먹이 100개</span><span class="si-cost">💰 150</span></button>
-      <button class="shop-item" data-act="buyFood" data-n="1000"><span class="si-ico">🍖</span><span class="si-nm">먹이 1,000개</span><span class="si-cost">💰 1,500</span></button>
-      <button class="shop-item" data-act="buyGold" data-n="5"><span class="si-ico">💰</span><span class="si-nm">골드 500</span><span class="si-cost">💎 5</span></button>
-      <button class="shop-item" data-act="buyGold" data-n="50"><span class="si-ico">💰</span><span class="si-nm">골드 6,000</span><span class="si-cost">💎 50</span></button>
-    </div>
-    <h3 class="sub" id="shopDeco">🎨 섬 꾸미기 <small class="muted">장식을 놓으면 그 섬 서식지 골드가 올라요 (섬마다 최대 +${DECO_CAP}%) · 지금 섬 +${decoPercent(S.isl || 0)}%</small></h3>
-    <div class="grid small">${DECOS.map(d => `<div class="card mini hab-card" data-act="buyDeco" data-id="${d.id}">
-        <div class="price-tag">${decoPrice(d)}</div>
-        <div class="face" style="background:linear-gradient(135deg, #ff9ad5, #1a1a3d)">${d.emoji}</div>
-        <div class="nm">${d.name}</div>
-        <div class="meta">골드 +${d.bonus}%</div>
-      </div>`).join('')}</div>
+    <div class="sec-head"><h2>상점</h2><p>서식지와 알은 여기서! 룬·먹이·장식도 팔아요.</p></div>
     <h3 class="sub" id="shopHab">🏠 서식지 상점 <small class="muted">사면 섬의 빈 땅에 바로 지어져요</small></h3>
     <div class="grid small">${[...EL.map(e => e.id), 'legend'].map(el => {
       const n = S.plots.filter(p => p && p.kind === 'hab' && p.el === el).length;
@@ -2731,6 +2840,22 @@ function renderShop() {
     <h3 class="sub" id="shopEgg">🥚 몬스터 알 상점 <small class="muted">사면 부화장으로 가요. 알맞은 서식지가 있어야 키울 수 있어요</small></h3>
     <div class="grid small">${EGG_SHOP.map(t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini',
       `<div class="price-tag">💰 ${fmt(eggPrice(t))}</div>`)).join('')}</div>
+    <h3 class="sub">🛍️ 룬 · 먹이 · 골드</h3>
+    <div class="shop">
+      <button class="shop-item" data-act="buyRune" data-kind="gold"><span class="si-ico">📦</span><span class="si-nm">룬 상자<small>★ 70% · ★★ 25% · ★★★ 5%</small></span><span class="si-cost">💰 1,000</span></button>
+      <button class="shop-item" data-act="buyRune" data-kind="gem"><span class="si-ico">🎁</span><span class="si-nm">고급 룬 상자<small>★★ 60% · ★★★ 40%</small></span><span class="si-cost">💎 20</span></button>
+      <button class="shop-item" data-act="buyFood" data-n="100"><span class="si-ico">🍖</span><span class="si-nm">먹이 100개</span><span class="si-cost">💰 150</span></button>
+      <button class="shop-item" data-act="buyFood" data-n="1000"><span class="si-ico">🍖</span><span class="si-nm">먹이 1,000개</span><span class="si-cost">💰 1,500</span></button>
+      <button class="shop-item" data-act="buyGold" data-n="5"><span class="si-ico">💰</span><span class="si-nm">골드 500</span><span class="si-cost">💎 5</span></button>
+      <button class="shop-item" data-act="buyGold" data-n="50"><span class="si-ico">💰</span><span class="si-nm">골드 6,000</span><span class="si-cost">💎 50</span></button>
+    </div>
+    <h3 class="sub" id="shopDeco">🎨 섬 꾸미기 <small class="muted">장식을 놓으면 그 섬 서식지 골드가 올라요 (섬마다 최대 +${DECO_CAP}%) · 지금 섬 +${decoPercent(S.isl || 0)}%</small></h3>
+    <div class="grid small">${DECOS.map(d => `<div class="card mini hab-card" data-act="buyDeco" data-id="${d.id}">
+        <div class="price-tag">${decoPrice(d)}</div>
+        <div class="face" style="background:linear-gradient(135deg, #ff9ad5, #1a1a3d)">${d.emoji}</div>
+        <div class="nm">${d.name}</div>
+        <div class="meta">골드 +${d.bonus}%</div>
+      </div>`).join('')}</div>
     <h3 class="sub">👑 전설 상점<small class="muted">골드로 살 수 있어요… 모을 수만 있다면요</small></h3>
     <div class="legend-shop">${SHOP_LEGENDS.map(l => {
       const c = CAT[l.id];
@@ -2822,6 +2947,8 @@ function buyMon(type) {
   if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
   if (!spend(eggPrice(type))) return;
   S.hatch.push(type);
+  sfx('buy');
+  mission('buyEgg');
   save();
   toast(`🥚 ${CAT[type].name} 알을 샀어요!`);
   render();
@@ -2899,6 +3026,7 @@ function feedAll(mode) {
   } else {
     list.forEach(m => { if (m.lv < MAX_LV) step(m); });
   }
+  if (ups) { sfx('level'); mission('feed', ups); }
   toast(ups ? `🍖 먹이 ${fmt(food)}개로 레벨 ${ups}번 올렸어요!${short ? ' (먹이가 모자라서 일부만)' : ''}` : '🍖 먹이가 부족해요. 농장에서 키워 보세요!');
   save();
   render();
@@ -3071,7 +3199,7 @@ function startBattle() {
     stage: S.stage,
     units: [...team.map((m, i) => mkUnit(m, 'me', i)), ...foes.map((m, i) => mkUnit(m, 'foe', i))],
     order: [], cur: null, target: 'foe0', log: [], round: 0,
-    waiting: false, over: false, fast: false, timer: null, result: null, built: false,
+    waiting: false, over: false, fast: !!S.fastBattle, auto: !!S.autoBattle, timer: null, result: null, built: false,
   };
   $('#battle').classList.remove('hidden');
   updateGuide();
@@ -3239,7 +3367,10 @@ async function nextTurn() {
     later(nextTurn, 800);
     return;
   }
-  if (u.side === 'me') {
+  if (u.side === 'me' && b.auto && !b.pvp) {
+    drawBattle();
+    later(() => { if (B === b && !b.over) aiAct(u); }, 450);
+  } else if (u.side === 'me') {
     const t = unitById(b.target);
     if (!t || t.hp <= 0) b.target = aliveOf('foe')[0].id;
     b.waiting = true;
@@ -3383,7 +3514,7 @@ function aiAct(u) {
   });
   const strong = opts.filter(s => s.cost > 0);
   const sk = strong.length && Math.random() < 0.75 ? pick(strong) : opts[0];
-  const foes = aliveOf('me');
+  const foes = aliveOf(u.side === 'me' ? 'foe' : 'me');
   const tgt = foes.slice().sort((a, b) =>
     advantage([sk.el], b.c.els) - advantage([sk.el], a.c.els) || a.hp - b.hp)[0];
   useSkill(u, sk, tgt);
@@ -3442,6 +3573,8 @@ function endBattle(win) {
     S.stage++;
   }
   B.result = { win, rewards };
+  sfx(win ? 'win' : 'lose');
+  if (win) mission('win');
   save();
   drawBattle();
   updateHud();
@@ -3509,6 +3642,7 @@ function drawBattle() {
           <b>${B.pvp ? `👥 친구 대전 · vs ${B.pvp.oppName}` : B.bossIdx != null ? `👹 보스전 · ${BOSSES[B.bossIdx].name}` : `스테이지 ${B.stage}`}</b><span class="muted" id="bRound"></span>
           <span class="spacer"></span>
           <button class="btn ghost small" data-act="typeChart">📘 상성표</button>
+          ${B.pvp ? '' : '<button class="btn ghost small" data-act="bAuto" id="bAuto"></button>'}
           <button class="btn ghost small" data-act="bFast" id="bFast"></button>
           <button class="btn ghost small" data-act="bQuit" id="bQuitTop">🏳️ 포기</button>
         </div>
@@ -3524,6 +3658,7 @@ function drawBattle() {
   }
   $('#bRound').textContent = `라운드 ${B.round}`;
   $('#bFast').textContent = B.fast ? '▶️ 보통 속도' : '⏩ 빠르게';
+  if ($('#bAuto')) { $('#bAuto').textContent = B.auto ? '🤖 자동 켜짐' : '🤖 자동'; $('#bAuto').classList.toggle('on', !!B.auto); }
   $('#bQuitTop').style.display = B.over ? 'none' : '';
   B.units.forEach(updateUnit);
   updateLog();
@@ -4266,6 +4401,8 @@ function openAccountMenu() {
       <button class="build-opt" data-act="accExport" style="--hc:#3fd6a4"><span class="bo-ico">📤</span><span class="bo-nm">이 계정 옮기기 코드<br><small>다른 기기에서 📥 가져오기에 붙여 넣으면 내 섬이 그대로 가요</small></span></button>
       <button class="build-opt" data-act="accRename" style="--hc:#ffb020"><span class="bo-ico">✏️</span><span class="bo-nm">이름 바꾸기</span></button>
       <button class="build-opt" data-act="accPinSet" style="--hc:#ff5ce1"><span class="bo-ico">🔒</span><span class="bo-nm">비밀번호 ${ACC.pin ? '바꾸기 / 없애기' : '만들기'}</span></button>
+      ${isPhone() && !isStandalone() ? `<button class="build-opt" data-act="fullscreen" style="--hc:#ffb020"><span class="bo-ico">⛶</span><span class="bo-nm">전체화면 ${isFull() ? '끄기' : '켜기'}<br><small>주소창·상태바 없이 게임만 꽉 차게</small></span></button>` : ''}
+      <button class="build-opt" data-act="sound" style="--hc:#7dff8f"><span class="bo-ico">${soundOn() ? '🔊' : '🔇'}</span><span class="bo-nm">소리 ${soundOn() ? '켜짐 (누르면 끄기)' : '꺼짐 (누르면 켜기)'}</span></button>
       <button class="build-opt" data-act="code" style="--hc:#a8b2c1"><span class="bo-ico">🔑</span><span class="bo-nm">비밀코드 입력</span></button>
       <button class="build-opt" data-act="hardRefresh" style="--hc:#5cc8ff"><span class="bo-ico">🔄</span><span class="bo-nm">최신 버전으로 새로고침<br><small>앱이 옛날 모습이면 눌러 보세요 (섬은 그대로예요)</small></span></button>
     </div>
@@ -4313,8 +4450,10 @@ function accPinSetOk() {
 // 게임에 들어온 뒤: 처음이면 설명, 아니면 일일 보상
 function afterEnter() {
   if (!$('#modal').classList.contains('hidden') || B || !$('#login').classList.contains('hidden')) return;
-  if (!S.welcomed) openWelcome(0);
-  else if (dailyReady()) openDaily();
+  if (!S.welcomed) { openWelcome(0, false); return; }
+  if (AWAY.sec > 300 && openWelcomeBack()) return;
+  // 튜토리얼 앞부분(첫 교배 전)에는 창을 띄우지 않고 🎁 빨간 점으로만 알려 준다
+  if (dailyReady() && (S.tutOff || tutStep() >= 8)) openDaily();
 }
 
 // ===================== 속성 상성표 =====================
@@ -4429,6 +4568,131 @@ const DAILY = [
   } },
   { icon: '🎁', text: '보석 50 + ★★★ 룬', give: () => { earn(50, 'gems'); return runeText(giveRune([0, 0, 1])); }, big: true },
 ];
+// ----- 📋 미션: 매일 3개, 깨면 보석 -----
+const MISSIONS = [
+  { id: 'collect', text: '💰 골드 걷기', need: 5 },
+  { id: 'breed',   text: '🏔️ 교배하기', need: 3 },
+  { id: 'feed',    text: '🍖 레벨 올리기', need: 10 },
+  { id: 'hatch',   text: '🐣 몬스터 태어나게 하기', need: 3 },
+  { id: 'harvest', text: '🌾 작물 수확하기', need: 3 },
+  { id: 'win',     text: '⚔️ 전투 이기기', need: 2 },
+  { id: 'buyEgg',  text: '🥚 알 사기', need: 2 },
+];
+const MIS_GEMS = 10, MIS_BONUS = 30;
+function misToday() {
+  const k = dayKey();
+  if (!S.mis || S.mis.day !== k) {
+    // 날짜로 정해지는 3개 (첫날은 튜토리얼과 맞게: 걷기·교배·레벨)
+    let n = [...k].reduce((s, ch) => s * 31 + ch.charCodeAt(0) >>> 0, 7);
+    const pool = MISSIONS.map(m => m.id), ids = [];
+    if (!S.mis) ids.push('collect', 'breed', 'feed');
+    while (ids.length < 3) { const id = pool[n % pool.length]; n = (n * 1103515245 + 12345) >>> 0; if (!ids.includes(id)) ids.push(id); }
+    S.mis = { day: k, ids, prog: {}, got: [], bonus: false };
+  }
+  return S.mis;
+}
+function mission(id, n = 1) {
+  const m = misToday();
+  if (!m.ids.includes(id)) return;
+  const def = MISSIONS.find(x => x.id === id);
+  const before = m.prog[id] || 0;
+  m.prog[id] = Math.min(def.need, before + n);
+  if (before < def.need && m.prog[id] >= def.need) {
+    setTimeout(() => { sfx('yay'); toast(`📋 미션 완료! ${def.text} → 위쪽 📋에서 💎 받기`); }, 400);
+  }
+  updateMisDot();
+}
+// ----- 🏆 도전 과제: 한 번만 받는 큰 목표 -----
+const ACH = [
+  ...[5, 10, 25, 50, 100, 200, 400, 700, 1000, 1500, 2000].map((n, k) => ({ id: 'dex' + n, text: `📖 도감 ${fmt(n)}마리 모으기`, now: () => Object.keys(S.dex).length, need: n, gems: [5, 10, 15, 25, 40, 60, 80, 100, 150, 200, 500][k] })),
+  ...[3, 5, 10, 15, 20, 30, 40, 50].map((n, k) => ({ id: 'stage' + n, text: `⚔️ 모험 스테이지 ${n} 도착`, now: () => S.stage, need: n, gems: [5, 10, 20, 30, 40, 60, 80, 100][k] })),
+  ...['rare', 'epic', 'legendary', 'mythic', 'divine', 'holy', 'absolute', 'origin'].map((r, k) => ({ id: 'rank' + r, text: `✨ ${RAR[r].name} 등급 몬스터 얻기`, now: () => (S.monsters.some(m => RANK[CAT[m.type].rarity] >= RANK[r]) ? 1 : 0), need: 1, gems: [5, 10, 30, 60, 100, 150, 200, 300][k] })),
+  ...[3, 6, 10, 20].map((n, k) => ({ id: 'habs' + n, text: `🏠 서식지 ${n}개 짓기`, now: () => S.plots.filter(p => p && p.kind === 'hab').length, need: n, gems: [5, 10, 20, 30][k] })),
+];
+const achReady = (a) => !(S.achGot || []).includes(a.id) && a.now() >= a.need;
+function misClaimable() {
+  const m = misToday();
+  return m.ids.some(id => (m.prog[id] || 0) >= MISSIONS.find(x => x.id === id).need && !m.got.includes(id)) ||
+    (!m.bonus && m.got.length >= 3) || ACH.some(achReady);
+}
+function updateMisDot() { const d = $('#misDot'); if (d) d.classList.toggle('on', misClaimable()); }
+function openMissions() {
+  const m = misToday();
+  const got = S.achGot || [];
+  // 도전 과제: 받을 수 있는 것 → 진행 중인 것(종류마다 다음 하나) 순서
+  const seen = new Set();
+  const achList = ACH.filter(a => !got.includes(a.id)).filter(a => { const kind = a.id.replace(/\d+|rank.*/, x => (x.startsWith('rank') ? 'rank' : '')); if (achReady(a)) return true; if (seen.has(kind)) return false; seen.add(kind); return true; });
+  showModal(`<h3>📋 오늘의 미션</h3>
+    <p class="muted">하나 깰 때마다 💎 ${MIS_GEMS}, 셋 다 깨면 보너스 💎 ${MIS_BONUS}! 내일은 새 미션이 나와요.</p>
+    <div class="mis-list">${m.ids.map(id => {
+      const def = MISSIONS.find(x => x.id === id), p = m.prog[id] || 0, done = p >= def.need, taken = m.got.includes(id);
+      return `<div class="mis-row ${taken ? 'taken' : done ? 'done' : ''}">
+        <div class="mis-info"><b>${def.text}</b> <small>${p}/${def.need}</small><div class="bar"><i style="width:${p / def.need * 100}%"></i></div></div>
+        ${taken ? '<span class="mis-ok">✅</span>' : `<button class="btn small ${done ? 'green' : ''}" data-act="misClaim" data-id="${id}" ${done ? '' : 'disabled'}>💎 ${MIS_GEMS}</button>`}
+      </div>`;
+    }).join('')}
+    <div class="mis-row bonus ${m.bonus ? 'taken' : ''}"><div class="mis-info"><b>🎉 셋 다 깨기 보너스</b> <small>${m.got.length}/3</small></div>
+      ${m.bonus ? '<span class="mis-ok">✅</span>' : `<button class="btn small ${m.got.length >= 3 ? 'green' : ''}" data-act="misBonus" ${m.got.length >= 3 ? '' : 'disabled'}>💎 ${MIS_BONUS}</button>`}</div>
+    </div>
+    <h3 class="sub">🏆 도전 과제 <small class="muted">한 번씩 받는 큰 목표 · ${got.length}/${ACH.length} 완료</small></h3>
+    <div class="mis-list">${achList.map(a => {
+      const p = Math.min(a.need, a.now()), ok = achReady(a);
+      return `<div class="mis-row ${ok ? 'done' : ''}">
+        <div class="mis-info"><b>${a.text}</b> <small>${fmt(p)}/${fmt(a.need)}</small><div class="bar"><i style="width:${p / a.need * 100}%"></i></div></div>
+        <button class="btn small ${ok ? 'green' : ''}" data-act="achClaim" data-id="${a.id}" ${ok ? '' : 'disabled'}>💎 ${a.gems}</button>
+      </div>`;
+    }).join('') || '<p class="muted">모든 도전 과제를 깼어요! 🏆</p>'}</div>
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+}
+function misClaim(id) {
+  const m = misToday(), def = MISSIONS.find(x => x.id === id);
+  if (!def || m.got.includes(id) || (m.prog[id] || 0) < def.need) return;
+  m.got.push(id);
+  earn(MIS_GEMS, 'gems');
+  sfx('coin');
+  toast(`💎 ${MIS_GEMS} 보석을 받았어요!`);
+  save(); updateHud(); openMissions();
+}
+function misBonus() {
+  const m = misToday();
+  if (m.bonus || m.got.length < 3) return;
+  m.bonus = true;
+  earn(MIS_BONUS, 'gems');
+  sfx('yay');
+  toast(`🎉 오늘 미션 모두 완료! 💎 ${MIS_BONUS}`);
+  save(); updateHud(); openMissions();
+}
+function achClaim(id) {
+  const a = ACH.find(x => x.id === id);
+  if (!a || !achReady(a)) return;
+  S.achGot = [...(S.achGot || []), id];
+  earn(a.gems, 'gems');
+  sfx('yay');
+  toast(`🏆 ${a.text} 달성! 💎 ${a.gems}`);
+  save(); updateHud(); openMissions();
+}
+
+// ----- 👋 돌아왔을 때: 없는 동안 쌓인 것 알려 주기 -----
+function openWelcomeBack() {
+  const gold = Math.max(0, Math.floor(S.plots.reduce((s, p) => s + (p && p.kind === 'hab' ? p.gold || 0 : 0), 0) - AWAY.gold0));
+  const eggs = S.plots.filter(p => p && p.kind === 'mountain').reduce((s, p) => s + mtnSlots(p).filter(b => b && Date.now() >= b.end).length, 0);
+  const crops = S.plots.filter(p => p && p.kind === 'farm' && p.crop != null && Date.now() >= p.end).length;
+  if (gold < 1 && !eggs && !crops) return false;
+  const h = AWAY.sec >= 3600 ? `${Math.floor(AWAY.sec / 3600)}시간 ${Math.floor(AWAY.sec % 3600 / 60)}분` : `${Math.floor(AWAY.sec / 60)}분`;
+  showModal(`<div class="welcome">
+    <div class="w-icon">👋</div>
+    <h3>다시 왔군요!</h3>
+    <p>${h} 동안 섬에서 이런 일이 있었어요${AWAY.sec > 8 * 3600 ? ' <small class="muted">(골드는 최대 8시간까지 쌓여요)</small>' : ''}</p>
+    <div class="wb-list">
+      ${gold >= 1 ? `<div>💰 골드 <b>${fmt(gold)}</b> 쌓임</div>` : ''}
+      ${eggs ? `<div>🥚 교배 끝난 알 <b>${eggs}개</b></div>` : ''}
+      ${crops ? `<div>🌾 다 자란 농장 <b>${crops}곳</b></div>` : ''}
+    </div>
+    <div class="row">${gold >= 1 ? '<button class="btn big green" data-act="wbCollect">💰 모두 걷기</button>' : '<button class="btn big" data-act="wbClose">좋아요!</button>'}</div>
+  </div>`);
+  return true;
+}
+
 function dayKey(offset = 0) {
   const d = new Date();
   d.setDate(d.getDate() + offset);
@@ -4878,7 +5142,7 @@ function openTutorial() {
   const cur = tutStep();
   showModal(`<h3>🎓 튜토리얼</h3>
     <p class="muted">단계를 골라 <b>👉 다시 보기</b>를 누르면 손가락이 어디를 누를지 알려 줘요.</p>
-    <div class="row"><button class="btn" data-act="welcome" data-n="0">📖 게임 설명 보기</button></div>
+    <div class="row"><button class="btn" data-act="welcome" data-n="0" data-full="1">📖 게임 설명 보기</button></div>
     <div class="tut-list">${TUT.map((t, k) => `<div class="tut-row ${k < cur ? 'done' : k === cur ? 'now' : ''}">
         <span class="tut-num">${k < cur ? '✅' : k === cur ? '👉' : k + 1}</span>
         <span class="tut-text">${t.text}</span>
@@ -4944,20 +5208,29 @@ const WELCOME = [
   { icon: '🎁', title: '매일 들어오면', text: '오른쪽 위 <b>🎁</b>에서 매일 <b>일일 보상</b>을 받아요. 7일째엔 큰 보상!' },
   { icon: '💡', title: '모르겠으면?', text: '화면 아래 <b>노란 말풍선</b>을 누르면 다음에 할 곳으로 데려가 주고, <b>👆 손가락</b>이 누를 곳을 알려 줘요.<br>오른쪽 위 <b>🎓 튜토리얼</b> 버튼으로 언제든 다시 볼 수 있어요.' },
 ];
-function openWelcome(n = 0) {
-  n = Math.max(0, Math.min(WELCOME.length - 1, Number(n)));
-  const w = WELCOME[n], last = n === WELCOME.length - 1;
+// 처음 온 사람에게는 짧게 3장만. 🎓 튜토리얼 창의 "게임 설명 보기"에서는 전부
+const WELCOME_SHORT = [
+  { icon: '🧬', title: '몬스터 합치기에 온 걸 환영해요!', text: `몬스터를 <b>모으고</b>, <b>섞고</b>, <b>키우는</b> 게임이에요.<br>${fmt(CAT_LIST.length)}마리 도감을 채워 봐요!` },
+  { icon: '🔁', title: '이렇게 놀아요', text: '🏠 서식지 짓기 → 🥚 알 사기 → 🍖 먹이로 <b>Lv.4</b><br>→ 🏔️ 두 마리를 <b>교배</b> → ✨ 새 몬스터!<br>몬스터는 서식지에서 💰 골드를 벌어요.' },
+  { icon: '👆', title: '따라만 오세요', text: '<b>노란 말풍선</b>과 <b>👆 손가락</b>이 할 일을 알려 줘요.<br>위쪽 <b>📋</b>에서 미션을 깨면 💎 보석! 모르면 <b>🎓</b>' },
+];
+let welcomeFull = false;
+function openWelcome(n = 0, full = welcomeFull) {
+  welcomeFull = !!full;
+  const list = welcomeFull ? WELCOME : WELCOME_SHORT;
+  n = Math.max(0, Math.min(list.length - 1, Number(n)));
+  const w = list[n], last = n === list.length - 1;
   showModal(`<div class="welcome">
     <div class="w-icon">${w.icon}</div>
     <h3>${w.title}</h3>
     <p>${w.text}</p>
-    <div class="w-dots">${WELCOME.map((_, k) => `<i class="${k === n ? 'on' : ''}"></i>`).join('')}</div>
+    <div class="w-dots">${list.map((_, k) => `<i class="${k === n ? 'on' : ''}"></i>`).join('')}</div>
     <div class="row">
       ${n > 0 ? `<button class="btn ghost" data-act="welcome" data-n="${n - 1}">← 이전</button>` : ''}
       ${last ? '<button class="btn big green" data-act="welcomeDone">시작하기! 🚀</button>' : `<button class="btn" data-act="welcome" data-n="${n + 1}">다음 →</button>`}
     </div>
     ${last ? '' : '<button class="btn ghost small" data-act="welcomeDone">건너뛰기</button>'}
-    <div class="row"><button class="btn ghost small danger" data-act="reset">🔄 처음부터 다시 하기</button>${S.tutOff ? ' <button class="btn ghost small" data-act="welcomeDone">💡 튜토리얼 다시 켜기</button>' : ''}</div>
+    ${S.tutOff ? '<div class="row"><button class="btn ghost small" data-act="welcomeDone">💡 튜토리얼 다시 켜기</button></div>' : ''}
   </div>`);
 }
 function welcomeDone() {
@@ -4972,6 +5245,8 @@ function updateHud() {
   updateGuide();
   const dot = $('#dailyDot');
   if (dot) dot.classList.toggle('on', dailyReady());
+  updateMisDot();
+  updateFullBtn();
   [['gold', S.gold], ['gems', S.gems]].forEach(([id, v]) => {
     const el = $('#' + id);
     el.textContent = S.infinite ? '∞' : (innerWidth < 560 ? shortNum(v) : fmt(v));
@@ -5026,6 +5301,8 @@ const ACTIONS = {
   breedCancel: (d) => breedCancel(d.i, d.s),
   incSlot: (d) => { const box = $('#modalBox'), y = box.scrollTop; openHatchery(curHatch, Number(d.s)); box.scrollTop = y; },
   place: (d) => place(d.idx, d.i),
+  buildPlace: (d) => buildPlace(d.idx, d.el),
+  upPlace: (d) => upPlace(d.idx, d.i),
   sellEgg: (d) => sellEgg(d.idx),
   openMon: (d) => openMon(d.uid),
   feed: (d) => feed(d.uid),
@@ -5048,7 +5325,13 @@ const ACTIONS = {
   fight: () => startBattle(),
   bSkill: (d) => playerSkill(d.i),
   bTarget: (d) => setTarget(d.id),
-  bFast: () => { B.fast = !B.fast; drawBattle(); },
+  bFast: () => { B.fast = !B.fast; S.fastBattle = B.fast; drawBattle(); },
+  bAuto: () => {
+    if (!B || B.pvp) return;
+    B.auto = !B.auto; S.autoBattle = B.auto;
+    // 내 차례를 기다리던 중이면 바로 자동으로 움직인다
+    if (B.auto && B.waiting && B.cur && B.cur.side === 'me') { B.waiting = false; aiAct(B.cur); } else drawBattle();
+  },
   typeChart: () => openTypeChart(),
   applyUpdate: () => { if (B && !B.over) { toast('전투가 끝나면 적용할게요'); return; } save(); location.reload(); },
   hardRefresh: () => { toast('🔄 최신 버전을 받는 중…'); hardRefresh(); },
@@ -5099,7 +5382,7 @@ const ACTIONS = {
   tutFocus: (d) => focusTutorial(d.k),
   tutOn: () => { S.tutOff = false; tutFocus = null; save(); closeModal(); updateGuide(); toast('💡 안내 말풍선을 켰어요'); },
   tutSkip: () => { if (tutFocus != null) { tutFocus = null; $('#guide').dataset.k = ''; updateGuide(); toast('다시 보기를 끝냈어요'); return; } S.tutOff = true; save(); updateGuide(); toast('튜토리얼을 껐어요. ❓ 버튼으로 다시 켤 수 있어요'); },
-  welcome: (d) => openWelcome(d.n),
+  welcome: (d) => openWelcome(d.n, d.full ? true : undefined),
   welcomeDone: () => welcomeDone(),
   help: () => openTutorial(),
   rebreed: (d) => rebreed(d.i, d.id),
@@ -5110,6 +5393,14 @@ const ACTIONS = {
   bossFight: (d) => startBossBattle(d.i),
   daily: () => openDaily(),
   claimDaily: () => claimDaily(),
+  missions: () => openMissions(),
+  misClaim: (d) => misClaim(d.id),
+  misBonus: () => misBonus(),
+  achClaim: (d) => achClaim(d.id),
+  sound: () => toggleSound(),
+  fullscreen: () => toggleFullscreen(),
+  wbCollect: () => { collectAll(); closeModal(); if (dailyReady() && tutStep() >= 8) setTimeout(openDaily, 300); },
+  wbClose: () => { closeModal(); if (dailyReady() && tutStep() >= 8) setTimeout(openDaily, 300); },
   dexMon: (d) => openDexMon(d.type),
   dexFilter: (d) => { dexFilter[d.k] = d.v; dexShow = 120; renderDex(); },
   dexMore: () => { const y = $('#panel').scrollTop; dexShow += 240; renderDex(); $('#panel').scrollTop = y; },
@@ -5137,7 +5428,7 @@ document.addEventListener('click', (e) => {
   if (!t || t.disabled) return;
   if (VISIT && !VISIT_OK.has(t.dataset.act)) { toast('👀 구경 중이에요. 🏠 내 섬으로 돌아간 뒤에 해 주세요'); return; }
   const fn = ACTIONS[t.dataset.act];
-  if (fn) fn(t.dataset);
+  if (fn) { if (!/^(collect|buy|feed|breed|claim|mis)/.test(t.dataset.act)) sfx('tap'); fn(t.dataset); }
 });
 
 tick();
