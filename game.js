@@ -4282,6 +4282,7 @@ async function gwarBody(guilds) {
 }
 let gwarCache = null;
 function gwarAttack(pid) {
+  tutFlag('gwar', true);
   const w = gwarToday();
   if (!w.left) { toast('오늘 공격을 다 썼어요. 내일 또 해요!'); return; }
   const opp = gwarCache && gwarCache.opp;
@@ -5807,6 +5808,8 @@ TUT.push(
   { text: '📋 위쪽 📋 버튼에서 오늘의 미션을 보고 💎 보석을 받아요', done: () => tutFlag('missions'), go: () => { closeModal(); openMissions(); } },
   { text: '🛡️ 모험 탭의 🛡️ 길드에 들어가거나 만들어 봐요 (골드 보너스!)', done: () => tutFlag('guild') || !!S.guild,
     go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
+  { text: '⚔️ 길드의 ⚔️ 길드전 탭에서 상대 길드원을 한 번 공격해 봐요 (이기면 ⭐!)', done: () => tutFlag('gwar'),
+    go: () => { closeModal(); openGuild(S.guild ? 'war' : undefined); } },
   { text: '🏆 모험 탭의 🏆 랭킹에서 전 세계 순위를 봐요 (랜덤 대전에서 이기면 트로피!)', done: () => tutFlag('ranking'),
     go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
 );
@@ -5885,7 +5888,17 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=guildJoin]:not([disabled])', '#modalBox [data-act=guildNew]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=guildOpen]'];
-    case 17: // 랭킹
+    case 17: // 길드전
+      if (inModal) {
+        if (!S.guild) return ['#modalBox [data-act=guildJoin]:not([disabled])', '#modalBox [data-act=guildNew]', '#modalBox [data-act=guildCreate]', '#modalBox [data-act=close]'];
+        if (guildTab !== 'war') return ['#modalBox [data-act=guildTab][data-t=war]'];
+        if (!S.team.length) return ['#modalBox [data-act=close]'];
+        return ['#modalBox [data-act=gwarAttack]:not([disabled])', '#modalBox [data-act=close]'];
+      }
+      if (!S.team.length) return tab !== 'adventure' ? [bottomBtn('adventure')] : ['#view [data-act=team]'];
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return ['.pvp-box [data-act=guildOpen]'];
+    case 18: // 랭킹
       if (inModal) return ['#modalBox [data-act=rankCat]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=ranking]'];
