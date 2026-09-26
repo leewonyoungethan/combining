@@ -910,8 +910,21 @@ let tab = 'island';
 let sel = [];
 
 const fmt = (n) => Math.floor(n).toLocaleString('ko-KR');
-// 짧은 숫자: 12,345 → 1.2만, 3억 4천만 → 3.4억
-const shortNum = (n) => { n = Math.floor(n); if (n >= 1e12) return (n / 1e12).toFixed(n >= 1e13 ? 0 : 1) + '조'; if (n >= 1e8) return (n / 1e8).toFixed(n >= 1e9 ? 0 : 1) + '억'; if (n >= 1e4) return (n / 1e4).toFixed(n >= 1e5 ? 0 : 1) + '만'; return fmt(n); };
+// 짧은 숫자: 9,999까지는 그대로, 만 넘으면 12.5K · 3.4M · 1.2B · 5T (100 넘으면 소수점 없이: 125K)
+const NUM_UNITS = [[1e18, 'Qi'], [1e15, 'Qa'], [1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K']];
+const shortNum = (n) => {
+  n = Math.floor(n);
+  if (Math.abs(n) < 1e4) return fmt(n);
+  for (const [u, s] of NUM_UNITS) {
+    if (Math.abs(n) >= u) {
+      const v = n / u;
+      // 버림으로 표시 (1.99M을 2M으로 올리지 않게)
+      const d = Math.abs(v) >= 100 ? 0 : 1, p = Math.pow(10, d);
+      return (Math.floor(v * p) / p).toFixed(d).replace(/.0$/, '') + s;
+    }
+  }
+  return fmt(n);
+};
 const elBadges = (els) => els.map(e => EL[ELI[e]].emoji).join('');
 const elNames = (els) => els.map(e => `${EL[ELI[e]].emoji} ${EL[ELI[e]].name}`).join(' · ');
 function grad(c) {
@@ -6084,10 +6097,12 @@ function updateHud() {
   updateFullBtn();
   [['gold', S.gold], ['gems', S.gems]].forEach(([id, v]) => {
     const el = $('#' + id);
-    el.textContent = S.infinite ? '∞' : (innerWidth < 560 ? shortNum(v) : fmt(v));
+    el.textContent = S.infinite ? '∞' : shortNum(v);
+    el.parentElement.title = S.infinite ? '무한' : fmt(v);
     el.classList.toggle('infinite', S.infinite);
   });
-  $('#food').textContent = innerWidth < 560 ? shortNum(S.food) : fmt(S.food);
+  $('#food').textContent = shortNum(S.food);
+  $('#food').parentElement.title = fmt(S.food);
 }
 
 function tick() {
@@ -6428,3 +6443,4 @@ setInterval(save, 10000);   // 중요한 행동은 그때그때 저장하므로 
 document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 setInterval(updateFinger, 250);
 window.addEventListener('beforeunload', save);
+window.addEventListener('pagehide', save);
