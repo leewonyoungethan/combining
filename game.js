@@ -502,6 +502,7 @@ function load() {
     delete s.breed;
     s.monsters = s.monsters.filter(m => CAT[m.type]);
     s.hatch = (s.hatch || []).filter(t => CAT[t]);
+    s.plots.forEach(p => { if (p && p.kind === 'hatchery' && Array.isArray(p.incs)) p.incs.forEach(b => { if (b) b.end = 0; }); });
     // 예전에 합친 부화장은 칸 수만 있고 레벨이 없다: 칸 수(3+3+1=7, 3개면 11 ...)로 합친 개수를 계산
     s.plots.forEach(p => {
       if (p && p.kind === 'hatchery' && !p.lv && (p.cap || HATCH_CAP) > HATCH_CAP) p.lv = Math.max(1, Math.round(((p.cap || HATCH_CAP) + 1) / (HATCH_CAP + 1)));
@@ -645,7 +646,7 @@ function plotReady(i) {
   const p = S.plots[i];
   if (!p) return false;
   if (p.kind === 'mountain') return mtnBusy(p).some(b => Date.now() >= b.end);
-  if (p.kind === 'hatchery') { const incs = hatchIncs(p); return incs.some(b => b && Date.now() >= b.end) || (S.hatch.length > 0 && incs.some(b => !b)); }
+  if (p.kind === 'hatchery') return S.hatch.length > 0 || hatchIncs(p).some(Boolean);
   if (p.kind === 'farm') return p.crop != null && Date.now() >= p.end;
   if (p.kind === 'hab') return p.gold >= 1;
   return false;
@@ -665,8 +666,7 @@ function liveText(key) {
     }
     if (p.kind === 'hatchery') {
       const incs = hatchIncs(p), busy = incs.filter(Boolean);
-      if (busy.some(b => now >= b.end)) return `🐣 완료! ${busy.length}/${incs.length}`;
-      if (busy.length) return `⏳ ${mmss(Math.min(...busy.map(b => b.end - now)) / 1000)}${incs.length > 1 ? ` ${busy.length}/${incs.length}` : ''}`;
+      if (busy.length) return `🐣 깨울 알 ${busy.length}`;
       return `🥚 ${S.hatch.length}/${hatchCap()}`;
     }
     if (p.kind === 'farm') {
@@ -1147,7 +1147,7 @@ function dropResult(from, to) {
   const p = S.plots[from], q = to >= 0 ? S.plots[to] : undefined;
   if (to < 0 || to === from) return { ok: false };
   if (!q) return { ok: true, kind: 'move', text: '🚚 여기로 옮기기' };
-  if (p.kind === 'hatchery' && q.kind === 'hatchery') return { ok: true, kind: 'merge', text: `🔗 합치기 → 동시에 ${(p.lv || 1) + (q.lv || 1)}개 부화` };
+  if (p.kind === 'hatchery' && q.kind === 'hatchery') return { ok: true, kind: 'merge', text: `🔗 합치기 → ${(p.cap || HATCH_CAP) + (q.cap || HATCH_CAP) + 1}칸` };
   if (p.kind === 'mountain' && q.kind === 'mountain') {
     return { ok: true, kind: 'merge', text: `🔗 합치기 → 큰 교배산 Lv.${(p.lv || 1) + (q.lv || 1)} (동시에 ${(p.lv || 1) + (q.lv || 1)}쌍)` };
   }
@@ -1996,38 +1996,22 @@ function openHatchery(i = curHatch, slot) {
   const now = Date.now();
   const b = incs[curInc];
   const key = `${i}|${curInc}`;
-  let view;
-  if (b && now < b.end) {
-    view = `<div class="egg ${eggLv(b.type)}">🥚</div>
-      <div class="timer" data-live="inc:${key}"></div>
-      <div class="bar green"><div data-bar="inc:${key}"></div></div>
-      <div class="row">
-        <button class="btn ghost" data-act="incGem" data-i="${i}" data-s="${curInc}">💎 <span data-live="incGem:${key}"></span> 즉시 부화</button>
-        <button class="btn ghost small danger" data-act="incCancel" data-i="${i}" data-s="${curInc}">❌ 부화 취소</button>
-      </div>`;
-  } else if (b) {
-    view = `<div class="egg ready">🥚</div>
-      <div class="hint">알이 흔들려요! 깨어날 준비가 됐어요</div>
-      <div class="row"><button class="btn big green" data-act="crack" data-i="${i}" data-s="${curInc}">🐣 깨우기!</button></div>`;
-  } else {
-    view = `<p class="muted inc-empty">${incs.length > 1 ? `칸 ${curInc + 1}이(가) ` : '부화 칸이 '}비어 있어요. 아래 알을 눌러 부화를 시작해요 🔥</p>`;
-  }
+  // 부화 시간은 없다: 알을 누르면 바로 깨어난다.
+  // (예전에 부화 칸에 넣어 둔 알이 있으면 "깨울 알"로 보여 준다)
+  const leftover = allIncs().filter(x => x.b);
   const busy = incs.filter(Boolean).length;
-  const anyFree = allIncs().some(x => !x.b), anyDone = allIncs().some(x => x.b && now >= x.b.end);
   showModal(`
-    <h3>🪺 부화장${incs.length > 1 ? ` <small class="muted">큰 부화장 Lv.${p.lv} · 동시에 ${incs.length}개</small>` : ''}</h3>
-    ${incSlotBarHTML(i)}
-    ${view}
-    <h4 class="sub">🥚 대기 중인 알 <small class="muted">${S.hatch.length}/${hatchCap()} · 부화 중 ${busy}/${incs.length}</small></h4>
+    <h3>🪺 부화장${(p.lv || 1) > 1 ? ` <small class="muted">큰 부화장 Lv.${p.lv}</small>` : ''}</h3>
+    <p class="muted">알을 누르면 바로 깨어나요. 살 서식지를 골라 주세요!</p>
+    ${leftover.length ? `<h4 class="sub">🐣 깨울 알</h4>
+      <div class="egg-row">${leftover.map(x => `<button class="egg-slot" data-act="crack" data-i="${x.k}" data-s="${x.s}"><span class="egg small ready">🥚</span><span>🐣 깨우기</span></button>`).join('')}</div>` : ''}
+    <h4 class="sub">🥚 알 <small class="muted">${S.hatch.length}/${hatchCap()}</small></h4>
     <div class="egg-row">${S.hatch.length
-      ? S.hatch.map((t, k) => `<button class="egg-slot" data-act="incubate" data-idx="${k}"><span class="egg small ${eggLv(t)}">🥚</span><span>🔥 부화 시작</span><small class="muted">${mmss(hatchTime(t))}</small></button>`).join('')
-      : '<p class="muted">대기 중인 알이 없어요. 교배산이나 상점에서 알을 가져오세요!</p>'}</div>
-    <div class="all-box row">
-      ${S.hatch.length && anyFree ? '<button class="btn small" data-act="incubateAll">🔥 빈 칸 모두 부화 시작</button>' : ''}
-      ${anyDone ? '<button class="btn small green" data-act="crackAll">🐣 다 된 알 모두 꺼내기 (자동 이사)</button>' : ''}
-    </div>
-    <p class="muted small-note">부화장 ${n}개가 대기 알을 같이 보관해요 (${hatcheries().map(k => (S.plots[k].cap || HATCH_CAP) + '칸').join(' + ')}${mtnPower() > 1 ? ` + 교배산 추가분 ${2 * (mtnPower() - 1)}칸` : ''})</p>
-    ${n > 1 ? '<p class="muted small-note">💡 부화장을 합치면 합친 개수만큼 동시에 부화해요. 섬에서 꾹 눌러 다른 부화장 위로 끌어도 합쳐져요</p>' : ''}
+      ? S.hatch.map((t, k) => `<button class="egg-slot" data-act="incubate" data-idx="${k}"><span class="egg small ${eggLv(t)}">🥚</span><span>🐣 부화!</span></button>`).join('')
+      : '<p class="muted">알이 없어요. 교배산이나 상점에서 알을 가져오세요!</p>'}</div>
+    ${S.hatch.length + leftover.length > 1 ? '<div class="all-box"><button class="btn green" data-act="hatchAll">🐣 모두 부화 (알맞은 서식지로 자동 이사)</button></div>' : ''}
+    <p class="muted small-note">부화장 ${n}개가 알을 같이 보관해요 (${hatcheries().map(k => (S.plots[k].cap || HATCH_CAP) + '칸').join(' + ')}${mtnPower() > 1 ? ` + 교배산 추가분 ${2 * (mtnPower() - 1)}칸` : ''})</p>
+    ${n > 1 ? '<p class="muted small-note">💡 부화장을 합치면 보관 칸이 모두 합쳐지고 보너스 1칸이 붙어요. 섬에서 꾹 눌러 다른 부화장 위로 끌어도 합쳐져요</p>' : ''}
     ${n > 1 ? `<div class="all-box"><button class="btn small" data-act="mergePick" data-i="${i}">🔗 다른 부화장과 합쳐서 큰 부화장 만들기</button></div>` : ''}
     <div class="row">
       ${(p.lv || 1) > 1 ? `<button class="btn ghost small" data-act="splitHatch" data-i="${i}">🔓 합치기 취소 (${p.lv}개로 나누기)</button>` : ''}
@@ -2207,7 +2191,7 @@ function splitHatchery(i) {
   const base = Math.max(N * HATCH_CAP, (p.cap || HATCH_CAP) - (N - 1));
   const each = Math.floor(base / N), extra = base - each * N;
   if (S.hatch.length > hatchCap() - ((p.cap || HATCH_CAP) - base)) { toast('대기 중인 알이 너무 많아서 나눌 수 없어요. 먼저 부화시켜 주세요'); return; }
-  if (!confirm(`큰 부화장(Lv.${N})을 부화장 ${N}개로 나눌까요? 부화 중인 알은 칸마다 그대로 옮겨 가요.`)) return;
+  if (!confirm(`큰 부화장(Lv.${N})을 부화장 ${N}개로 나눌까요? 보관 중인 알은 그대로 있어요.`)) return;
   const incs = hatchIncs(p).slice();
   p.lv = 1;
   p.cap = each + extra;
@@ -2257,14 +2241,16 @@ function mergeHatch(i, k) {
   a.incs = incs;
   S.plots[k] = null;
   save();
-  toast(`🔗 큰 부화장 완성! 대기 ${a.cap}칸 · 동시에 ${a.lv}개 부화`);
+  toast(`🔗 큰 부화장 완성! 알 ${a.cap}칸을 보관해요 (보너스 +1칸)`);
   render();
   openHatchery(i);
 }
 
 // 모든 알을 부화시켜 빈자리가 있는 알맞은 서식지로 자동 이사
 function hatchAll() {
-  return incubateAll();
+  // 예전 부화 칸에 남은 알은 대기 알로 되돌린 뒤 한꺼번에 부화
+  allIncs().forEach(({ k, s, b }) => { if (b) { S.hatch.push(b.type); hatchIncs(S.plots[k])[s] = null; } });
+  return oldHatchAll();
 }
 function oldHatchAll() {
   const born = [], stuck = [];
@@ -2294,7 +2280,7 @@ function oldHatchAll() {
 }
 
 function hatchOne(idx) {
-  return incubate(idx);
+  return oldHatchReveal(idx);
 }
 function oldHatchReveal(idx) {
   idx = Number(idx);
@@ -3881,7 +3867,7 @@ function goPlot(i) {
 const TUT = [
   { text: '🏠 서식지를 지어요! 몬스터가 사는 집이에요', done: () => S.plots.some(p => p && p.kind === 'hab'), go: () => goShop('shopHab') },
   { text: '🥚 몬스터 알을 사요 (지은 서식지와 같은 속성으로!)', done: () => S.monsters.length > 0 || S.hatch.length > 0 || allIncs().some(x => x.b), go: () => goShop('shopEgg') },
-  { text: '🐣 부화장에서 알을 부화시키고 깨워요', done: () => S.monsters.length > 0, go: () => goPlot(hatcheries()[0]) },
+  { text: '🐣 부화장에서 알을 깨요', done: () => S.monsters.length > 0, go: () => goPlot(hatcheries()[0]) },
   { text: '🥚 몬스터를 한 마리 더 모아요 (교배하려면 2마리!)', done: () => S.monsters.length >= 2, go: () => (S.hatch.length || allIncs().some(x => x.b) ? goPlot(hatcheries()[0]) : goShop('shopEgg')) },
   { text: '🌾 농장을 지어요. 먹이 🍖를 키우는 곳이에요', done: () => farmIdx().length > 0, go: () => goShop('shopHab') },
   { text: '🌱 농장을 눌러 작물을 심어요', done: () => farmIdx().some(k => S.plots[k].crop != null || S.plots[k].lastCrop != null), go: () => goPlot(farmIdx()[0]) },
@@ -4133,9 +4119,9 @@ const ACTIONS = {
   takeEgg: (d) => takeEgg(d.i, d.s),
   mtnSlot: (d) => { const box = $('#modalBox'), y = box.scrollTop; openBreed(curMtn, Number(d.s)); box.scrollTop = y; },
   openHatch: () => openHatchery(),
-  hatchOne: (d) => incubate(d.idx),
-  incubate: (d) => incubate(d.idx),
-  incubateAll: () => incubateAll(),
+  hatchOne: (d) => oldHatchReveal(d.idx),
+  incubate: (d) => oldHatchReveal(d.idx),
+  incubateAll: () => hatchAll(),
   incGem: (d) => incGem(d.i, d.s),
   crack: (d) => crack(d.i, d.s),
   placeInc: (d) => placeInc(d.i, d.s, d.h),
@@ -4163,7 +4149,7 @@ const ACTIONS = {
   merge: (d) => merge(d.t, d.lv),
   mergeAll: () => mergeAll(),
   upAllHabs: (d) => upAllHabs(d.i),
-  hatchAll: () => incubateAll(),
+  hatchAll: () => hatchAll(),
   feedAll: (d) => feedAll(d.mode),
   team: (d) => toggleTeam(d.uid),
   fight: () => startBattle(),
