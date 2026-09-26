@@ -1,0 +1,15 @@
+{
+  "name": "몬스터 합치기",
+  "short_name": "몬스터 합치기",
+  "description": "몬스터를 모으고, 섞고, 키워서 싸우는 게임",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f1024",
+  "theme_color": "#0f1024",
+  "lang": "ko",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

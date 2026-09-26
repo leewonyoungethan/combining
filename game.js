@@ -469,7 +469,31 @@ const RUNE = {
 const runeText = (r) => `${RUNE[r.t].emoji} ${RUNE[r.t].name} +${RUNE[r.t].vals[r.lv - 1]}% ${'★'.repeat(r.lv)}`;
 
 // ===================== 상태 / 저장 =====================
-const KEY = 'combining-save-v4';
+const KEY = 'combining-save-v4';          // 예전(계정이 없던 때) 저장 위치. 계정별 저장은 KEY:계정id
+// ----- 계정: 이 기기(브라우저) 안에 여러 계정을 만들고, 계정마다 자기 섬을 따로 저장한다 -----
+const ACC_KEY = 'combining-accounts', ACC_CUR = 'combining-current';
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } };
+const lsDel = (k) => { try { localStorage.removeItem(k); } catch (e) { /* 저장 불가 */ } };
+const accKey = (id) => `${KEY}:${id}`;
+function accounts() { try { return JSON.parse(lsGet(ACC_KEY)) || []; } catch (e) { return []; } }
+function saveAccounts(list) { lsSet(ACC_KEY, JSON.stringify(list)); }
+const newAccId = () => 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+let ACC = null;
+(function initAccounts() {
+  let list = accounts();
+  if (!list.length) {
+    // 처음: 예전에 하던 섬이 있으면 첫 계정으로 옮긴다
+    const id = newAccId(), old = lsGet(KEY);
+    let name = '나의 섬';
+    try { const o = JSON.parse(old); if (o && o.nick) name = String(o.nick).slice(0, 10); } catch (e) { /* 없음 */ }
+    list = [{ id, name, pin: null, created: Date.now() }];
+    saveAccounts(list);
+    if (old) lsSet(accKey(id), old);
+    lsSet(ACC_CUR, id);
+  }
+  ACC = list.find(a => a.id === lsGet(ACC_CUR)) || list[0];
+})();
 const SECRET_CODE = '방탄유리';
 
 function newState() {
@@ -488,9 +512,9 @@ function newState() {
   return s;
 }
 
-function load() {
+function load(id = ACC && ACC.id) {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = lsGet(accKey(id));
     if (!raw) return null;
     const s = JSON.parse(raw);
     if (!s || !Array.isArray(s.monsters) || !Array.isArray(s.plots)) return null;
@@ -526,7 +550,8 @@ function load() {
 
 function save() {
   if (VISIT) return;   // 친구 섬 구경 중에는 저장하지 않는다
-  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* 저장 불가 환경 */ }
+  if (!ACC) return;
+  lsSet(accKey(ACC.id), JSON.stringify(S));
 }
 
 let S = load() || newState();
@@ -3986,6 +4011,188 @@ function visitExit() {
   toast('🏠 내 섬으로 돌아왔어요');
 }
 
+// ===================== 계정 =====================
+const pinHash = (id, pin) => hashStr(`pin:${id}:${pin}`).toString(36);
+function accSummary(a) {
+  try {
+    const d = JSON.parse(lsGet(accKey(a.id)));
+    if (!d) return '새 섬';
+    return `몬스터 ${fmt((d.monsters || []).length)} · 도감 ${fmt(Object.keys(d.dex || {}).length)} · 💰${d.infinite ? '∞' : fmt(d.gold || 0)}`;
+  } catch (e) { return '새 섬'; }
+}
+function openLogin() {
+  const list = accounts();
+  const el = $('#login');
+  el.innerHTML = `<div class="login-box">
+    <div class="login-logo">🧬 몬스터 합치기</div>
+    <p class="muted">어느 계정으로 들어갈까요?</p>
+    <div class="acc-list">${list.map(a => `
+      <div class="acc-row">
+        <button class="acc-card ${ACC && a.id === ACC.id ? 'on' : ''}" data-act="accPick" data-id="${a.id}">
+          <span class="acc-icon">👤</span>
+          <span class="acc-nm">${esc(a.name)} ${a.pin ? '🔒' : ''}<small>${accSummary(a)}</small></span>
+        </button>
+        <button class="btn ghost small danger" data-act="accDel" data-id="${a.id}" title="계정 삭제">🗑️</button>
+      </div>`).join('')}</div>
+    <div class="row">
+      <button class="btn" data-act="accNew">➕ 새 계정 만들기</button>
+      <button class="btn ghost" data-act="accImport">📥 다른 기기에서 가져오기</button>
+    </div>
+    <p class="muted small-note">계정은 이 기기(브라우저)에 저장돼요. 다른 기기로 옮기려면 게임 안 👤 메뉴의 📤 옮기기 코드를 쓰세요.</p>
+  </div>`;
+  el.classList.remove('hidden');
+}
+function closeLogin() { $('#login').classList.add('hidden'); }
+function accPick(id) {
+  const a = accounts().find(x => x.id === id);
+  if (!a) return;
+  if (!a.pin) { enterAccount(a); return; }
+  showModal(`<h3>🔒 ${esc(a.name)}</h3>
+    <p class="muted">비밀번호 4자리를 입력해요</p>
+    <input id="accPin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••">
+    <div class="row"><button class="btn" data-act="accPinOk" data-id="${a.id}">들어가기</button><button class="btn ghost" data-act="close">취소</button></div>`);
+  const inp = $('#accPin');
+  inp.focus();
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') accPinOk(a.id); });
+}
+function accPinOk(id) {
+  const a = accounts().find(x => x.id === id);
+  const pin = ($('#accPin') || {}).value || '';
+  if (!a || pinHash(a.id, pin) !== a.pin) { toast('❌ 비밀번호가 달라요'); return; }
+  closeModal();
+  enterAccount(a);
+}
+// 계정으로 들어가기: 지금 섬을 저장하고, 그 계정의 섬을 불러온다
+function enterAccount(a) {
+  if (VISIT) visitExit();
+  if (B) { clearTimeout(B.timer); if (B.pvp) { netSend({ t: 'bye' }); netClose(); } B = null; $('#battle').classList.add('hidden'); }
+  if (ACC && S) save();
+  ACC = a;
+  lsSet(ACC_CUR, a.id);
+  S = load() || newState();
+  if (!S.nick) S.nick = a.name;
+  sel = [];
+  tab = 'island';
+  Object.keys(walkers).forEach(k => delete walkers[k]);
+  closeModal();
+  closeLogin();
+  render();
+  save();
+  toast(`👤 ${a.name}님, 어서 와요!`);
+  setTimeout(afterEnter, 400);
+}
+function openAccNew() {
+  showModal(`<h3>➕ 새 계정</h3>
+    <p class="muted">새 계정은 빈 섬에서 시작해요.</p>
+    <input id="accName" maxlength="10" placeholder="이름 (예: 진희)">
+    <input id="accNewPin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="비밀번호 4자리 (없어도 돼요)">
+    <div class="row"><button class="btn big" data-act="accNewOk">만들기</button><button class="btn ghost" data-act="close">취소</button></div>`);
+  $('#accName').focus();
+}
+function accNewOk() {
+  const name = ($('#accName').value || '').trim().slice(0, 10);
+  const pin = ($('#accNewPin').value || '').trim();
+  if (!name) { toast('이름을 적어 주세요'); return; }
+  if (pin && !/^\d{4}$/.test(pin)) { toast('비밀번호는 숫자 4자리예요'); return; }
+  const list = accounts();
+  if (list.some(a => a.name === name)) { toast('같은 이름의 계정이 이미 있어요'); return; }
+  const a = { id: newAccId(), name, pin: null, created: Date.now() };
+  if (pin) a.pin = pinHash(a.id, pin);
+  list.push(a);
+  saveAccounts(list);
+  enterAccount(a);
+}
+function accDel(id) {
+  const list = accounts(), a = list.find(x => x.id === id);
+  if (!a) return;
+  if (list.length <= 1) { toast('계정이 하나뿐이라 지울 수 없어요'); return; }
+  if (!confirm(`${a.name} 계정을 지울까요? 이 계정의 섬과 몬스터가 모두 사라져요.`)) return;
+  if (!confirm('정말 지울까요? 되돌릴 수 없어요.')) return;
+  lsDel(accKey(id));
+  const rest = list.filter(x => x.id !== id);
+  saveAccounts(rest);
+  if (ACC && ACC.id === id) { ACC = rest[0]; lsSet(ACC_CUR, ACC.id); S = load() || newState(); render(); }
+  toast(`🗑️ ${a.name} 계정을 지웠어요`);
+  openLogin();
+}
+function openAccImport() {
+  showModal(`<h3>📥 다른 기기에서 가져오기</h3>
+    <p class="muted">다른 기기의 👤 메뉴 → 📤 옮기기 코드를 붙여 넣어요.</p>
+    <textarea id="accCode" class="code-box" placeholder="MHS1로 시작하는 코드"></textarea>
+    <div class="row"><button class="btn big green" data-act="accImportOk">가져오기</button><button class="btn ghost" data-act="close">취소</button></div>`);
+}
+async function accImportOk() {
+  let d;
+  try { d = await unpackCode('MHS1', $('#accCode').value); } catch (e) { toast('❌ 올바른 옮기기 코드가 아니에요. 전부 복사했는지 확인해 주세요'); return; }
+  if (!d || d.v !== 1 || !d.save || !Array.isArray(d.save.plots)) { toast('❌ 올바른 옮기기 코드가 아니에요'); return; }
+  const list = accounts();
+  let name = String(d.name || '가져온 섬').slice(0, 10);
+  let n = 2;
+  while (list.some(a => a.name === name)) name = `${String(d.name || '가져온 섬').slice(0, 7)} (${n++})`;
+  const a = { id: newAccId(), name, pin: null, created: Date.now() };
+  if (!lsSet(accKey(a.id), JSON.stringify(d.save))) { toast('저장 공간이 부족해요'); return; }
+  list.push(a);
+  saveAccounts(list);
+  enterAccount(a);
+}
+function openAccountMenu() {
+  showModal(`<h3>👤 ${esc(ACC.name)}</h3>
+    <p class="muted">${accSummary(ACC)}</p>
+    <div class="build-list">
+      <button class="build-opt" data-act="accSwitch" style="--hc:#6f8cff"><span class="bo-ico">🔄</span><span class="bo-nm">계정 바꾸기 / 새 계정</span></button>
+      <button class="build-opt" data-act="accExport" style="--hc:#3fd6a4"><span class="bo-ico">📤</span><span class="bo-nm">이 계정 옮기기 코드<br><small>다른 기기에서 📥 가져오기에 붙여 넣으면 내 섬이 그대로 가요</small></span></button>
+      <button class="build-opt" data-act="accRename" style="--hc:#ffb020"><span class="bo-ico">✏️</span><span class="bo-nm">이름 바꾸기</span></button>
+      <button class="build-opt" data-act="accPinSet" style="--hc:#ff5ce1"><span class="bo-ico">🔒</span><span class="bo-nm">비밀번호 ${ACC.pin ? '바꾸기 / 없애기' : '만들기'}</span></button>
+      <button class="build-opt" data-act="code" style="--hc:#a8b2c1"><span class="bo-ico">🔑</span><span class="bo-nm">비밀코드 입력</span></button>
+    </div>
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+}
+async function accExport() {
+  save();
+  const code = await packCode('MHS1', { v: 1, name: ACC.name, save: S });
+  codeBox('📤 계정 옮기기 코드', code, `다른 기기에서 게임을 열고 계정 화면의 <b>📥 다른 기기에서 가져오기</b>에 붙여 넣어요. (코드 길이 ${fmt(code.length)}자) 코드를 가진 사람은 누구나 이 섬을 가져갈 수 있으니 조심해요!`);
+}
+function accRename() {
+  showModal(`<h3>✏️ 이름 바꾸기</h3><input id="accNewName" maxlength="10" value="${esc(ACC.name)}">
+    <div class="row"><button class="btn" data-act="accRenameOk">바꾸기</button><button class="btn ghost" data-act="close">취소</button></div>`);
+}
+function accRenameOk() {
+  const name = ($('#accNewName').value || '').trim().slice(0, 10);
+  if (!name) return;
+  const list = accounts();
+  if (list.some(a => a.name === name && a.id !== ACC.id)) { toast('같은 이름의 계정이 이미 있어요'); return; }
+  const a = list.find(x => x.id === ACC.id);
+  a.name = name;
+  saveAccounts(list);
+  ACC = a;
+  S.nick = name;
+  save();
+  closeModal();
+  toast(`✏️ 이름을 ${name}(으)로 바꿨어요`);
+}
+function accPinSet() {
+  showModal(`<h3>🔒 비밀번호</h3>
+    <p class="muted">숫자 4자리. 비워 두고 저장하면 비밀번호가 없어져요.</p>
+    <input id="accPinNew" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••">
+    <div class="row"><button class="btn" data-act="accPinSetOk">저장</button><button class="btn ghost" data-act="close">취소</button></div>`);
+}
+function accPinSetOk() {
+  const pin = ($('#accPinNew').value || '').trim();
+  if (pin && !/^\d{4}$/.test(pin)) { toast('비밀번호는 숫자 4자리예요'); return; }
+  const list = accounts(), a = list.find(x => x.id === ACC.id);
+  a.pin = pin ? pinHash(a.id, pin) : null;
+  saveAccounts(list);
+  ACC = a;
+  closeModal();
+  toast(pin ? '🔒 비밀번호를 만들었어요' : '🔓 비밀번호를 없앴어요');
+}
+// 게임에 들어온 뒤: 처음이면 설명, 아니면 일일 보상
+function afterEnter() {
+  if (!$('#modal').classList.contains('hidden') || B || !$('#login').classList.contains('hidden')) return;
+  if (!S.welcomed) openWelcome(0);
+  else if (dailyReady()) openDaily();
+}
+
 // ===================== 속성 상성표 =====================
 const weakTo = (e) => EL.filter(x => BEATS[x.id].includes(e)).map(x => x.id);
 function typeChartHTML() {
@@ -4711,6 +4918,20 @@ const ACTIONS = {
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; drawBattle(); },
   typeChart: () => openTypeChart(),
+  account: () => openAccountMenu(),
+  accSwitch: () => { closeModal(); save(); openLogin(); },
+  accPick: (d) => accPick(d.id),
+  accPinOk: (d) => accPinOk(d.id),
+  accNew: () => openAccNew(),
+  accNewOk: () => accNewOk(),
+  accDel: (d) => accDel(d.id),
+  accImport: () => openAccImport(),
+  accImportOk: () => accImportOk(),
+  accExport: () => accExport(),
+  accRename: () => accRename(),
+  accRenameOk: () => accRenameOk(),
+  accPinSet: () => accPinSet(),
+  accPinSetOk: () => accPinSetOk(),
   giftSend: (d) => openGiftSend(d.k || giftTab),
   giftMon: (d) => giftMon(d.uid),
   giftRes: () => giftRes(),
@@ -4788,11 +5009,14 @@ render();
 requestAnimationFrame(drawWorld);
 setInterval(tick, 250);
 setInterval(updateHud, 30000);   // 자정이 지나면 🎁 점 다시 켜기
-setTimeout(() => {
-  if (!$('#modal').classList.contains('hidden') || B) return;
-  if (!S.welcomed) openWelcome(0);
-  else if (dailyReady()) openDaily();
-}, 900);
+if (accounts().length > 1 || (ACC && ACC.pin)) openLogin();
+setTimeout(afterEnter, 900);
+// 오프라인에서도 켜지도록 (한 번 접속하면 파일을 저장해 둔다)
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').catch(() => { /* 오프라인 저장 불가 */ });
+}
+window.addEventListener('offline', () => toast('📴 오프라인이에요. 실시간 친구 대전 말고는 그대로 할 수 있어요'));
+window.addEventListener('online', () => toast('📶 다시 연결됐어요'));
 setInterval(save, 3000);
 setInterval(updateFinger, 120);
 window.addEventListener('beforeunload', save);

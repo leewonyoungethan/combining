@@ -5,7 +5,11 @@
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>몬스터 합치기</title>
-<link rel="stylesheet" href="style.css?v=64">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f1024">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="style.css?v=65">
 </head>
 <body>
 <canvas id="world"></canvas>
@@ -17,7 +21,7 @@
     <div class="pill"><span>💎</span><b id="gems">0</b></div>
     <div class="pill"><span>🍖</span><b id="food">0</b></div>
     <button class="pill code-btn daily-btn" data-act="daily" title="일일 보상">🎁<i class="dot" id="dailyDot"></i></button>
-    <button class="pill code-btn" data-act="code" title="비밀코드">🔒</button>
+    <button class="pill code-btn" data-act="account" title="계정">👤</button>
     <button class="pill code-btn tut-btn" data-act="help" title="튜토리얼">🎓<span>튜토리얼</span></button>
   </div>
 </header>
@@ -43,11 +47,12 @@
 </nav>
 
 <div id="battle" class="battle hidden"></div>
+<div id="login" class="login hidden"></div>
 <div id="modal" class="modal hidden"><div class="modal-box" id="modalBox"></div></div>
 <div id="toast" class="toast"></div>
 <div id="finger" class="finger hidden"><span class="f-hand">👆</span><span class="f-tip">여기를 눌러요!</span></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
-<script src="game.js?v=64"></script>
+<script src="game.js?v=65"></script>
 </body>
 </html>

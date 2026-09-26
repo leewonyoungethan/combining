@@ -727,3 +727,18 @@ body.ui-hidden .zoom-btns { opacity: .55; }
 .visit-bar.hidden { display: none; }
 body.visiting .bottom-bar, body.visiting #hideBtn, body.visiting .guide, body.visiting .finger { display: none !important; }
 body.visiting .zoom-btns { top: 160px; }
+
+/* 👤 계정 화면 */
+.login { position: fixed; inset: 0; z-index: 48; overflow-y: auto; background: radial-gradient(circle at 50% -10%, #2a2d6b 0%, var(--bg) 65%); display: grid; place-items: center; padding: 20px 16px; }
+.login.hidden { display: none; }
+.login-box { width: 100%; max-width: 440px; text-align: center; }
+.login-logo { font-size: 30px; font-weight: 900; margin-bottom: 6px; }
+.acc-list { display: grid; gap: 8px; margin: 14px 0; }
+.acc-row { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.acc-card { display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px 14px; border-radius: 14px; background: var(--panel); border: 2px solid var(--line); }
+.acc-card.on { border-color: var(--accent); }
+.acc-card:hover { border-color: #7dff8f; }
+.acc-icon { font-size: 30px; }
+.acc-nm { font-weight: 900; font-size: 16px; display: flex; flex-direction: column; gap: 2px; }
+.acc-nm small { font-size: 11px; color: var(--muted); font-weight: 600; }
+.modal-box input[type="password"] { letter-spacing: 8px; }
