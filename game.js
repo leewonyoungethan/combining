@@ -1139,7 +1139,7 @@ function tapAt(sx, sy) {
   if (i >= 0) openPlot(i);
 }
 
-// 건물 꾹 눌러 끌기: 빈 땅에 놓으면 이사, 같은 건물 위에 놓으면 합치기
+// 건물 꾹 눌러 끌기: 빈 땅에 놓으면 그 자리로 옮긴다
 const HOLD_MS = 320;
 let drag = null;
 let carry = null;   // { from, sx, sy, over }
@@ -1147,11 +1147,8 @@ function dropResult(from, to) {
   const p = S.plots[from], q = to >= 0 ? S.plots[to] : undefined;
   if (to < 0 || to === from) return { ok: false };
   if (!q) return { ok: true, kind: 'move', text: '🚚 여기로 옮기기' };
-  if (p.kind === 'hatchery' && q.kind === 'hatchery') return { ok: true, kind: 'merge', text: `🔗 합치기 → ${(p.cap || HATCH_CAP) + (q.cap || HATCH_CAP) + 1}칸` };
-  if (p.kind === 'mountain' && q.kind === 'mountain') {
-    return { ok: true, kind: 'merge', text: `🔗 합치기 → 큰 교배산 Lv.${(p.lv || 1) + (q.lv || 1)} (동시에 ${(p.lv || 1) + (q.lv || 1)}쌍)` };
-  }
-  return { ok: false, text: '같은 건물끼리만 합칠 수 있어요' };
+  // 건물 합치기는 없앴다: 빈 땅으로 옮기기만 된다
+  return { ok: false, text: '빈 땅에만 옮길 수 있어요' };
 }
 function dropBuilding(from, to) {
   const r = dropResult(from, to);
@@ -1206,7 +1203,7 @@ cv.addEventListener('pointerdown', (e) => {
       if (!drag || drag.moved || pinch) return;
       carry = { from: i, sx: drag.sx, sy: drag.sy, over: i };
       if (navigator.vibrate) try { navigator.vibrate(25); } catch (err) { /* 진동 없음 */ }
-      toast('끌어서 빈 땅에 놓으면 옮기고, 같은 건물 위에 놓으면 합쳐요');
+      toast('끌어서 빈 땅에 놓으면 그 자리로 옮겨요');
     }, HOLD_MS);
   }
 });
@@ -1729,7 +1726,6 @@ function mountainFooter(i) {
   return `<div class="row">
     ${n > 1 ? `<span class="muted small-note">교배산 ${mountains().indexOf(i) + 1}/${n} ${islandLabel(i)}</span>` : ''}
     ${(S.plots[i].lv || 1) > 1 ? `<span class="muted small-note">⭐ 큰 교배산 Lv.${S.plots[i].lv} · 동시에 ${mtnSlots(S.plots[i]).length}쌍 교배</span>` : ''}
-    ${n > 1 ? '<span class="muted small-note">💡 섬에서 교배산을 꾹 눌러 다른 교배산 위로 끌면 합쳐져요</span>' : ''}
     ${(S.plots[i].lv || 1) > 1 ? `<button class="btn ghost small" data-act="splitMtn" data-i="${i}">🔓 합치기 취소 (${S.plots[i].lv}개로 나누기)</button>` : ''}
     ${canDemolish ? `<button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 철거 (+💰 ${fmt(MOUNTAIN_COST / 2)})</button>` : ''}
     <button class="btn ghost small" data-act="close">닫기</button>
@@ -2011,8 +2007,6 @@ function openHatchery(i = curHatch, slot) {
       : '<p class="muted">알이 없어요. 교배산이나 상점에서 알을 가져오세요!</p>'}</div>
     ${S.hatch.length + leftover.length > 1 ? '<div class="all-box"><button class="btn green" data-act="hatchAll">🐣 모두 부화 (알맞은 서식지로 자동 이사)</button></div>' : ''}
     <p class="muted small-note">부화장 ${n}개가 알을 같이 보관해요 (${hatcheries().map(k => (S.plots[k].cap || HATCH_CAP) + '칸').join(' + ')}${mtnPower() > 1 ? ` + 교배산 추가분 ${2 * (mtnPower() - 1)}칸` : ''})</p>
-    ${n > 1 ? '<p class="muted small-note">💡 부화장을 합치면 보관 칸이 모두 합쳐지고 보너스 1칸이 붙어요. 섬에서 꾹 눌러 다른 부화장 위로 끌어도 합쳐져요</p>' : ''}
-    ${n > 1 ? `<div class="all-box"><button class="btn small" data-act="mergePick" data-i="${i}">🔗 다른 부화장과 합쳐서 큰 부화장 만들기</button></div>` : ''}
     <div class="row">
       ${(p.lv || 1) > 1 ? `<button class="btn ghost small" data-act="splitHatch" data-i="${i}">🔓 합치기 취소 (${p.lv}개로 나누기)</button>` : ''}
       ${n > 1 && !busy ? `<button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 이 부화장 철거 (+💰 ${fmt(demolishRefund(p))})</button>` : ''}
