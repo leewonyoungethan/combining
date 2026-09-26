@@ -1,6 +1,6 @@
 // 오프라인에서도 게임이 켜지도록 파일을 저장해 둔다.
 // 인터넷이 되면 항상 새 파일을 먼저 받아서 저장하고(업데이트 반영), 안 되면 저장해 둔 파일을 쓴다.
-const CACHE = 'monhap-v9';
+const CACHE = 'monhap-v10';
 const CORE = ['./', './index.html', './style.css', './game.js', './manifest.webmanifest', './icon.svg', './icon-180.png', './icon-192.png', './icon-512.png', './icon-maskable.png', './opening.mp4'];
 
 self.addEventListener('install', (e) => {

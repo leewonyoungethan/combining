@@ -13,13 +13,28 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="몬스터 합치기">
-<link rel="stylesheet" href="style.css?v=74">
+<link rel="stylesheet" href="style.css?v=76">
 </head>
 <body>
 <div id="opening" class="opening">
   <video id="openingVideo" src="opening.mp4" playsinline webkit-playsinline preload="auto"></video>
   <div id="openingTap" class="opening-tap hidden">👆 화면을 눌러 시작</div>
   <button id="openingSkip" class="opening-skip">건너뛰기 ⏭</button>
+</div>
+<div id="loader" class="loader">
+  <div class="ld-rays"></div>
+  <div class="ld-stars"></div>
+  <div class="ld-center">
+    <div class="ld-logo"><div class="ld-ring"><div class="ld-orbit"><span style="--a:0deg"><i>🐉</i></span><span style="--a:45deg"><i>🦊</i></span><span style="--a:90deg"><i>🐙</i></span><span style="--a:135deg"><i>🦄</i></span><span style="--a:180deg"><i>🐢</i></span><span style="--a:225deg"><i>🦅</i></span><span style="--a:270deg"><i>🐺</i></span><span style="--a:315deg"><i>🦖</i></span></div></div><img src="icon.svg" alt=""></div>
+    <h1 class="ld-title">몬스터 합치기</h1>
+    <div class="ld-sub">MONSTER MERGE</div>
+  </div>
+  <div class="ld-bottom">
+    <div class="ld-status" id="ldStatus">섬을 불러오는 중…</div>
+    <div class="ld-bar"><i id="ldFill"></i><b id="ldPct">0%</b></div>
+    <div class="ld-tip" id="ldTip"></div>
+    <div class="ld-credit">LEE WONYOUNG STUDIOS</div>
+  </div>
 </div>
 <canvas id="world"></canvas>
 
@@ -64,6 +79,6 @@
 <div id="finger" class="finger hidden"><span class="f-hand">👆</span><span class="f-tip">여기를 눌러요!</span></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
-<script src="game.js?v=74"></script>
+<script src="game.js?v=76"></script>
 </body>
 </html>

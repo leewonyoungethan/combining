@@ -5435,7 +5435,7 @@ document.addEventListener('click', (e) => {
 // 소리 있는 영상은 브라우저가 자동 재생을 막는다 → 막히면 "화면을 눌러 시작"을 보여 주고, 누르면 소리와 함께 재생
 function runOpening() {
   const box = $('#opening'), v = $('#openingVideo');
-  if (!box || !v) return;
+  if (!box || !v) { startLoading(); return; }
   let done = false;
   const end = () => {
     if (done) return;
@@ -5443,6 +5443,7 @@ function runOpening() {
     try { v.pause(); } catch (e) { /* 이미 멈춤 */ }
     box.classList.add('fade');
     setTimeout(() => box.remove(), 500);
+    startLoading();
   };
   const safety = (ms) => setTimeout(end, ms);
   v.addEventListener('ended', end);
@@ -5468,6 +5469,63 @@ function runOpening() {
   if (p && p.then) p.then(() => safety(8000)).catch(tapToStart);
   else safety(8000);
 }
+// ----- ⏳ 로딩 화면: 글꼴 준비, 지금 섬 몬스터 그림 미리 그리기, 친구 대전 준비 -----
+const LOAD_TIPS = [
+  '💡 같은 속성 몬스터 두 마리를 섞으면 그 속성의 새 몬스터가 나와요',
+  '💡 서식지 레벨이 오를수록 몬스터 자리와 골드가 늘어나요',
+  '💡 📖 도감에서 몬스터를 누르면 가장 잘 나오는 교배 조합을 알려 줘요',
+  '💡 강한 속성으로 공격하면 피해가 1.5배! 📘 상성표를 확인해요',
+  '💡 📋 미션을 깨면 매일 💎 보석을 받을 수 있어요',
+  '💡 🎨 장식을 놓으면 그 섬 서식지 골드가 올라요',
+  '💡 🤖 자동 전투를 켜면 몬스터가 알아서 싸워요',
+  '💡 오래 자라는 작물일수록 먹이 효율이 좋아요',
+  '💡 👥 친구와 4자리 코드로 선물을 주고받을 수 있어요',
+  '💡 건물을 꾹 눌러 끌면 다른 빈 땅으로 옮길 수 있어요',
+];
+let loadingStarted = false;
+async function startLoading() {
+  if (loadingStarted) return;
+  loadingStarted = true;
+  const box = $('#loader');
+  if (!box) { setTimeout(afterEnter, 200); return; }
+  $('#ldTip').textContent = pick(LOAD_TIPS);
+  let shown = 0, target = 0;
+  const bar = setInterval(() => {
+    shown += Math.max(0.4, (target - shown) * 0.18);
+    if (shown > target) shown = target;
+    $('#ldFill').style.width = shown + '%';
+    $('#ldPct').textContent = Math.floor(shown) + '%';
+  }, 30);
+  const stage = (pct, text) => { target = pct; $('#ldStatus').textContent = text; };
+  const pause = (ms) => new Promise(r => setTimeout(r, ms));
+  const t0 = Date.now();
+  stage(20, '🏝️ 섬을 불러오는 중…');
+  try { if (document.fonts && document.fonts.ready) await Promise.race([document.fonts.ready, pause(1500)]); } catch (e) { /* 글꼴 없음 */ }
+  await pause(350);
+  stage(55, '🐣 몬스터를 깨우는 중…');
+  // 지금 섬에 나오는 그림(몬스터·건물·장식)을 미리 그려 두면 첫 화면이 부드럽다
+  try {
+    const sc = DPR * cam.z, want = new Set(['💰', '⛵', ...ISLANDS[S.isl || 0].decor]);
+    islandRange(S.isl || 0).forEach(i => { const p = S.plots[i]; if (p && p.kind === 'hab') { want.add(habEmoji(p.el)); habMons(i).forEach(m => want.add(CAT[m.type].face)); } });
+    const list = [...want];
+    for (let k = 0; k < list.length; k++) {
+      [44, 48, 80].forEach(size => { const w = size * sc; emojiSprite(list[k], Math.max(8, Math.min(320, w < 64 ? Math.ceil(w / 4) * 4 : Math.ceil(w / 16) * 16))); });
+      if (k % 6 === 5) await pause(0);
+    }
+  } catch (e) { /* 미리 그리기는 못 해도 괜찮다 */ }
+  await pause(350);
+  stage(85, '⚔️ 모험을 준비하는 중…');
+  await pause(400);
+  stage(100, '✨ 준비 완료!');
+  await pause(Math.max(450, 2200 - (Date.now() - t0)));
+  clearInterval(bar);
+  $('#ldFill').style.width = '100%';
+  $('#ldPct').textContent = '100%';
+  box.classList.add('fade');
+  setTimeout(() => box.remove(), 600);
+  setTimeout(afterEnter, 350);
+}
+
 runOpening();
 
 tick();
@@ -5476,7 +5534,7 @@ requestAnimationFrame(drawWorld);
 setInterval(tick, 250);
 setInterval(updateHud, 30000);   // 자정이 지나면 🎁 점 다시 켜기
 if (accounts().length > 1 || (ACC && ACC.pin)) openLogin();
-setTimeout(afterEnter, 900);
+// 환영/일일 보상 창은 로딩 화면이 끝난 뒤에 (startLoading에서)
 // 오프라인에서도 켜지도록 (한 번 접속하면 파일을 저장해 둔다)
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   // 새 버전 확인: 켤 때 + 30분마다. 새 파일이 준비되면 알려 주고, 누르면 저장한 뒤 새로 켠다
