@@ -4225,6 +4225,7 @@ async function accImportOk() {
   enterAccount(a);
 }
 function openAccountMenu() {
+  tutFlag('account', true);
   showModal(`<h3>👤 ${esc(ACC.name)}</h3>
     <p class="muted">${accSummary(ACC)}</p>
     <div class="build-list">
@@ -4697,6 +4698,7 @@ const TUT = [
   { text: '📖 도감에서 몬스터를 눌러 추천 교배 조합을 봐요', done: () => tutFlag('dex'), go: () => { closeModal(); tab = 'dex'; render(); } },
   { text: '🎨 섬 꾸미기 장식을 하나 놓아요 (섬 골드가 올라요!)', done: () => S.plots.some(p => p && p.kind === 'deco'), go: () => goShop('shopDeco') },
   { text: '👹 모험 탭의 보스전에 도전해 봐요', done: () => tutFlag('boss') || Object.keys(S.bossCleared || {}).length > 0, go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.boss-list'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
+  { text: '👤 오른쪽 위 👤를 눌러 계정 메뉴를 봐요 (계정·옮기기·비밀번호)', done: () => tutFlag('account'), go: () => { closeModal(); openAccountMenu(); } },
   { text: '👥 친구 칸에서 대전·선물·섬 구경을 둘러봐요', done: () => tutFlag('friends'), go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
 ];
 // 한 번 해 본 기능 기록 (튜토리얼 단계 확인용)
@@ -4761,7 +4763,10 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return S.team.length ? ['[data-act=bossFight]:not([disabled])'] : ['#view [data-act=team]'];
-    case 13: // 친구
+    case 13: // 계정
+      if (inModal) return ['#modalBox [data-act=accExport]', '#modalBox [data-act=close]'];
+      return ['.hud [data-act=account]'];
+    case 14: // 친구
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=giftSend]'];
@@ -4897,7 +4902,8 @@ const WELCOME = [
   { icon: '🏔️', title: '교배', text: '<b>Lv.4</b> 몬스터 두 마리를 교배산에 넣으면 <b>새 몬스터</b>가 태어나요!<br>등급은 <b>일반 → … → 서사 → 전설 → 신화</b>까지 15단계. 타이머가 길수록 좋은 등급이에요.<br>📖 도감에서 몬스터를 누르면 <b>추천 교배 조합</b>을 알려 줘요.' },
   { icon: '🏝️', title: '섬 18개', text: '위쪽 <b>◀ ▶</b>로 섬을 옮겨 다녀요. 건물을 <b>꾹 눌러 끌면</b> 빈 땅으로 옮겨져요.<br>🎨 장식을 놓으면 그 섬 골드가 올라요.<br>두 손가락으로 <b>확대</b>, 🙈 숨기기로 이름표를 감출 수 있어요.' },
   { icon: '⚔️', title: '모험과 보스', text: '몬스터 3마리로 팀을 짜서 싸워요. 📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!<br>👹 보스전에서는 에너지가 엄청 많은 보스와 싸워요.' },
-  { icon: '👥', title: '친구와 함께', text: '모험 탭 <b>👥 친구</b> 칸에서<br>⚔️ 방 코드로 <b>실시간 대전</b>, 🎁 <b>선물 코드</b> 주고받기, 👀 <b>친구 섬 구경</b>을 할 수 있어요.' },
+  { icon: '👥', title: '친구와 함께', text: '모험 탭 <b>👥 친구</b> 칸에서<br>⚔️ 방 코드로 <b>실시간 대전</b>, 🎁 <b>선물</b> 주고받기, 👀 <b>친구 섬 구경</b>을 할 수 있어요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요. 친구가 받을 때까지 코드 창을 열어 두세요!' },
+  { icon: '👤', title: '계정과 오프라인', text: '오른쪽 위 <b>👤</b>에서 <b>계정</b>을 여러 개 만들 수 있어요. 계정마다 <b>자기 섬</b>이 따로 있고, 🔒 비밀번호도 걸 수 있어요.<br>다른 기기로는 <b>📤 옮기기 코드</b>로 섬을 옮겨요.<br>한 번 접속하면 <b>인터넷 없이도</b> 켜지고, 홈 화면에 앱처럼 설치할 수 있어요.' },
   { icon: '🎁', title: '매일 들어오면', text: '오른쪽 위 <b>🎁</b>에서 매일 <b>일일 보상</b>을 받아요. 7일째엔 큰 보상!' },
   { icon: '💡', title: '모르겠으면?', text: '화면 아래 <b>노란 말풍선</b>을 누르면 다음에 할 곳으로 데려가 주고, <b>👆 손가락</b>이 누를 곳을 알려 줘요.<br>오른쪽 위 <b>🎓 튜토리얼</b> 버튼으로 언제든 다시 볼 수 있어요.' },
 ];
