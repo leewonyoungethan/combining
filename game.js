@@ -4234,6 +4234,7 @@ function openAccountMenu() {
       <button class="build-opt" data-act="accRename" style="--hc:#ffb020"><span class="bo-ico">✏️</span><span class="bo-nm">이름 바꾸기</span></button>
       <button class="build-opt" data-act="accPinSet" style="--hc:#ff5ce1"><span class="bo-ico">🔒</span><span class="bo-nm">비밀번호 ${ACC.pin ? '바꾸기 / 없애기' : '만들기'}</span></button>
       <button class="build-opt" data-act="code" style="--hc:#a8b2c1"><span class="bo-ico">🔑</span><span class="bo-nm">비밀코드 입력</span></button>
+      <button class="build-opt" data-act="hardRefresh" style="--hc:#5cc8ff"><span class="bo-ico">🔄</span><span class="bo-nm">최신 버전으로 새로고침<br><small>앱이 옛날 모습이면 눌러 보세요 (섬은 그대로예요)</small></span></button>
     </div>
     <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
 }
@@ -5013,6 +5014,8 @@ const ACTIONS = {
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; drawBattle(); },
   typeChart: () => openTypeChart(),
+  applyUpdate: () => { if (B && !B.over) { toast('전투가 끝나면 적용할게요'); return; } save(); location.reload(); },
+  hardRefresh: () => { toast('🔄 최신 버전을 받는 중…'); hardRefresh(); },
   account: () => openAccountMenu(),
   accSwitch: () => { closeModal(); save(); openLogin(); },
   accPick: (d) => accPick(d.id),
@@ -5109,7 +5112,32 @@ if (accounts().length > 1 || (ACC && ACC.pin)) openLogin();
 setTimeout(afterEnter, 900);
 // 오프라인에서도 켜지도록 (한 번 접속하면 파일을 저장해 둔다)
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-  navigator.serviceWorker.register('sw.js').catch(() => { /* 오프라인 저장 불가 */ });
+  // 새 버전 확인: 켤 때 + 30분마다. 새 파일이 준비되면 알려 주고, 누르면 저장한 뒤 새로 켠다
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    reg.update().catch(() => {});
+    setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
+  }).catch(() => { /* 오프라인 저장 불가 */ });
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return;   // 처음 설치될 때는 알리지 않는다
+    showUpdateBanner();
+  });
+}
+function showUpdateBanner() {
+  if ($('#updateBanner')) return;
+  const b = document.createElement('button');
+  b.id = 'updateBanner';
+  b.className = 'update-banner';
+  b.dataset.act = 'applyUpdate';
+  b.innerHTML = '✨ 새 버전이 나왔어요! <b>눌러서 적용</b>';
+  document.body.appendChild(b);
+}
+// 옛 파일을 지우고 최신 버전으로 다시 켜기 (저장은 그대로)
+async function hardRefresh() {
+  save();
+  try { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); } catch (e) { /* 캐시 없음 */ }
+  try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.update())); } catch (e) { /* 없음 */ }
+  location.reload();
 }
 window.addEventListener('offline', () => toast('📴 오프라인이에요. 실시간 친구 대전 말고는 그대로 할 수 있어요'));
 window.addEventListener('online', () => toast('📶 다시 연결됐어요'));
