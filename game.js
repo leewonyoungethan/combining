@@ -682,7 +682,8 @@ document.addEventListener('pointerup', function autoFull() {
 
 // ----- 🎵 배경음악: 파일 없이 직접 연주한다 (섬 / 전투 두 곡) -----
 const musicOn = () => lsGet('combining-music') !== 'off';
-const CH = { C: [48, 60, 64, 67], G: [43, 59, 62, 67], Am: [45, 60, 64, 69], F: [41, 60, 65, 69], Em: [40, 59, 64, 67], E: [40, 56, 59, 64] };
+const CH = { C: [48, 60, 64, 67], G: [43, 59, 62, 67], Am: [45, 60, 64, 69], F: [41, 60, 65, 69], Em: [40, 59, 64, 67], E: [40, 56, 59, 64],
+  Dm: [38, 62, 65, 69], Bb: [46, 62, 65, 70], Gm: [43, 62, 67, 70] };
 // 멜로디는 [음 높이(MIDI), 8분음표 몇 개]  (0 = 쉼표)
 const SONGS = {
   island: {
@@ -697,6 +698,21 @@ const SONGS = {
       [74, 2], [71, 2], [74, 2], [79, 2],
       [81, 2], [79, 1], [77, 1], [76, 2], [74, 2],
       [74, 2], [76, 2], [72, 4],
+    ],
+  },
+  // 상점: 오르골처럼 톡톡 튀는 귀여운 곡 (F장조)
+  shop: {
+    bpm: 118, drums: 'shop', vol: 1, lead: 'sine', pluck: true,
+    chords: ['F', 'Dm', 'Bb', 'C', 'F', 'Dm', 'Gm', 'C'],
+    melody: [
+      [81, 1], [84, 1], [81, 1], [77, 1], [79, 2], [81, 2],
+      [77, 1], [74, 1], [77, 1], [81, 1], [86, 2], [84, 2],
+      [86, 1], [84, 1], [82, 1], [81, 1], [82, 2], [77, 2],
+      [79, 2], [76, 1], [79, 1], [84, 4],
+      [84, 1], [81, 1], [77, 1], [81, 1], [84, 2], [89, 2],
+      [88, 1], [86, 1], [84, 1], [81, 1], [86, 4],
+      [82, 1], [81, 1], [79, 1], [77, 1], [79, 2], [82, 2],
+      [81, 2], [79, 2], [77, 4],
     ],
   },
   battle: {
@@ -757,9 +773,12 @@ function songEvents(song) {
     const ch = CH[c], b0 = bar * 8;
     for (let s = 0; s < 8; s++) {
       ev.push({ at: b0 + s, k: 'arp', m: ch[1 + [0, 1, 2, 1][s % 4]] + (s >= 4 ? 12 : 0) });
-      if (song.drums === 'hard' ? true : s % 4 === 0) ev.push({ at: b0 + s, k: 'bass', m: ch[0] + (song.drums === 'hard' && s % 2 ? 12 : 0), len: song.drums === 'hard' ? 1 : 3 });
+      if (song.drums === 'shop') {
+        // 걸어 다니는 베이스: 근음과 5도를 번갈아
+        if (s % 2 === 0) ev.push({ at: b0 + s, k: 'bass', m: ch[0] + (s % 4 === 2 ? 7 : 0), len: 2 });
+      } else if (song.drums === 'hard' ? true : s % 4 === 0) ev.push({ at: b0 + s, k: 'bass', m: ch[0] + (song.drums === 'hard' && s % 2 ? 12 : 0), len: song.drums === 'hard' ? 1 : 3 });
       if (s % 4 === 0 || (song.drums === 'hard' && s % 2 === 0)) ev.push({ at: b0 + s, k: 'kick' });
-      if (song.drums === 'hard' && s % 4 === 2) ev.push({ at: b0 + s, k: 'snare' });
+      if ((song.drums === 'hard' || song.drums === 'shop') && s % 4 === 2) ev.push({ at: b0 + s, k: 'snare' });
       if (s % 2 === 1 || song.drums === 'hard') ev.push({ at: b0 + s, k: 'hat' });
     }
   });
@@ -776,11 +795,15 @@ function musicTick() {
     const at = MUS.step % song.len, t = MUS.next, dest = MUS.gain, v = song.vol;
     ev.forEach(x => {
       if (x.at !== at) return;
-      if (x.k === 'mel') mTone(dest, t, x.m, x.len * e8 * 0.95, 'triangle', 0.09 * v, 0.02);
+      if (x.k === 'mel' && song.pluck) {
+        // 오르골 소리: 짧게 울리고 한 옥타브 위 방울 소리를 살짝
+        mTone(dest, t, x.m, Math.min(x.len * e8, 0.5), song.lead, 0.11 * v, 0.005);
+        mTone(dest, t, x.m + 12, 0.25, 'sine', 0.03 * v, 0.005);
+      } else if (x.k === 'mel') mTone(dest, t, x.m, x.len * e8 * 0.95, song.lead || 'triangle', 0.09 * v, 0.02);
       else if (x.k === 'arp') mTone(dest, t, x.m, e8 * 0.9, 'sine', 0.035 * v);
       else if (x.k === 'bass') mTone(dest, t, x.m, x.len * e8 * 0.9, 'triangle', 0.1 * v, 0.01);
       else if (x.k === 'kick') mKick(dest, t, (song.drums === 'hard' ? 0.22 : 0.14) * v);
-      else if (x.k === 'snare') mNoise(dest, t, 0.14, 0.09 * v, 1500);
+      else if (x.k === 'snare') mNoise(dest, t, song.drums === 'shop' ? 0.06 : 0.14, (song.drums === 'shop' ? 0.05 : 0.09) * v, song.drums === 'shop' ? 3000 : 1500);
       else if (x.k === 'hat') mNoise(dest, t, 0.04, 0.025 * v, 7000);
     });
     MUS.step++;
@@ -808,10 +831,11 @@ function setMusic(name) {
 }
 function startMusic() {
   MUS.started = true;
-  setMusic('island');
+  setMusic(wantSong());
 }
 // 전투 중이면 전투 곡, 아니면 섬 곡
-setInterval(() => { if (MUS.started) setMusic(B && !B.over ? 'battle' : 'island'); }, 400);
+const wantSong = () => (B && !B.over ? 'battle' : tab === 'shop' ? 'shop' : 'island');
+setInterval(() => { if (MUS.started) setMusic(wantSong()); }, 400);
 // 소리가 막혀 있으면 화면을 처음 누를 때 켠다
 ['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, () => { if (AC && AC.state === 'suspended' && !document.hidden) AC.resume(); }, true));
 document.addEventListener('visibilitychange', () => {
@@ -821,7 +845,7 @@ document.addEventListener('visibilitychange', () => {
 });
 function toggleMusic() {
   lsSet('combining-music', musicOn() ? 'off' : 'on');
-  if (musicOn()) { MUS.started = true; audioCtx(); if (AC && AC.state === 'suspended') AC.resume(); setMusic(B && !B.over ? 'battle' : 'island'); } else setMusic(null);
+  if (musicOn()) { MUS.started = true; audioCtx(); if (AC && AC.state === 'suspended') AC.resume(); setMusic(wantSong()); } else setMusic(null);
   toast(musicOn() ? '🎵 배경음악을 켰어요' : '🎵 배경음악을 껐어요');
   openAccountMenu();
 }
