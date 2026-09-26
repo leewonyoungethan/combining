@@ -622,12 +622,25 @@ const SFX = {
   err:   [[180, 0.12, 'sawtooth', 0.05]],
   yay:   [[784, 0.08, 'triangle', 0.08], [988, 0.08, 'triangle', 0.08, 0.08], [1175, 0.08, 'triangle', 0.08, 0.16], [1568, 0.25, 'triangle', 0.08, 0.24]],
 };
+const MUSIC_VOL = 0.42, DUCK_VOL = 0.1;
+// 효과음이 나는 동안 배경음악 줄이기
+function duckMusic(sec) {
+  if (typeof MUS === 'undefined' || !MUS.gain || !AC) return;
+  const g = MUS.gain.gain, now = AC.currentTime;
+  if (g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(now);
+  else { const v = g.value; g.cancelScheduledValues(now); g.setValueAtTime(v, now); }
+  g.linearRampToValueAtTime(DUCK_VOL, now + 0.04);
+  g.setValueAtTime(DUCK_VOL, now + sec + 0.05);
+  g.linearRampToValueAtTime(MUSIC_VOL, now + sec + 0.6);
+}
 function sfx(kind) {
   if (!soundOn() || !SFX[kind]) return;
   try {
     if (!audioCtx()) return;
     if (AC.state === 'suspended') AC.resume();
     const t0 = AC.currentTime + 0.01;
+    const len = Math.max(...SFX[kind].map(([, d, , , at = 0]) => at + d));
+    duckMusic(len);
     SFX[kind].forEach(([f, d, type, vol, at = 0]) => {
       const o = AC.createOscillator(), g = AC.createGain();
       o.type = type; o.frequency.value = f;
@@ -849,7 +862,7 @@ function setMusic(name) {
   if (!name) return;
   MUS.gain = AC.createGain();
   MUS.gain.gain.setValueAtTime(0.0001, AC.currentTime);
-  MUS.gain.gain.linearRampToValueAtTime(0.55, AC.currentTime + 1.2);
+  MUS.gain.gain.linearRampToValueAtTime(MUSIC_VOL, AC.currentTime + 1.2);
   MUS.gain.connect(AC.destination);
   MUS.step = 0;
   MUS.next = AC.currentTime + 0.1;
@@ -3296,10 +3309,11 @@ function renderAdventure() {
       <div class="row"><button class="btn big" data-act="fight" ${team.length ? '' : 'disabled'}>⚔️ 전투 시작</button></div>
     </div>
     <div class="stage-box pvp-box">
-      <h3>👥 친구</h3>
-      <p class="muted">친구와 실시간으로 싸우거나, 코드로 선물을 주고받고 섬을 구경해요.</p>
+      <h3>👥 대전 · 친구</h3>
+      <p class="muted"><b>🌍 랜덤 대전</b>으로 모르는 사람과 바로 싸우거나, 친구와 방 코드로 싸우고 선물·섬 구경도 해요.</p>
       <div class="friend-grid">
-        <button class="btn" data-act="pvp">⚔️ 실시간 대전<small>이기면 💰${fmt(PVP_REWARD.gold)} + 💎${PVP_REWARD.gems}</small></button>
+        <button class="btn big-rnd" data-act="pvpRandom">🌍 랜덤 대전<small>모르는 사람과 바로 매칭!</small></button>
+        <button class="btn" data-act="pvp">⚔️ 친구 대전<small>이기면 💰${fmt(PVP_REWARD.gold)} + 💎${PVP_REWARD.gems}</small></button>
         <button class="btn" data-act="giftSend">🎁 선물 보내기<small>몬스터·골드·룬</small></button>
         <button class="btn green" data-act="giftRecv">📥 선물 받기${(S.giftBox || []).length ? `<small>📦 보관함 ${S.giftBox.length}</small>` : '<small>코드 붙여넣기</small>'}</button>
         <button class="btn" data-act="islandShare">🏝️ 내 섬 코드<small>친구에게 보여 주기</small></button>
@@ -3930,7 +3944,9 @@ function openPvp() {
   showModal(`<h3>👥 친구 대전</h3>
     <p class="muted">방 코드로 친구와 연결해서 실시간으로 싸워요. 모험 탭의 <b>내 팀</b>(${n}마리)으로 싸워요.</p>
     ${n ? '' : '<p class="warn">먼저 모험 탭에서 팀을 짜 주세요!</p>'}
-    <input id="pvpName" maxlength="10" value="${esc(S.nick || '')}" placeholder="내 이름 (친구에게 보여요)">
+    <input id="pvpName" maxlength="10" value="${esc(S.nick || '')}" placeholder="내 이름 (상대에게 보여요)">
+    <div class="row"><button class="btn big green" data-act="pvpRandom" ${n ? '' : 'disabled'}>🌍 모르는 사람과 랜덤 대전</button></div>
+    <p class="muted">친구와 하려면 👇</p>
     <div class="row"><button class="btn big" data-act="pvpHost" ${n ? '' : 'disabled'}>🏠 방 만들기</button></div>
     <p class="muted">또는 친구가 알려 준 방 코드 입력</p>
     <input id="pvpCode" maxlength="6" placeholder="예: K7QM2P" style="text-transform:uppercase">
@@ -3991,6 +4007,108 @@ function pvpJoin() {
     netClose();
   });
 }
+const RND_PREFIX = 'monhap-rnd1-', RND_SLOTS = 10, RND_HOST_WAIT = 30000, RND_MAX = 180000;
+function pvpRandom() {
+  saveNick();
+  if (!S.team.map(byUid).filter(Boolean).length) { toast('먼저 모험 탭에서 팀을 짜 주세요!'); return; }
+  netClose();
+  NET = { random: true, role: null, t0: Date.now(), tries: 0 };
+  rndWaitUI('상대를 찾는 중…');
+  rndSearch();
+}
+function rndAlive(n) { return NET === n && !NET.started; }
+function rndWaitUI(text) {
+  const n = NET;
+  if (!n || n.started) return;
+  const sec = Math.floor((Date.now() - n.t0) / 1000);
+  pvpWaitModal('🌍 랜덤 대전', `<div class="rnd-radar"><span>🔍</span></div>
+    <p><b>${text}</b></p>
+    <p class="muted" id="rndTime">${sec}초째 찾는 중 · 전 세계 몬스터 합치기 플레이어와 싸워요</p>`);
+  clearInterval(n.uiTimer);
+  n.uiTimer = setInterval(() => {
+    if (NET !== n || n.started) { clearInterval(n.uiTimer); return; }
+    const el = $('#rndTime');
+    if (el) el.textContent = `${Math.floor((Date.now() - n.t0) / 1000)}초째 찾는 중 · 전 세계 몬스터 합치기 플레이어와 싸워요`;
+    if (Date.now() - n.t0 > RND_MAX) { clearInterval(n.uiTimer); netClose(); closeModal(); toast('지금은 대전할 상대가 없어요. 조금 뒤에 다시 해 봐요!'); }
+  }, 1000);
+}
+// 1단계: 기다리는 사람 찾기
+function rndSearch() {
+  const n = NET;
+  if (!rndAlive(n)) return;
+  try { n.peer && n.peer.destroy(); } catch (e) { /* 이미 닫힘 */ }
+  n.role = 'guest';
+  n.conn = null;
+  n.empty = null;
+  const peer = new Peer();
+  n.peer = peer;
+  let k = 0, timer = null;
+  const next = () => {
+    clearTimeout(timer);
+    if (!rndAlive(n) || n.peer !== peer) return;
+    try { n.conn && n.conn.close(); } catch (e) { /* 이미 닫힘 */ }
+    n.conn = null;
+    if (k >= RND_SLOTS) { rndHost(n.empty == null ? RND_SLOTS : n.empty); return; }   // 처음 본 빈 자리에서 기다리기
+    const conn = peer.connect(RND_PREFIX + (k++), { reliable: true });
+    n.conn = conn;
+    timer = setTimeout(next, 9000);   // 대답이 없으면 다음 자리 (연결이 열리는 데 몇 초 걸릴 수 있다)
+    conn.on('open', () => {
+      if (!rndAlive(n) || n.conn !== conn) return;
+      clearTimeout(timer);
+      rndWaitUI('상대를 찾았어요! 연결하는 중…');
+      netSend({ t: 'hello', name: S.nick || '플레이어', team: myTeamData() });
+      timer = setTimeout(next, 8000);   // 상대가 대전을 시작하지 않으면(이미 다른 사람과 싸우는 중) 다음 자리
+    });
+    conn.on('data', (msg) => { if (n.conn === conn) { if (msg && msg.t === 'start') clearTimeout(timer); onNet(msg); } });
+    conn.on('close', () => { if (n.conn !== conn) return; if (rndAlive(n)) next(); else onNetClose(); });
+    conn.on('error', () => { if (n.conn === conn && rndAlive(n)) next(); });
+  };
+  peer.on('open', next);
+  peer.on('error', (e) => {
+    if (n.peer !== peer || !rndAlive(n)) return;
+    if (e.type === 'peer-unavailable') { if (n.empty == null) n.empty = k - 1; next(); }   // 그 자리엔 아무도 없음
+    else { toast('연결 오류: ' + e.type); netClose(); closeModal(); }
+  });
+}
+// 2단계: 빈 자리를 맡아서 기다리기
+function rndHost(k) {
+  const n = NET;
+  if (!rndAlive(n)) return;
+  try { n.peer && n.peer.destroy(); } catch (e) { /* 이미 닫힘 */ }
+  if (k >= RND_SLOTS) { setTimeout(rndSearch, 1500); return; }
+  n.role = 'host';
+  n.conn = null;
+  const peer = new Peer(RND_PREFIX + k);
+  n.peer = peer;
+  peer.on('open', () => {
+    if (n.peer !== peer || !rndAlive(n)) return;
+    rndWaitUI('상대가 들어오기를 기다리는 중…');
+    // 오래 기다려도 안 오면: 다른 자리에서 기다리는 사람이 있을 수 있으니 다시 찾기
+    n.hostTimer = setTimeout(() => { if (n.peer === peer && rndAlive(n) && !n.conn) rndSearch(); }, RND_HOST_WAIT + Math.random() * 5000);
+  });
+  peer.on('connection', (conn) => {
+    if (n.peer !== peer || !rndAlive(n) || n.conn) { conn.on('open', () => conn.close()); return; }   // 이미 상대가 있음
+    clearTimeout(n.hostTimer);
+    n.conn = conn;
+    // 연결이 중간에 멈추면(12초 동안 안 열리면) 버리고 다시 기다린다
+    setTimeout(() => { if (n.conn === conn && !conn.open && rndAlive(n)) { try { conn.close(); } catch (e) { /* 이미 닫힘 */ } n.conn = null; rndWaitUI('상대가 들어오기를 기다리는 중…'); } }, 12000);
+    conn.on('open', () => { netSend({ t: 'hello', name: S.nick || '플레이어', team: myTeamData() }); });
+    conn.on('data', onNet);
+    conn.on('close', () => {
+      if (n.conn !== conn) return;
+      if (rndAlive(n)) { n.conn = null; rndWaitUI('상대가 나갔어요. 다시 기다리는 중…'); } else onNetClose();
+    });
+    conn.on('error', () => {});
+  });
+  peer.on('error', (e) => {
+    if (n.peer !== peer || !rndAlive(n)) return;
+    if (e.type === 'unavailable-id') {
+      // 누가 먼저 이 자리를 맡았다 → 그 사람과 붙을 수 있게 다시 찾기
+      setTimeout(rndSearch, 300 + Math.random() * 700);
+    } else { toast('연결 오류: ' + e.type); netClose(); closeModal(); }
+  });
+}
+
 function setupConn(conn) {
   conn.on('open', () => {
     netSend({ t: 'hello', name: S.nick || '플레이어', team: myTeamData() });
@@ -4007,7 +4125,7 @@ function onNetClose() {
     B.over = true;
     B.waiting = false;
     clearTimeout(B.timer);
-    B.result = { win: true, rewards: ['친구가 나갔어요'] };
+    B.result = { win: true, rewards: [B.pvp.random ? '상대가 나갔어요' : '친구가 나갔어요'] };
     drawBattle();
   } else if (!B) {
     closeModal();
@@ -4050,9 +4168,11 @@ function startPvpBattle() {
   const opp = NET.oppTeam.map((d, k) => netUnit(d, 'foe', k)).filter(Boolean);
   if (!mine.length || !opp.length) { toast('양쪽 모두 팀이 있어야 해요'); netSend({ t: 'bye' }); netClose(); closeModal(); return; }
   NET.started = true;
+  clearInterval(NET.uiTimer);
+  clearTimeout(NET.hostTimer);
   closeModal();
   B = {
-    stage: S.stage, pvp: { role: 'host', oppName: NET.oppName },
+    stage: S.stage, pvp: { role: 'host', oppName: NET.oppName, random: !!NET.random },
     units: [...mine.map((m, k) => mkUnit(m, 'me', k)), ...opp.map((u, k) => ({ ...u, id: 'foe' + k }))],
     order: [], cur: null, target: 'foe0', log: [], round: 0, remoteTurn: null,
     waiting: false, over: false, fast: false, timer: null, result: null, built: false,
@@ -4090,10 +4210,11 @@ function sendPvpState() {
 function startPvpGuest(msg) {
   if (!Array.isArray(msg.units)) return;
   NET.started = true;
+  clearInterval(NET.uiTimer);
   NET.oppName = esc(String(msg.name || NET.oppName || '친구').slice(0, 10));
   closeModal();
   B = {
-    stage: S.stage, pvp: { role: 'guest', oppName: NET.oppName }, anim: 0,
+    stage: S.stage, pvp: { role: 'guest', oppName: NET.oppName, random: !!NET.random }, anim: 0,
     units: msg.units.map((d, k) => { const side = d.side === 'me' ? 'foe' : 'me'; const u = netUnit(d, side, 0); if (u) u.id = flipId(d.id); return u; }).filter(Boolean),
     order: [], cur: null, target: 'foe0', log: [`👥 ${NET.oppName}와(과)의 대전 시작!`], round: 0,
     waiting: false, over: false, fast: false, timer: null, result: null, built: false,
@@ -5560,9 +5681,10 @@ const ACTIONS = {
   giftUndo: () => { if (!SHARE || !SHARE.undo || SHARE.done) return; const u = SHARE.undo; SHARE.undo = null; stopShare(); u(); closeModal(); toast('↩️ 선물을 취소하고 돌려받았어요'); },
   copyCode: () => { const ta = $('#modalBox .code-box'); if (!ta) return; ta.select(); try { navigator.clipboard.writeText(ta.value).then(() => toast('📋 코드를 복사했어요! 친구에게 붙여 넣어 보내 주세요'), () => { document.execCommand('copy'); toast('📋 복사했어요'); }); } catch (e) { document.execCommand('copy'); toast('📋 복사했어요'); } },
   pvp: () => openPvp(),
+  pvpRandom: () => { if ($('#pvpName')) saveNick(); if (!S.nick) { openPvp(); toast('상대에게 보일 이름을 적고 🌍 랜덤 대전을 눌러요'); return; } tutFlag('friends', true); pvpRandom(); },
   pvpHost: () => pvpHost(),
   pvpJoin: () => pvpJoin(),
-  pvpCancel: () => { netClose(); closeModal(); toast('친구 대전을 취소했어요'); },
+  pvpCancel: () => { if (NET) clearInterval(NET.uiTimer); netClose(); closeModal(); toast('대전을 취소했어요'); },
   pvpCopy: (d) => { try { navigator.clipboard.writeText(d.code); toast('📋 코드를 복사했어요: ' + d.code); } catch (e) { toast('코드: ' + d.code); } },
   teamView: (d) => { const v = teamView(); v[d.k] = d.k === 'strong' ? d.v === 'true' : d.v; save(); const p = $('#panel'), y = p.scrollTop; renderAdventure(); p.scrollTop = y; },
   breedView: (d) => { const v = breedView(); v[d.k] = d.k === 'ready' ? d.v === 'true' : d.v; save(); const box = $('#modalBox'); const y = box.scrollTop; openBreed(curMtn); box.scrollTop = y; },
@@ -5626,7 +5748,7 @@ document.addEventListener('click', (e) => {
   if (!t || t.disabled) return;
   if (VISIT && !VISIT_OK.has(t.dataset.act)) { toast('👀 구경 중이에요. 🏠 내 섬으로 돌아간 뒤에 해 주세요'); return; }
   const fn = ACTIONS[t.dataset.act];
-  if (fn) { if (!/^(collect|buy|feed|breed|claim|mis)/.test(t.dataset.act)) sfx('tap'); fn(t.dataset); }
+  if (fn) fn(t.dataset);
 });
 
 // ----- 🎬 오프닝 영상 -----

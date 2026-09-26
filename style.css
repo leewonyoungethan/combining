@@ -901,3 +901,12 @@ body.visiting .zoom-btns { top: 160px; }
 @keyframes ldFloat { from { translate: 0 -6px; } to { translate: 0 8px; } }
 @keyframes ldShine { from { background-position: 150% 0; } to { background-position: -50% 0; } }
 @keyframes ldRise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+
+/* 🌍 랜덤 대전 */
+.friend-grid .big-rnd { grid-column: 1 / -1; background: linear-gradient(135deg, #ff5ce1, #7b5cff); color: #fff; font-size: 17px; }
+.rnd-radar { width: 96px; height: 96px; margin: 8px auto 4px; border-radius: 50%; position: relative; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle, rgba(125, 255, 143, .25), rgba(125, 255, 143, .05) 60%, transparent 70%); font-size: 40px; }
+.rnd-radar::before, .rnd-radar::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 3px solid rgba(125, 255, 143, .7); animation: rndPing 1.6s ease-out infinite; }
+.rnd-radar::after { animation-delay: .8s; }
+.rnd-radar span { animation: ldBob 1s ease-in-out infinite alternate; }
+@keyframes rndPing { from { transform: scale(.4); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
