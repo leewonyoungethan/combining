@@ -742,3 +742,9 @@ body.visiting .zoom-btns { top: 160px; }
 .acc-nm { font-weight: 900; font-size: 16px; display: flex; flex-direction: column; gap: 2px; }
 .acc-nm small { font-size: 11px; color: var(--muted); font-weight: 600; }
 .modal-box input[type="password"] { letter-spacing: 8px; }
+
+/* 4자리 짧은 코드 */
+.short-code { font-size: 54px; font-weight: 900; letter-spacing: 14px; color: #ffe066; margin: 8px 0 2px; font-variant-numeric: tabular-nums; text-shadow: 0 0 18px rgba(255, 224, 102, .4); }
+.long-code { margin-top: 10px; text-align: left; }
+.long-code summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 700; }
+.modal-box input#giftCode, .modal-box textarea#giftCode { font-size: 16px; }

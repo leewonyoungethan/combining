@@ -651,6 +651,7 @@ function showModal(html) {
   refreshLive();
 }
 function closeModal() {
+  if (typeof SHARE !== 'undefined' && SHARE) stopShare();
   $('#modal').classList.add('hidden');
   $('#modalBox').innerHTML = '';
   modalStack = null;
@@ -3787,16 +3788,87 @@ function myPlayerId() {
   if (!S.playerId) { S.playerId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36); save(); }
   return S.playerId;
 }
-function codeBox(title, code, note) {
+// 짧은 코드: 보내는 쪽이 창을 열어 둔 동안 4자리 숫자로 친구가 인터넷을 통해 바로 받아 간다 (PeerJS)
+const SHORT_PREFIX = 'monhap-x-';
+let SHARE = null;   // { peer, code, long, once, done, undo }
+function stopShare() {
+  const sh = SHARE;
+  SHARE = null;
+  try { sh && sh.peer && sh.peer.destroy(); } catch (e) { /* 이미 닫힘 */ }
+}
+function setShareStatus(html) { const el = $('#shareStatus'); if (el) el.innerHTML = html; }
+function startShare(long, once, retry = 0) {
+  if (!window.Peer || !navigator.onLine) { setShareStatus('📴 지금은 인터넷이 안 돼서 짧은 코드를 쓸 수 없어요. 아래 긴 코드를 보내 주세요'); return; }
+  const code = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+  const peer = new Peer(SHORT_PREFIX + code);
+  SHARE = { peer, code, long, once, done: false, undo: SHARE && SHARE.undo };
+  const mine = SHARE;
+  peer.on('open', () => {
+    if (SHARE !== mine) return;
+    const el = $('#shortCode');
+    if (el) el.textContent = code;
+    setShareStatus('📡 친구가 이 숫자를 넣을 때까지 <b>이 창을 열어 두세요</b>');
+  });
+  peer.on('connection', (conn) => {
+    conn.on('open', () => {
+      if (SHARE !== mine || mine.done) { conn.close(); return; }
+      conn.send({ t: 'code', code: long });
+      if (mine.once) {
+        mine.done = true;
+        setShareStatus('✅ 친구가 받아 갔어요!');
+        const u = $('#giftUndo');
+        if (u) u.remove();
+        toast('✅ 친구가 받아 갔어요!');
+        setTimeout(() => { if (SHARE === mine) stopShare(); }, 1500);
+      } else {
+        toast('👀 친구가 내 섬 코드를 받아 갔어요');
+      }
+    });
+  });
+  peer.on('error', (e) => {
+    if (SHARE !== mine) return;
+    if (e.type === 'unavailable-id' && retry < 5) { stopShare(); SHARE = { undo: mine.undo }; startShare(long, once, retry + 1); return; }
+    setShareStatus('⚠️ 짧은 코드를 만들지 못했어요. 아래 긴 코드를 보내 주세요');
+  });
+}
+// 받는 쪽: 4자리 숫자면 인터넷으로 긴 코드를 받아 오고, 긴 코드면 그대로
+function resolveCode(input) {
+  const t = String(input || '').trim();
+  if (!/^\d{4}$/.test(t)) return Promise.resolve(t);
+  if (!window.Peer || !navigator.onLine) return Promise.reject(new Error('offline'));
+  toast('📡 코드를 받아 오는 중…');
+  return new Promise((resolve, reject) => {
+    const peer = new Peer();
+    let finished = false;
+    const end = (fn, v) => { if (finished) return; finished = true; try { peer.destroy(); } catch (e) { /* 닫힘 */ } fn(v); };
+    setTimeout(() => end(reject, new Error('timeout')), 12000);
+    peer.on('open', () => {
+      const conn = peer.connect(SHORT_PREFIX + t, { reliable: true });
+      conn.on('data', (d) => { if (d && d.t === 'code') end(resolve, String(d.code)); });
+      conn.on('error', () => end(reject, new Error('conn')));
+    });
+    peer.on('error', (e) => end(reject, new Error(e.type || 'peer')));
+  });
+}
+function shortCodeFail(e) {
+  toast(e && e.message === 'offline' ? '📴 인터넷이 안 돼서 4자리 코드를 쓸 수 없어요. 긴 코드를 받아 주세요'
+    : '❌ 그 숫자 코드를 찾을 수 없어요. 보내는 사람이 코드 창을 열어 두었는지 확인해 주세요');
+}
+function codeBox(title, code, note, opts = {}) {
+  stopShare();
   showModal(`<h3>${title}</h3>
     <p class="muted">${note}</p>
-    <textarea class="code-box" readonly>${esc(code)}</textarea>
-    <div class="row">
-      <button class="btn big" data-act="copyCode">📋 코드 복사</button>
-      <button class="btn ghost" data-act="close">닫기</button>
-    </div>`);
-  const ta = $('#modalBox .code-box');
-  if (ta) { ta.focus(); ta.select(); }
+    <div class="short-code" id="shortCode">····</div>
+    <p class="muted small-note" id="shareStatus">📡 짧은 코드를 만드는 중…</p>
+    ${opts.undo ? '<div class="row"><button class="btn ghost small" id="giftUndo" data-act="giftUndo">↩️ 선물 취소 (돌려받기)</button></div>' : ''}
+    <details class="long-code">
+      <summary>📄 긴 코드 (인터넷 없이 보낼 때)</summary>
+      <textarea class="code-box" readonly>${esc(code)}</textarea>
+      <div class="row"><button class="btn small" data-act="copyCode">📋 긴 코드 복사</button></div>
+    </details>
+    <div class="row"><button class="btn ghost" data-act="close">닫기</button></div>`);
+  SHARE = { undo: opts.undo || null };
+  startShare(code, opts.once !== false);
 }
 
 // ----- 선물 보내기 -----
@@ -3832,12 +3904,13 @@ function openGiftSend(kind = giftTab) {
     ${body}
     <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
 }
-async function makeGift(kind, data, label) {
+async function makeGift(kind, data, label, undo) {
   const payload = { v: 1, g: kind, d: data, from: S.nick || '친구', pid: myPlayerId(), id: Math.random().toString(36).slice(2) + Date.now().toString(36) };
   const code = await packCode(GIFT_PREFIX, payload);
   save();
   render();
-  codeBox('🎁 선물 코드', code, `<b>${label}</b>을(를) 담았어요. 코드를 친구에게 보내 주세요. 코드는 <b>한 번만</b> 받을 수 있어요.`);
+  codeBox('🎁 선물 코드', code, `<b>${label}</b>을(를) 담았어요. 아래 <b>4자리 숫자</b>를 친구에게 알려 주면, 친구가 📥 선물 받기에 넣어서 받아요. (한 번만 받을 수 있어요)`,
+    { once: true, undo: undo ? () => { undo(); S.usedGifts = S.usedGifts || []; S.usedGifts.push(payload.id); save(); render(); updateHud(); } : null });
 }
 function giftMon(uid) {
   const m = byUid(uid);
@@ -3847,7 +3920,8 @@ function giftMon(uid) {
   S.monsters = S.monsters.filter(x => x.uid !== m.uid);
   sel = sel.filter(u => u !== m.uid);
   delete walkers[m.uid];
-  makeGift('mon', { type: m.type, lv: m.lv }, `${CAT[m.type].face} ${CAT[m.type].name} Lv.${m.lv}`);
+  makeGift('mon', { type: m.type, lv: m.lv }, `${CAT[m.type].face} ${CAT[m.type].name} Lv.${m.lv}`,
+    () => { if (habsFor(m.type).some(h => h.i === m.hab) || (S.plots[m.hab] && habMons(m.hab).length < habCap(m.hab))) S.monsters.push({ ...m, runes: [null, null] }); else (S.giftBox = S.giftBox || []).push({ type: m.type, lv: m.lv }); });
 }
 function giftRes() {
   const num = (id) => Math.max(0, Math.floor(Number(($(id) || {}).value) || 0));
@@ -3858,13 +3932,14 @@ function giftRes() {
   if (!S.infinite) { S.gold -= gold; S.gems -= gems; }
   S.food -= food;
   updateHud();
-  makeGift('res', { gold, gems, food }, [gold && `💰${fmt(gold)}`, gems && `💎${fmt(gems)}`, food && `🍖${fmt(food)}`].filter(Boolean).join(' '));
+  makeGift('res', { gold, gems, food }, [gold && `💰${fmt(gold)}`, gems && `💎${fmt(gems)}`, food && `🍖${fmt(food)}`].filter(Boolean).join(' '),
+    () => { earn(gold); earn(gems, 'gems'); S.food += food; });
 }
 function giftRune(rid) {
   const r = S.runes.find(x => x.id === Number(rid));
   if (!r || r.on != null) return;
   S.runes = S.runes.filter(x => x.id !== r.id);
-  makeGift('rune', { t: r.t, lv: r.lv }, runeText(r));
+  makeGift('rune', { t: r.t, lv: r.lv }, runeText(r), () => { S.runes.push({ ...r, on: null }); });
 }
 
 // ----- 선물 받기 -----
@@ -3877,8 +3952,8 @@ function giftBoxHTML() {
 function openGiftRecv() {
   tutFlag('friends', true);
   showModal(`<h3>📥 선물 받기</h3>
-    <p class="muted">친구가 보낸 선물 코드를 붙여 넣어요.</p>
-    <textarea id="giftCode" class="code-box" placeholder="MHG1로 시작하는 코드"></textarea>
+    <p class="muted">친구가 알려 준 <b>4자리 숫자</b>(또는 긴 코드)를 넣어요.</p>
+    <textarea id="giftCode" class="code-box" placeholder="4자리 숫자 (예: 0427) 또는 긴 코드"></textarea>
     <div class="row"><button class="btn big green" data-act="giftRecvOk">🎁 받기</button><button class="btn ghost" data-act="close">닫기</button></div>
     ${giftBoxHTML()}`);
 }
@@ -3891,7 +3966,9 @@ function placeGiftMon(type, lv) {
 }
 async function giftRecvOk() {
   let g;
-  try { g = await unpackCode(GIFT_PREFIX, $('#giftCode').value); } catch (e) { toast('❌ 올바른 선물 코드가 아니에요. 전부 복사했는지 확인해 주세요'); return; }
+  let raw;
+  try { raw = await resolveCode($('#giftCode').value); } catch (e) { shortCodeFail(e); return; }
+  try { g = await unpackCode(GIFT_PREFIX, raw); } catch (e) { toast('❌ 올바른 선물 코드가 아니에요. 전부 복사했는지 확인해 주세요'); return; }
   if (!g || g.v !== 1 || !g.id) { toast('❌ 올바른 선물 코드가 아니에요'); return; }
   if (g.pid === myPlayerId()) { toast('내가 만든 선물은 내가 받을 수 없어요'); return; }
   S.usedGifts = S.usedGifts || [];
@@ -3946,20 +4023,22 @@ async function openIslandShare() {
   });
   const payload = { v: 1, nick: S.nick || '친구', isl: S.isl || 0, plots, mons: S.monsters.map(m => [m.hab, m.type, m.lv]), dex: Object.keys(S.dex).length };
   const code = await packCode(ISLE_PREFIX, payload);
-  codeBox('🏝️ 내 섬 코드', code, `친구에게 이 코드를 보내면 내 섬 ${ISLANDS.length}개를 구경할 수 있어요. (몬스터 ${S.monsters.length}마리 · 코드 길이 ${fmt(code.length)}자)`);
+  codeBox('🏝️ 내 섬 코드', code, `아래 <b>4자리 숫자</b>를 친구에게 알려 주면, 친구가 👀 친구 섬 구경에 넣어서 내 섬 ${ISLANDS.length}개를 구경해요. 창을 열어 둔 동안 여러 친구가 받아 갈 수 있어요.`, { once: false });
 }
 function openVisit() {
   tutFlag('friends', true);
   showModal(`<h3>👀 친구 섬 구경</h3>
-    <p class="muted">친구가 보낸 섬 코드를 붙여 넣어요.</p>
-    <textarea id="isleCode" class="code-box" placeholder="MHI1로 시작하는 코드"></textarea>
+    <p class="muted">친구가 알려 준 <b>4자리 숫자</b>(또는 긴 코드)를 넣어요.</p>
+    <textarea id="isleCode" class="code-box" placeholder="4자리 숫자 (예: 0427) 또는 긴 코드"></textarea>
     <div class="row"><button class="btn big green" data-act="visitOk">👀 구경하기</button><button class="btn ghost" data-act="close">닫기</button></div>`);
 }
 var VISIT = null;       // { nick, real: 내 저장 상태 } (var: 파일 앞쪽 save()에서도 읽을 수 있게)
 const VISIT_OK = new Set(['isl', 'islList', 'islGo', 'visitExit', 'zoomIn', 'zoomOut', 'hideUI', 'close', 'copyCode']);
 async function visitOk() {
   let d;
-  try { d = await unpackCode(ISLE_PREFIX, $('#isleCode').value); } catch (e) { toast('❌ 올바른 섬 코드가 아니에요. 전부 복사했는지 확인해 주세요'); return; }
+  let raw;
+  try { raw = await resolveCode($('#isleCode').value); } catch (e) { shortCodeFail(e); return; }
+  try { d = await unpackCode(ISLE_PREFIX, raw); } catch (e) { toast('❌ 올바른 섬 코드가 아니에요. 전부 복사했는지 확인해 주세요'); return; }
   if (!d || d.v !== 1 || !Array.isArray(d.plots)) { toast('❌ 올바른 섬 코드가 아니에요'); return; }
   const plots = Array(PLOTS).fill(null);
   const n = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.floor(Number(v)) || lo));
@@ -4117,13 +4196,15 @@ function accDel(id) {
 }
 function openAccImport() {
   showModal(`<h3>📥 다른 기기에서 가져오기</h3>
-    <p class="muted">다른 기기의 👤 메뉴 → 📤 옮기기 코드를 붙여 넣어요.</p>
-    <textarea id="accCode" class="code-box" placeholder="MHS1로 시작하는 코드"></textarea>
+    <p class="muted">다른 기기의 👤 메뉴 → 📤 옮기기 코드에 나온 <b>4자리 숫자</b>(또는 긴 코드)를 넣어요.</p>
+    <textarea id="accCode" class="code-box" placeholder="4자리 숫자 (예: 0427) 또는 긴 코드"></textarea>
     <div class="row"><button class="btn big green" data-act="accImportOk">가져오기</button><button class="btn ghost" data-act="close">취소</button></div>`);
 }
 async function accImportOk() {
   let d;
-  try { d = await unpackCode('MHS1', $('#accCode').value); } catch (e) { toast('❌ 올바른 옮기기 코드가 아니에요. 전부 복사했는지 확인해 주세요'); return; }
+  let raw;
+  try { raw = await resolveCode($('#accCode').value); } catch (e) { shortCodeFail(e); return; }
+  try { d = await unpackCode('MHS1', raw); } catch (e) { toast('❌ 올바른 옮기기 코드가 아니에요. 전부 복사했는지 확인해 주세요'); return; }
   if (!d || d.v !== 1 || !d.save || !Array.isArray(d.save.plots)) { toast('❌ 올바른 옮기기 코드가 아니에요'); return; }
   const list = accounts();
   let name = String(d.name || '가져온 섬').slice(0, 10);
@@ -4150,7 +4231,7 @@ function openAccountMenu() {
 async function accExport() {
   save();
   const code = await packCode('MHS1', { v: 1, name: ACC.name, save: S });
-  codeBox('📤 계정 옮기기 코드', code, `다른 기기에서 게임을 열고 계정 화면의 <b>📥 다른 기기에서 가져오기</b>에 붙여 넣어요. (코드 길이 ${fmt(code.length)}자) 코드를 가진 사람은 누구나 이 섬을 가져갈 수 있으니 조심해요!`);
+  codeBox('📤 계정 옮기기 코드', code, `다른 기기에서 게임을 열고 계정 화면의 <b>📥 다른 기기에서 가져오기</b>에 아래 <b>4자리 숫자</b>를 넣어요. 코드를 아는 사람은 누구나 이 섬을 가져갈 수 있으니 조심해요!`, { once: true });
 }
 function accRename() {
   showModal(`<h3>✏️ 이름 바꾸기</h3><input id="accNewName" maxlength="10" value="${esc(ACC.name)}">
@@ -4943,6 +5024,7 @@ const ACTIONS = {
   visitOpen: () => openVisit(),
   visitOk: () => visitOk(),
   visitExit: () => visitExit(),
+  giftUndo: () => { if (!SHARE || !SHARE.undo || SHARE.done) return; const u = SHARE.undo; SHARE.undo = null; stopShare(); u(); closeModal(); toast('↩️ 선물을 취소하고 돌려받았어요'); },
   copyCode: () => { const ta = $('#modalBox .code-box'); if (!ta) return; ta.select(); try { navigator.clipboard.writeText(ta.value).then(() => toast('📋 코드를 복사했어요! 친구에게 붙여 넣어 보내 주세요'), () => { document.execCommand('copy'); toast('📋 복사했어요'); }); } catch (e) { document.execCommand('copy'); toast('📋 복사했어요'); } },
   pvp: () => openPvp(),
   pvpHost: () => pvpHost(),
