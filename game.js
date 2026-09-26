@@ -619,6 +619,8 @@ let tab = 'island';
 let sel = [];
 
 const fmt = (n) => Math.floor(n).toLocaleString('ko-KR');
+// 짧은 숫자: 12,345 → 1.2만, 3억 4천만 → 3.4억
+const shortNum = (n) => { n = Math.floor(n); if (n >= 1e12) return (n / 1e12).toFixed(n >= 1e13 ? 0 : 1) + '조'; if (n >= 1e8) return (n / 1e8).toFixed(n >= 1e9 ? 0 : 1) + '억'; if (n >= 1e4) return (n / 1e4).toFixed(n >= 1e5 ? 0 : 1) + '만'; return fmt(n); };
 const elBadges = (els) => els.map(e => EL[ELI[e]].emoji).join('');
 const elNames = (els) => els.map(e => `${EL[ELI[e]].emoji} ${EL[ELI[e]].name}`).join(' · ');
 function grad(c) {
@@ -785,7 +787,8 @@ function resize() {
   H = window.innerHeight;
   cv.width = Math.round(W * DPR);
   cv.height = Math.round(H * DPR);
-  cam.z = clamp(Math.min(W / 1150, (H - 190) / 860), 0.26, 1.2);
+  const portrait = H > W * 1.2;
+  cam.z = portrait ? clamp(W / 820, 0.3, 1.2) : clamp(Math.min(W / 1150, (H - 190) / 860), 0.26, 1.2);
 }
 
 function diamond(x, y, hw, hh) {
@@ -830,7 +833,10 @@ function shadow(x, y, rx, ry = rx * 0.35) {
   ctx.fill();
 }
 
+const MIN_TEXT_PX = 10;   // 화면에서 글씨가 이 크기(px)보다 작아지지 않게
+const minSize = (size, px = MIN_TEXT_PX) => Math.max(size, px / cam.z);
 function pill(text, x, y, bg, fg, size = 15) {
+  size = minSize(size);
   ctx.font = `800 ${size}px ${TEXT_FONT}`;
   const w = ctx.measureText(text).width + 18, h = size + 10;
   ctx.beginPath();
@@ -845,11 +851,12 @@ function pill(text, x, y, bg, fg, size = 15) {
 }
 
 function label(text, x, y, size = 16) {
+  size = minSize(size, 11);
   ctx.font = `800 ${size}px ${TEXT_FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = 'rgba(0,0,0,.7)';
+  ctx.lineWidth = Math.max(4, 3 / cam.z);
+  ctx.strokeStyle = 'rgba(0,0,0,.75)';
   ctx.strokeText(text, x, y);
   ctx.fillStyle = '#fff';
   ctx.fillText(text, x, y);
@@ -1035,7 +1042,8 @@ function drawLabel(p, i, x, y, t) {
       const by = y - TH * 0.95 + Math.sin(t * 3 + i) * 5;
       const full = inc > 0 && p.gold >= inc * 600;   // 10분치 넘게 쌓이면 노랗게
       ctx.beginPath();
-      ctx.arc(x, by, 30, 0, Math.PI * 2);
+      const br = minSize(30, 16);
+      ctx.arc(x, by, br, 0, Math.PI * 2);
       ctx.fillStyle = full ? '#ffe066' : 'rgba(255,255,255,.92)';
       ctx.fill();
       ctx.beginPath();
@@ -1043,9 +1051,9 @@ function drawLabel(p, i, x, y, t) {
       ctx.lineTo(x, by + 40);
       ctx.lineTo(x + 8, by + 26);
       ctx.fill();
-      emoji('💰', x, by - 2, 32);
-      pill(fmt(p.gold), x, by - 42, 'rgba(0,0,0,.6)', '#ffe066', 14);
-      bubbles.push({ x, y: by, r: 36, i });
+      emoji('💰', x, by - 2, br * 1.05);
+      pill(shortNum(p.gold), x, by - br * 1.4, 'rgba(0,0,0,.6)', '#ffe066', 14);
+      bubbles.push({ x, y: by, r: br + 6, i });
     }
     return;
   }
@@ -1300,7 +1308,7 @@ function renderIslandBar() {
   const hb = $('#hideBtn');
   hb.classList.toggle('hidden', tab !== 'island');
   hb.classList.toggle('on', !!S.hideUI);
-  hb.innerHTML = S.hideUI ? '👁️ 보이기' : '🙈 숨기기';
+  hb.innerHTML = S.hideUI ? '👁️<span> 보이기</span>' : '🙈<span> 숨기기</span>';
   document.body.classList.toggle('ui-hidden', !!S.hideUI && tab === 'island');
 }
 function goIsland(k) {
@@ -4923,10 +4931,10 @@ function updateHud() {
   if (dot) dot.classList.toggle('on', dailyReady());
   [['gold', S.gold], ['gems', S.gems]].forEach(([id, v]) => {
     const el = $('#' + id);
-    el.textContent = S.infinite ? '∞' : fmt(v);
+    el.textContent = S.infinite ? '∞' : (innerWidth < 560 ? shortNum(v) : fmt(v));
     el.classList.toggle('infinite', S.infinite);
   });
-  $('#food').textContent = fmt(S.food);
+  $('#food').textContent = innerWidth < 560 ? shortNum(S.food) : fmt(S.food);
 }
 
 function tick() {

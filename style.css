@@ -748,3 +748,27 @@ body.visiting .zoom-btns { top: 160px; }
 .long-code { margin-top: 10px; text-align: left; }
 .long-code summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 700; }
 .modal-box input#giftCode, .modal-box textarea#giftCode { font-size: 16px; }
+
+/* 📱 폰 화면 다듬기 */
+@media (max-width: 560px) {
+  .hud { padding: 8px 8px 6px; }
+  .res { gap: 4px; flex-wrap: nowrap; }
+  .pill { padding: 4px 8px; font-size: 13px; gap: 3px; }
+  .pill b { font-size: 13px; }
+  .pill.code-btn { padding: 4px 7px; }
+  .island-bar { top: 48px; gap: 4px; padding: 3px; max-width: calc(100% - 16px); }
+  .ib-arrow { width: 30px; height: 30px; font-size: 12px; }
+  .ib-name { font-size: 13px; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; }
+  .ib-name small { font-size: 10px; }
+  .hide-btn { top: 92px; right: 8px; padding: 6px 9px; font-size: 16px; }
+  .hide-btn span { display: none; }
+  .zoom-btns { top: 132px; right: 8px; gap: 4px; }
+  .zoom-btns button { width: 34px; height: 34px; font-size: 18px; border-radius: 10px; }
+  .visit-bar { top: 92px; font-size: 12px; }
+  body.visiting .zoom-btns { top: 132px; }
+  .panel { padding-top: 54px; }
+  .panel-x { top: 50px; right: 10px; width: 34px; height: 34px; }
+  .guide { bottom: 86px; padding: 8px 34px 8px 12px !important; }
+  .g-text { font-size: 14px; }
+  .bottom-bar { padding: 5px; bottom: 6px; }
+}
