@@ -746,8 +746,8 @@ function liveBar(key) {
   return 0;
 }
 function refreshLive() {
-  document.querySelectorAll('[data-live]').forEach(el => { el.textContent = liveText(el.dataset.live); });
-  document.querySelectorAll('[data-bar]').forEach(el => { el.style.width = `${liveBar(el.dataset.bar) * 100}%`; });
+  document.querySelectorAll('[data-live]').forEach(el => { const s = liveText(el.dataset.live); if (el.textContent !== s) el.textContent = s; });
+  document.querySelectorAll('[data-bar]').forEach(el => { const w = `${liveBar(el.dataset.bar) * 100}%`; if (el.style.width !== w) el.style.width = w; });
   document.querySelectorAll('[data-plot]').forEach(el => el.classList.toggle('ready', plotReady(Number(el.dataset.plot))));
 }
 
@@ -782,7 +782,8 @@ const plotPos = (i) => {
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 function resize() {
-  DPR = Math.min(2, window.devicePixelRatio || 1);
+  // 작은 화면은 해상도를 조금 낮춰도 티가 안 나고 훨씬 가볍다
+  DPR = Math.min(window.innerWidth < 760 ? 1.5 : 2, window.devicePixelRatio || 1);
   W = window.innerWidth;
   H = window.innerHeight;
   cv.width = Math.round(W * DPR);
@@ -813,16 +814,38 @@ function block(x, y, hw, hh, top, side, depth = 14) {
   ctx.stroke();
 }
 
+// 이모지 글자를 매번 그리면 휴대폰에서 아주 느리다 → 크기별로 한 번만 그려 두고 그림처럼 찍는다
+const EMO_CACHE = new Map();
+let drawScale = 1;   // 지금 화면 배율 (DPR × 확대)
+function emojiSprite(e, px) {
+  const key = e + '|' + px;
+  let c = EMO_CACHE.get(key);
+  if (!c) {
+    if (EMO_CACHE.size > 700) EMO_CACHE.clear();
+    const s = Math.ceil(px * 1.35);
+    c = document.createElement('canvas');
+    c.width = c.height = s;
+    const g = c.getContext('2d');
+    g.font = `${px}px ${EMOJI_FONT}`;
+    g.fillStyle = '#fff';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(e, s / 2, s / 2);
+    EMO_CACHE.set(key, c);
+  }
+  return c;
+}
 function emoji(e, x, y, size, rot = 0, flip = 1) {
+  const want = size * drawScale;
+  const px = Math.max(8, Math.min(320, want < 64 ? Math.ceil(want / 4) * 4 : Math.ceil(want / 16) * 16));
+  const c = emojiSprite(e, px);
+  const d = c.width * size / px;
+  if (!rot && flip >= 0) { ctx.drawImage(c, x - d / 2, y - d / 2, d, d); return; }
   ctx.save();
   ctx.translate(x, y);
   if (rot) ctx.rotate(rot);
   if (flip < 0) ctx.scale(-1, 1);
-  ctx.font = `${size}px ${EMOJI_FONT}`;
-  ctx.fillStyle = '#fff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(e, 0, 0);
+  ctx.drawImage(c, -d / 2, -d / 2, d, d);
   ctx.restore();
 }
 
@@ -891,11 +914,15 @@ function stepWalker(w, dt) {
 }
 
 // ----- 그리기 -----
+let seaGrad = null, seaH = 0;
 function drawSea(t) {
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#2b8fe0');
-  g.addColorStop(1, '#0b4f8a');
-  ctx.fillStyle = g;
+  if (!seaGrad || seaH !== H) {
+    seaGrad = ctx.createLinearGradient(0, 0, 0, H);
+    seaGrad.addColorStop(0, '#2b8fe0');
+    seaGrad.addColorStop(1, '#0b4f8a');
+    seaH = H;
+  }
+  ctx.fillStyle = seaGrad;
   ctx.fillRect(0, 0, W, H);
   ctx.strokeStyle = 'rgba(255,255,255,.13)';
   ctx.lineWidth = 2;
@@ -1112,8 +1139,13 @@ function floatAt(i, text) {
   floaters.push({ x, y: y - TH * 0.8, text, t0: performance.now() / 1000 });
 }
 
-let lastFrame = 0;
+let lastFrame = 0, lastDraw = 0, lastInput = 0;
+const LOW_POWER = matchMedia('(pointer: coarse)').matches || window.innerWidth < 760;
+['pointerdown', 'pointermove', 'wheel', 'touchmove'].forEach(ev => window.addEventListener(ev, () => { lastInput = performance.now(); }, { passive: true }));
 function drawWorld(now) {
+  // 휴대폰: 가만히 있을 때는 1초에 30번만 그린다 (배터리·렉 줄이기)
+  if (LOW_POWER && now - lastInput > 800 && !carry && now - lastDraw < 30) { requestAnimationFrame(drawWorld); return; }
+  lastDraw = now;
   const t = now / 1000;
   const dt = Math.min(0.05, t - (lastFrame || t));
   lastFrame = t;
@@ -1121,6 +1153,7 @@ function drawWorld(now) {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     drawSea(t);
     const z = cam.z;
+    drawScale = DPR * z;
     ctx.setTransform(DPR * z, 0, 0, DPR * z, DPR * (W / 2 - cam.x * z), DPR * (H / 2 + 10 - cam.y * z));
     BOATS.forEach(b => {
       b.x += b.v * dt;
@@ -4465,9 +4498,11 @@ function dexMatches(c) {
   return true;
 }
 
+let dexShow = 120;
 function renderDex() {
   const found = CAT_LIST.filter(c => S.dex[c.id]).length;
-  const list = CAT_LIST.filter(dexMatches);
+  const all = CAT_LIST.filter(dexMatches);
+  const list = all.slice(0, dexShow);
   const chip = (key, val, label) =>
     `<button class="chip ${dexFilter[key] === val ? 'on' : ''}" data-act="dexFilter" data-k="${key}" data-v="${val}">${label}</button>`;
   view.innerHTML = `
@@ -4478,9 +4513,10 @@ function renderDex() {
     <div class="chips">${chip('el', 'all', '전체')}${EL.map(e => chip('el', e.id, `${e.emoji}${e.name}`)).join('')}${chip('el', 'legend', '🏛️전설')}</div>
     <div class="chips">${chip('rar', 'all', '모든 등급')}${RAR_ORDER.map(r => chip('rar', r, RAR[r].name)).join('')}
       <span class="chip-gap"></span>${chip('found', 'all', '전부')}${chip('found', 'yes', '✅ 발견')}${chip('found', 'no', '❔ 미발견')}</div>
-    <p class="muted dex-count">${list.length}마리</p>
+    <p class="muted dex-count">${all.length}마리</p>
     <div class="grid">${list.map(c => card({ type: c.id, lv: 1 }, `data-act="dexMon" data-type="${c.id}"`,
       `mini ${S.dex[c.id] ? '' : 'undiscovered'}`, S.dex[c.id] ? '<div class="found-mark">✅</div>' : '')).join('')}</div>
+    ${all.length > list.length ? `<div class="footer-actions"><button class="btn big" data-act="dexMore">⬇️ 더 보기 (${all.length - list.length}마리 남음)</button></div>` : ''}
     <div class="footer-actions"><button class="btn ghost small" data-act="reset">🔄 처음부터 다시 하기</button></div>`;
 }
 
@@ -5075,7 +5111,8 @@ const ACTIONS = {
   daily: () => openDaily(),
   claimDaily: () => claimDaily(),
   dexMon: (d) => openDexMon(d.type),
-  dexFilter: (d) => { dexFilter[d.k] = d.v; renderDex(); },
+  dexFilter: (d) => { dexFilter[d.k] = d.v; dexShow = 120; renderDex(); },
+  dexMore: () => { const y = $('#panel').scrollTop; dexShow += 240; renderDex(); $('#panel').scrollTop = y; },
   goBreed: (d) => goBreed(d.a, d.b),
   bQuit: () => quitBattle(),
   back: () => { const fn = modalStack; modalStack = null; if (fn) fn(); else closeModal(); },
@@ -5141,6 +5178,7 @@ async function hardRefresh() {
 }
 window.addEventListener('offline', () => toast('📴 오프라인이에요. 실시간 친구 대전 말고는 그대로 할 수 있어요'));
 window.addEventListener('online', () => toast('📶 다시 연결됐어요'));
-setInterval(save, 3000);
-setInterval(updateFinger, 120);
+setInterval(save, 10000);   // 중요한 행동은 그때그때 저장하므로 자동 저장은 10초마다
+document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+setInterval(updateFinger, 250);
 window.addEventListener('beforeunload', save);
