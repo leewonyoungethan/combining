@@ -1056,3 +1056,8 @@ body.ui-hidden .pet-btn { opacity: .55; }
 .wonder-card b { font-size: 12px; }
 .wonder-card small { font-size: 10px; color: #7dff8f; }
 .wd-cost { font-weight: 900; color: #ffe066; font-size: 13px; }
+
+/* 🔁 연속 전투 */
+.loop-btn { width: 100%; background: linear-gradient(135deg, #ff9a3d, #ff4d6d); color: #fff; display: flex; flex-direction: column; }
+.loop-btn small { font-size: 11px; font-weight: 700; opacity: .9; }
+.loop-note { font-weight: 900; color: #ffe066; }

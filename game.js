@@ -3630,6 +3630,7 @@ function renderAdventure() {
       <h3>🛡️ 내 팀</h3>
       <div class="team-row">${slots}</div>
       <div class="row"><button class="btn green" data-act="teamAuto" ${S.monsters.length ? '' : 'disabled'}>⚡ 자동 편성</button><button class="btn big" data-act="fight" ${team.length ? '' : 'disabled'}>⚔️ 전투 시작</button></div>
+      <div class="row"><button class="btn loop-btn" data-act="fightLoop" ${team.length ? '' : 'disabled'}>🔁 연속 전투<small>이기면 다음 스테이지로 자동으로 계속! (자동 전투)</small></button></div>
     </div>
     <div class="stage-box pvp-box">
       <h3>👥 대전 · 친구</h3>
@@ -3737,6 +3738,31 @@ function mkUnit(m, side, idx) {
 const aliveOf = (side) => B.units.filter(u => u.side === side && u.hp > 0);
 const unitById = (id) => B.units.find(u => u.id === id);
 
+// ----- 🔁 연속 전투: 이기면 잠깐 뒤 다음 스테이지를 자동으로 시작. 지거나 멈추기를 누르면 끝 -----
+let LOOP = null;   // { wins, start, gold }
+function startLoop() {
+  if (!S.team.map(byUid).filter(Boolean).length) { toast('먼저 팀을 짜 주세요 (⚡ 자동 편성)'); return; }
+  LOOP = { wins: 0, start: S.stage, gold: S.gold };
+  toast('🔁 연속 전투 시작! 지거나 ⏹ 멈추기를 누르면 끝나요');
+  startBattle();
+}
+function stopLoop(reason) {
+  if (!LOOP) return;
+  const l = LOOP;
+  LOOP = null;
+  toast(`⏹ 연속 전투 끝! ${l.wins}연승 (스테이지 ${l.start} → ${S.stage})${reason ? ' · ' + reason : ''}`);
+  if (B) drawBattle();
+}
+function loopNext() {
+  if (!LOOP || !B || !B.over || B.pvp || B.gwar || B.bossIdx != null) return;
+  if (!B.result.win) { stopLoop('패배'); return; }
+  LOOP.wins++;
+  clearTimeout(B.timer);
+  B = null;
+  $('#battle').classList.add('hidden');
+  startBattle();
+}
+
 function startBattle() {
   const team = S.team.map(byUid).filter(Boolean);
   if (!team.length || B) return;
@@ -3745,7 +3771,7 @@ function startBattle() {
     stage: S.stage,
     units: [...team.map((m, i) => mkUnit(m, 'me', i)), ...foes.map((m, i) => mkUnit(m, 'foe', i))],
     order: [], cur: null, target: 'foe0', log: [], round: 0,
-    waiting: false, over: false, fast: !!S.fastBattle, auto: !!S.autoBattle, timer: null, result: null, built: false,
+    waiting: false, over: false, fast: !!S.fastBattle, auto: !!S.autoBattle || !!LOOP, timer: null, result: null, built: false,
   };
   $('#battle').classList.remove('hidden');
   updateGuide();
@@ -4124,12 +4150,19 @@ function endBattle(win) {
   sfx(win ? 'win' : 'lose');
   if (win) mission('win');
   save();
+  if (LOOP && !B.pvp && !B.gwar && B.bossIdx == null) {
+    if (win) { const b = B; setTimeout(() => { if (B === b && LOOP) loopNext(); }, 1600); }
+    else { LOOP.wins = LOOP.wins; setTimeout(() => stopLoop('패배'), 300); }
+  }
   drawBattle();
   updateHud();
 }
 
 function quitBattle() {
   if (!B) return;
+  // 연속 전투 중에 누르면: 연속만 멈추고 지금 전투는 계속 (끝나면 확인)
+  if (LOOP && !B.over) { stopLoop(); return; }
+  if (LOOP) stopLoop();
   if (!B.over && !confirm(B.pvp ? '친구 대전에서 나갈까요? (지는 걸로 처리돼요)' : '전투를 포기할까요?')) return;
   clearTimeout(B.timer);
   if (B.pvp) { netSend({ t: 'bye' }); netClose(); }
@@ -4210,6 +4243,7 @@ function drawBattle() {
   $('#bFast').textContent = B.fast ? '▶️ 보통 속도' : '⏩ 빠르게';
   if ($('#bAuto')) { $('#bAuto').textContent = B.auto ? '🤖 자동 켜짐' : '🤖 자동'; $('#bAuto').classList.toggle('on', !!B.auto); }
   $('#bQuitTop').style.display = B.over ? 'none' : '';
+  $('#bQuitTop').textContent = LOOP ? '⏹ 연속 멈추기' : '🏳️ 포기';
   B.units.forEach(updateUnit);
   updateLog();
 
@@ -4219,7 +4253,9 @@ function drawBattle() {
     bottom = `<div class="b-result">
       <div class="result ${r.win ? 'win' : 'lose'}">${r.win ? '🏆 승리!' : '💥 패배…'}</div>
       <p>${r.win || B.gwar ? `보상: ${r.rewards.join(' · ')}` : '속성 상성을 생각하거나 몬스터를 키우고 룬을 끼워 보세요!'}</p>
-      <button class="btn big" data-act="bQuit">확인</button>
+      ${LOOP && r.win && !B.pvp && !B.gwar && B.bossIdx == null
+        ? `<p class="loop-note">🔁 연속 전투 ${LOOP.wins + 1}연승! 곧 다음 스테이지…</p><button class="btn big" data-act="loopStop">⏹ 멈추기</button>`
+        : `<div class="row"><button class="btn big" data-act="bQuit">확인</button>${!B.pvp && !B.gwar && B.bossIdx == null ? `<button class="btn big green" data-act="${r.win ? 'nextStage' : 'fightLoop'}">${r.win ? '⏩ 다음 스테이지' : '🔁 다시 연속 전투'}</button>` : ''}</div>`}
     </div>`;
   } else if (B.waiting) {
     const u = B.cur, t = unitById(B.target);
@@ -6560,6 +6596,9 @@ const ACTIONS = {
   team: (d) => toggleTeam(d.uid),
   teamAuto: () => teamAuto(),
   fight: () => startBattle(),
+  fightLoop: () => { if (B) { if (!B.over) return; B = null; $('#battle').classList.add('hidden'); } startLoop(); },
+  loopStop: () => { stopLoop(); },
+  nextStage: () => { if (B) { clearTimeout(B.timer); B = null; $('#battle').classList.add('hidden'); } startBattle(); },
   bSkill: (d) => playerSkill(d.i),
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; S.fastBattle = B.fast; drawBattle(); },
