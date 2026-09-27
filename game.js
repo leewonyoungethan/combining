@@ -902,6 +902,50 @@ function toggleMusic() {
   openAccountMenu();
 }
 
+// ----- 💰💎🍖 재화 안내: 위쪽 숫자를 누르면 어디서 얻고 어디에 쓰는지 -----
+const RES_INFO = {
+  gold: { icon: '💰', name: '골드', get: ['🏠 서식지의 몬스터가 계속 벌어요 → 섬의 💰 말풍선을 누르거나 <b>모두 걷기</b>', '⚔️ 모험·길드전에서 이기기', '🎁 일일 보상, 📦 겹치는 몬스터 팔기'],
+    use: ['🏠 서식지·🌾 농장·🏔️ 교배산 짓기', '🥚 알 사기 (💰500), 🏔️ 교배 비용', '⬆️ 서식지 업그레이드 (몬스터 자리 + 골드 증가)'],
+    btns: '<button class="btn green" data-act="collectAll">💰 모두 걷기</button><button class="btn" data-act="resGo" data-to="shop">🛒 상점</button>' },
+  gems: { icon: '💎', name: '보석', get: ['📋 매일 미션, 🏆 도전 과제', '🎁 일일 보상, ⚔️ 모험 5스테이지마다', '🛡️ 길드전 상자, 🏆 티어 승급'],
+    use: ['⏩ 교배·농장 시간 바로 끝내기', '🎁 고급 룬 상자, 💰 골드로 바꾸기', '👑 황금 왕관 동상 장식'],
+    btns: '<button class="btn green" data-act="missions">📋 미션 보기</button>' },
+  food: { icon: '🍖', name: '먹이', get: ['🌾 농장에 작물을 심고 수확 (오래 걸리는 작물일수록 효율이 좋아요)', '🛒 상점에서 사기, 🎁 일일 보상'],
+    use: ['⬆️ 몬스터 레벨 올리기 → <b>Lv.4가 되면 교배</b>할 수 있어요', '레벨이 높을수록 골드를 더 벌고 전투에서 더 세져요'],
+    btns: '<button class="btn green" data-act="resGo" data-to="mons">🐾 몬스터 키우기</button>' },
+};
+function openResInfo(r) {
+  const x = RES_INFO[r];
+  if (!x) return;
+  const now = r === 'gold' ? S.gold : r === 'gems' ? S.gems : S.food;
+  showModal(`<div class="res-info"><div class="ri-ico">${x.icon}</div>
+    <h3>${x.name} <small class="muted">${S.infinite ? '무한' : fmt(now)}</small></h3>
+    <h4>✅ 얻는 법</h4><ul>${x.get.map(t => `<li>${t}</li>`).join('')}</ul>
+    <h4>🛍️ 쓰는 곳</h4><ul>${x.use.map(t => `<li>${t}</li>`).join('')}</ul>
+    <div class="row">${x.btns}<button class="btn ghost" data-act="close">닫기</button></div></div>`);
+}
+// ----- 🎯 다음 목표: 튜토리얼이 끝나면 섬 위쪽에 가장 가까운 목표를 보여 준다 -----
+function nextGoal() {
+  const m = misToday();
+  const misReady = m.ids.some(id => (m.prog[id] || 0) >= MISSIONS.find(x => x.id === id).need && !m.got.includes(id)) || (!m.bonus && m.got.length >= 3);
+  const ach = ACH.filter(a => !(S.achGot || []).includes(a.id));
+  if (ach.some(achReady) || misReady) return { text: '🎁 받을 보상이 있어요! 눌러서 받기', ready: true };
+  const best = ach.map(a => ({ a, p: Math.min(1, a.now() / a.need) })).sort((x, y) => y.p - x.p)[0];
+  if (!best) return null;
+  return { text: `🎯 ${best.a.text} <b>${fmt(Math.min(best.a.need, best.a.now()))}/${fmt(best.a.need)}</b> → 💎${best.a.gems}` };
+}
+function updateGoal() {
+  const c = $('#goalChip');
+  if (!c) return;
+  const g = $('#guide');
+  const show = tab === 'island' && !B && !VISIT && !S.hideUI && S.tutCoreDone && (!g || g.classList.contains('hidden'));
+  const goal = show ? nextGoal() : null;
+  c.classList.toggle('hidden', !goal);
+  if (!goal) return;
+  if (c.dataset.t !== goal.text) { c.innerHTML = goal.text; c.dataset.t = goal.text; }
+  c.classList.toggle('ready', !!goal.ready);
+}
+
 function toggleSound() {
   lsSet('combining-sound', soundOn() ? 'off' : 'on');
   toast(soundOn() ? '🔊 소리를 켰어요' : '🔇 소리를 껐어요');
@@ -1105,9 +1149,13 @@ function resize() {
   H = window.innerHeight;
   cv.width = Math.round(W * DPR);
   cv.height = Math.round(H * DPR);
+  // 가로 폭이 바뀔 때(처음·회전)만 확대 배율을 다시 정한다. 주소창이 생겼다 사라지는 건 그대로 둔다
+  if (W === lastZoomW) return;
+  lastZoomW = W;
   const portrait = H > W * 1.2;
   cam.z = portrait ? clamp(W / 820, 0.3, 1.2) : clamp(Math.min(W / 1150, (H - 190) / 860), 0.26, 1.2);
 }
+let lastZoomW = -1;
 
 function diamond(x, y, hw, hh) {
   ctx.beginPath();
@@ -1460,6 +1508,8 @@ let lastFrame = 0, lastDraw = 0, lastInput = 0;
 const LOW_POWER = matchMedia('(pointer: coarse)').matches || window.innerWidth < 760;
 ['pointerdown', 'pointermove', 'wheel', 'touchmove'].forEach(ev => window.addEventListener(ev, () => { lastInput = performance.now(); }, { passive: true }));
 function drawWorld(now) {
+  // 화면 크기가 0이었다가 커졌는데 캔버스가 그대로면(숨겨진 채로 켜진 경우 등) 다시 맞춘다
+  if (W !== window.innerWidth || H !== window.innerHeight || !cv.width) resize();
   // 휴대폰: 가만히 있을 때는 1초에 30번만 그린다 (배터리·렉 줄이기)
   if (LOW_POWER && now - lastInput > 800 && !carry && now - lastDraw < 30) { requestAnimationFrame(drawWorld); return; }
   lastDraw = now;
@@ -1644,6 +1694,9 @@ cv.addEventListener('wheel', (e) => {
   zoomAt(cam.z * Math.exp(-e.deltaY * 0.0012), e.clientX, e.clientY);
 }, { passive: false });
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 250));
+window.addEventListener('pageshow', resize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
 resize();
 
 function renderIslandBar() {
@@ -4520,6 +4573,7 @@ function pvpJoin() {
 }
 const RND_PREFIX = 'monhap-rnd1-', RND_SLOTS = 10, RND_HOST_WAIT = 30000, RND_MAX = 180000;
 function pvpRandom() {
+  if (!window.Peer) { toast('대전 기능을 아직 불러오는 중이에요. 잠시 뒤에 다시 눌러 주세요'); return; }
   saveNick();
   if (!S.team.map(byUid).filter(Boolean).length) { toast('먼저 모험 탭에서 팀을 짜 주세요!'); return; }
   netClose();
@@ -6122,6 +6176,7 @@ const WELCOME = [
 const WELCOME_SHORT = [
   { icon: '🧬', title: '몬스터 합치기에 온 걸 환영해요!', text: `몬스터를 <b>모으고</b>, <b>섞고</b>, <b>키우는</b> 게임이에요.<br>${fmt(CAT_LIST.length)}마리 도감을 채워 봐요!` },
   { icon: '🔁', title: '이렇게 놀아요', text: '🏠 서식지 짓기 → 🥚 알 사기 → 🍖 먹이로 <b>Lv.4</b><br>→ 🏔️ 두 마리를 <b>교배</b> → ✨ 새 몬스터!<br>몬스터는 서식지에서 💰 골드를 벌어요.' },
+  { icon: '💰', title: '재화 3가지', text: '💰 <b>골드</b>: 몬스터가 벌어요 → 건물·알 사기<br>🍖 <b>먹이</b>: 농장에서 키워요 → 몬스터 레벨 업<br>💎 <b>보석</b>: 미션·보상으로 받아요 → 시간 단축<br><small>위쪽 숫자를 누르면 언제든 자세히 볼 수 있어요</small>' },
   { icon: '👆', title: '따라만 오세요', text: '<b>노란 말풍선</b>과 <b>👆 손가락</b>이 할 일을 알려 줘요.<br>위쪽 <b>📋</b>에서 미션을 깨면 💎 보석! 모르면 <b>🎓</b>' },
 ];
 let welcomeFull = false;
@@ -6157,6 +6212,7 @@ function updateHud() {
   if (dot) dot.classList.toggle('on', dailyReady());
   updateMisDot();
   updateFullBtn();
+  updateGoal();
   [['gold', S.gold], ['gems', S.gems]].forEach(([id, v]) => {
     const el = $('#' + id);
     el.textContent = S.infinite ? '∞' : shortNum(v);
@@ -6178,7 +6234,7 @@ function tick() {
 }
 
 const ACTIONS = {
-  tab: (d) => { tab = d.tab; render(); $('#panel').scrollTop = 0; },
+  tab: (d) => { tab = d.tab; render(); $('#panel').scrollTop = 0; updateGoal(); },
   plot: (d) => openPlot(d.i),
   collectAll: () => collectAll(),
   build: (d) => build(d.i, d.what),
@@ -6331,6 +6387,9 @@ const ACTIONS = {
   misBonus: () => misBonus(),
   achClaim: (d) => achClaim(d.id),
   sound: () => toggleSound(),
+  resInfo: (d) => openResInfo(d.r),
+  resGo: (d) => { closeModal(); tab = d.to; render(); },
+  goalGo: () => openMissions(),
   music: () => toggleMusic(),
   fullscreen: () => toggleFullscreen(),
   wbCollect: () => { collectAll(); closeModal(); if (dailyReady() && tutStep() >= 8) setTimeout(openDaily, 300); },
@@ -6379,29 +6438,32 @@ function runOpening() {
     setTimeout(() => box.remove(), 500);
     startLoading();
   };
-  const safety = (ms) => setTimeout(end, ms);
+  let hard = setTimeout(end, 7000);   // 영상이 멈추거나 못 불러와도 7초 뒤에는 무조건 다음으로
   v.addEventListener('ended', end);
   v.addEventListener('error', end);
+  v.addEventListener('stalled', () => { clearTimeout(hard); hard = setTimeout(end, 2500); });
   $('#openingSkip').addEventListener('click', (e) => { e.stopPropagation(); end(); });
-  const tapToStart = () => {
-    $('#openingTap').classList.remove('hidden');
-    box.addEventListener('click', function go() {
-      box.removeEventListener('click', go);
-      $('#openingTap').classList.add('hidden');
-      v.muted = false;
-      v.currentTime = 0;
-      v.play().then(() => safety(8000)).catch(() => { v.muted = true; v.play().catch(end); safety(8000); });
-    });
-  };
-  if (!soundOn()) {
+  const playMuted = () => {
     v.muted = true;
-    v.play().then(() => safety(8000)).catch(end);
-    return;
-  }
+    const q = v.play();
+    if (q && q.catch) q.catch(end);
+    if (soundOn()) {
+      // 소리 켜기: 처음부터 소리와 함께 다시
+      const b = $('#openingTap');
+      b.classList.remove('hidden');
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        b.classList.add('hidden');
+        v.muted = false; v.currentTime = 0;
+        clearTimeout(hard); hard = setTimeout(end, 7000);
+        const r = v.play(); if (r && r.catch) r.catch(() => { v.muted = true; v.play().catch(end); });
+      }, { once: true });
+    }
+  };
+  if (!soundOn()) { playMuted(); return; }
   v.muted = false;
   const p = v.play();
-  if (p && p.then) p.then(() => safety(8000)).catch(tapToStart);
-  else safety(8000);
+  if (p && p.catch) p.catch(playMuted);
 }
 // ----- ⏳ 로딩 화면: 글꼴 준비, 지금 섬 몬스터 그림 미리 그리기, 친구 대전 준비 -----
 const LOAD_TIPS = [
@@ -6421,7 +6483,20 @@ async function startLoading() {
   if (loadingStarted) return;
   loadingStarted = true;
   const box = $('#loader');
-  if (!box) { setTimeout(afterEnter, 200); startMusic(); return; }
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(hardStop);
+    if (box) { box.classList.add('fade'); setTimeout(() => box.remove(), 600); }
+    resize();
+    setTimeout(afterEnter, 350);
+    startMusic();
+    setTimeout(() => rankSubmit(false), 5000);
+  };
+  const hardStop = setTimeout(finish, 9000);
+  if (!box) { finish(); return; }
+  try {
   $('#ldTip').textContent = pick(LOAD_TIPS);
   let shown = 0, target = 0;
   const bar = setInterval(() => {
@@ -6455,13 +6530,11 @@ async function startLoading() {
   clearInterval(bar);
   $('#ldFill').style.width = '100%';
   $('#ldPct').textContent = '100%';
-  box.classList.add('fade');
-  setTimeout(() => box.remove(), 600);
-  setTimeout(afterEnter, 350);
-  startMusic();
-  setTimeout(() => rankSubmit(false), 5000);
+  } catch (e) { /* 로딩 중 문제가 있어도 게임은 켠다 */ }
+  finish();
 }
 
+window.__booted = true;
 runOpening();
 
 tick();

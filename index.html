@@ -13,13 +13,35 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="몬스터 합치기">
-<link rel="stylesheet" href="style.css?v=89">
+<link rel="stylesheet" href="style.css?v=92">
+<script>
+  // 게임이 켜지다가 문제가 생기면 멈춘 화면 대신 다시 시도 버튼을 보여 준다
+  window.addEventListener('error', function (e) { window.__bootErr = (e && e.message) || '알 수 없는 오류'; });
+  function __hardReload() {
+    var go = function () { location.replace(location.pathname + '?r=' + Date.now()); };
+    try {
+      var jobs = [];
+      if (window.caches) jobs.push(caches.keys().then(function (k) { return Promise.all(k.map(function (x) { return caches.delete(x); })); }));
+      if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function (r) { return Promise.all(r.map(function (x) { return x.unregister(); })); }));
+      Promise.all(jobs).then(go, go);
+    } catch (e) { go(); }
+  }
+  setTimeout(function () {
+    if (window.__booted) return;
+    var o = document.getElementById('opening'); if (o) o.remove();
+    var l = document.getElementById('loader'); if (!l) return;
+    l.innerHTML = '<div class="ld-fail"><div class="ld-fail-ico">😵</div><h2>게임을 불러오지 못했어요</h2>' +
+      '<p>인터넷 연결을 확인하고 다시 시도해 주세요.</p>' +
+      '<button onclick="location.reload()">🔄 다시 시도</button><button onclick="__hardReload()">🧹 새로 받기</button>' +
+      '<small>' + (window.__bootErr ? String(window.__bootErr).replace(/[<>&]/g, '') : '') + '</small></div>';
+  }, 12000);
+</script>
 </head>
 <body>
 <div id="opening" class="opening">
   <video id="openingVideo" src="opening.mp4?v=2" playsinline webkit-playsinline preload="auto"></video>
-  <div id="openingTap" class="opening-tap hidden">👆 화면을 눌러 시작</div>
-  <button id="openingSkip" class="opening-skip">건너뛰기 ⏭</button>
+  <button id="openingTap" class="opening-tap hidden">🔊 소리 켜기</button>
+  <button id="openingSkip" class="opening-skip" onclick="if(!window.__booted){var o=document.getElementById('opening');if(o)o.remove();}">건너뛰기 ⏭</button>
 </div>
 <div id="loader" class="loader">
   <div class="ld-rays"></div>
@@ -41,9 +63,9 @@
 <header class="hud">
   <div class="logo"><img src="icon.svg" alt=""> 몬스터 합치기</div>
   <div class="res">
-    <div class="pill"><span>💰</span><b id="gold">0</b></div>
-    <div class="pill"><span>💎</span><b id="gems">0</b></div>
-    <div class="pill"><span>🍖</span><b id="food">0</b></div>
+    <button class="pill res-pill" data-act="resInfo" data-r="gold"><span>💰</span><b id="gold">0</b></button>
+    <button class="pill res-pill" data-act="resInfo" data-r="gems"><span>💎</span><b id="gems">0</b></button>
+    <button class="pill res-pill" data-act="resInfo" data-r="food"><span>🍖</span><b id="food">0</b></button>
     <button class="pill code-btn daily-btn" data-act="daily" title="일일 보상">🎁<i class="dot" id="dailyDot"></i></button>
     <button class="pill code-btn mis-btn" data-act="missions" title="미션">📋<i class="dot" id="misDot"></i></button>
     <button class="pill code-btn" data-act="account" title="계정">👤</button>
@@ -62,6 +84,7 @@
 <button id="hideBtn" class="hide-btn" data-act="hideUI">🙈 숨기기</button>
 <div id="zoomBtns" class="zoom-btns"><button data-act="zoomIn" title="확대">＋</button><button data-act="zoomOut" title="축소">−</button></div>
 <div id="guide" class="guide hidden"></div>
+<button id="goalChip" class="goal-chip hidden" data-act="goalGo"></button>
 
 <nav class="bottom-bar">
   <button class="round" data-act="tab" data-tab="island">🏝️<span>섬</span></button>
@@ -78,7 +101,7 @@
 <div id="toast" class="toast"></div>
 <div id="finger" class="finger hidden"><span class="f-hand">👆</span><span class="f-tip">여기를 눌러요!</span></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
-<script src="game.js?v=91"></script>
+<script src="game.js?v=92"></script>
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
 </body>
 </html>

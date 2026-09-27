@@ -972,3 +972,35 @@ body.visiting .zoom-btns { top: 160px; }
 
 /* 👆 튜토리얼 손가락도 누를 수 있게 (누르면 가리키는 버튼이 눌린다) */
 .finger { pointer-events: auto; cursor: pointer; }
+
+/* 📱 웹뷰·모바일 브라우저 호환: 글자 크기 자동 확대 막기, 당겨서 새로고침 막기, 주소창 높이 반영 */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+html, body { overscroll-behavior: none; }
+body { -webkit-tap-highlight-color: transparent; }
+@supports (height: 100dvh) { .modal-box { max-height: 90dvh; } }
+/* 로딩 실패 화면 */
+.ld-fail { position: relative; z-index: 2; margin: auto; text-align: center; color: #fff; padding: 24px; max-width: 340px; }
+.ld-fail-ico { font-size: 56px; }
+.ld-fail h2 { margin: 8px 0; }
+.ld-fail button { display: block; width: 100%; margin: 10px 0 0; padding: 12px; border-radius: 14px; border: 0; font: inherit; font-weight: 900; font-size: 16px; background: #ffe066; color: #3a2a00; cursor: pointer; }
+.ld-fail button + button { background: rgba(255, 255, 255, .15); color: #fff; }
+.ld-fail small { display: block; margin-top: 12px; color: rgba(255, 255, 255, .5); word-break: break-all; }
+.opening-tap { cursor: pointer; background: rgba(0, 0, 0, .35); font-family: inherit; }
+
+/* 💰 재화 안내 */
+.res-pill { cursor: pointer; font: inherit; color: inherit; pointer-events: auto; }
+.res-info { text-align: left; }
+.res-info .ri-ico { font-size: 44px; text-align: center; }
+.res-info h3 { text-align: center; }
+.res-info h4 { margin: 10px 0 4px; }
+.res-info ul { margin: 0; padding-left: 20px; line-height: 1.6; }
+.res-info .row { justify-content: center; }
+/* 🎯 다음 목표 */
+.goal-chip { position: fixed; left: 50%; top: 104px; transform: translateX(-50%); z-index: 27; max-width: min(520px, calc(100% - 130px));
+  background: rgba(15, 16, 40, .82); color: var(--text); border: 1px solid rgba(255, 255, 255, .2); border-radius: 999px; padding: 6px 14px;
+  font: inherit; font-size: 13px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.goal-chip b { color: #ffe066; }
+.goal-chip.ready { background: #ffe066; color: #3a2a00; border-color: #fff; animation: ready 1.2s ease-in-out infinite; }
+.goal-chip.hidden { display: none; }
+@media (max-width: 560px) { .goal-chip { top: 92px; font-size: 12px; padding: 5px 10px; max-width: calc(100% - 110px); } }
+body.ui-hidden .goal-chip, body.visiting .goal-chip { display: none !important; }
