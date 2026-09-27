@@ -576,7 +576,7 @@ const habMons = (i) => S.monsters.filter(m => m.hab === i);
 // 서식지에 들어갈 수 있는 몬스터 수 = 레벨 (최소 2마리, Lv.10이면 10마리). 쌓이는 골드는 무제한
 const habCap = (i) => Math.max(2, S.plots[i].lv);
 const habLvBonus = (i) => (S.plots[i].lv - 1) * HAB_LV_BONUS;
-const habIncome = (i) => habMons(i).reduce((s, m) => s + monIncome(m), 0) * (1 + (habLvBonus(i) + decoPercent(islandOf(i)) + guildPct() + petPct('gold') + kdLv('gold') * 10 + wonderPct()) / 100) * (boostOn() ? 2 : 1);
+const habIncome = (i) => habMons(i).reduce((s, m) => s + monIncome(m), 0) * (1 + (habLvBonus(i) + decoPercent(islandOf(i)) + guildPct() + petPct('gold') + kdLv('gold') * 10 + wonderPct()) / 100) * (boostOn() ? 2 : 1) * evtGoldMult(S.plots[i].el);
 const habGoldCap = () => Infinity;
 const feedCost = (m) => m.lv * 20;
 const sellPrice = (m) => Math.round(RAR[CAT[m.type].rarity].cost * 0.5 * (1 + m.lv * 0.2));
@@ -712,6 +712,35 @@ const CH = {
   Dm: [26, 57, 62, 65], Bb: [34, 58, 62, 65], A: [33, 57, 61, 64], Gm: [31, 55, 58, 62],
   Fmaj7: [29, 57, 60, 64], Em7: [28, 55, 59, 62], Dm7: [26, 57, 60, 65], G7: [31, 53, 59, 62],
   Cmaj7: [36, 55, 59, 64], Am7: [33, 55, 60, 64], Em9: [28, 54, 59, 62], Bsus: [35, 54, 59, 64], B7: [35, 54, 59, 63],
+  D: [26, 57, 62, 66],
+};
+// 곡의 2부(B): 다른 화음과 멜로디. form = 곡 순서 (도입 → A → B → A 변형 …) 라서 같은 부분만 계속 반복되지 않는다
+//   noMel: 멜로디 없이 / oct: 멜로디 한 옥타브 올리기 / noDrums, noArp: 그 악기 빼기
+const SONG_B = {
+  island: {
+    chords: ['F', 'G', 'Em7', 'Am', 'F', 'G', 'C', 'E'],
+    melody: [[72, 4], [74, 4], [76, 4], [74, 2], [72, 2], [71, 6], [0, 2], [69, 8],
+      [72, 2], [74, 2], [77, 4], [79, 4], [77, 2], [76, 2], [76, 4], [74, 2], [72, 2], [71, 8]],
+    form: [{ p: 'A', noMel: 1 }, { p: 'A' }, { p: 'B' }, { p: 'A', oct: 12, noArp: 1 }, { p: 'B', noArp: 1 }, { p: 'A' }],
+  },
+  shop: {
+    chords: ['Am7', 'Dm7', 'G7', 'Cmaj7', 'Fmaj7', 'Em7', 'Dm7', 'G7'],
+    melody: [[76, 2], [74, 2], [72, 3], [0, 1], [77, 2], [76, 1], [74, 1], [72, 4], [71, 2], [74, 2], [77, 2], [76, 2], [76, 6], [0, 2],
+      [72, 1], [74, 1], [76, 2], [77, 2], [79, 2], [79, 3], [77, 1], [76, 4], [74, 2], [72, 2], [71, 2], [69, 2], [71, 6], [0, 2]],
+    form: [{ p: 'A', noMel: 1 }, { p: 'A' }, { p: 'B' }, { p: 'A', oct: 12 }, { p: 'B', noDrums: 1 }, { p: 'A' }],
+  },
+  dex: {
+    chords: ['Cmaj7', 'D', 'Em9', 'Em9', 'Am7', 'D', 'Bsus', 'B7'],
+    melody: [[74, 4], [76, 4], [78, 6], [0, 2], [79, 4], [78, 2], [76, 2], [71, 8],
+      [72, 4], [74, 2], [76, 2], [78, 8], [76, 4], [74, 4], [71, 6], [0, 2]],
+    form: [{ p: 'A', noMel: 1 }, { p: 'A' }, { p: 'B' }, { p: 'A', oct: 12 }, { p: 'B', noArp: 1 }, { p: 'A', noMel: 1 }],
+  },
+  battle: {
+    chords: ['Gm', 'Dm', 'Bb', 'F', 'Gm', 'Bb', 'C', 'A'],
+    melody: [[67, 3], [69, 1], [70, 4], [69, 4], [65, 4], [70, 2], [72, 2], [74, 4], [72, 6], [0, 2],
+      [74, 2], [72, 2], [70, 2], [67, 2], [70, 4], [74, 4], [76, 3], [74, 1], [72, 4], [73, 8]],
+    form: [{ p: 'A', noMel: 1 }, { p: 'A' }, { p: 'B' }, { p: 'A', oct: 12 }, { p: 'B' }, { p: 'A', noMel: 1, noArp: 1 }, { p: 'A', oct: 12 }],
+  },
 };
 // 곡마다: 빠르기, 화음 8마디, 멜로디 [음, 8분음표 길이] (0 = 쉼표), 쓰는 악기
 const SONGS = {
@@ -810,36 +839,50 @@ function mDrum(dest, t, vol, from, to, len) {
 }
 // 곡을 8분음표 단위 사건 목록으로 풀어 둔다
 function songEvents(song) {
-  if (song.ev) return song.ev;
+  if (song.byAt) return song.byAt;
+  const name = Object.keys(SONGS).find(k => SONGS[k] === song);
+  const extra = SONG_B[name] || {};
+  const parts = { A: { chords: song.chords, melody: song.melody }, B: extra.chords ? { chords: extra.chords, melody: extra.melody } : { chords: song.chords, melody: song.melody } };
+  const form = extra.form || [{ p: 'A' }];
   const ev = [];
-  let pos = 0;
-  song.melody.forEach(([m, len]) => { if (m) ev.push({ at: pos, k: 'mel', m, len }); pos += len; });
-  song.chords.forEach((c, bar) => {
-    const ch = CH[c], b0 = bar * 8, up = ch.slice(1);
-    if (song.pad) up.forEach(m => ev.push({ at: b0, k: 'pad', m, len: 8 }));
-    if (song.comp) [2, 6].forEach(s => up.forEach(m => ev.push({ at: b0 + s, k: 'comp', m })));
-    // 베이스
-    if (song.bass === 'long') ev.push({ at: b0, k: 'bassL', m: ch[0] + 12, len: 8 });
-    if (song.bass === 'walk') [0, 2, 4, 6].forEach((s, n) => ev.push({ at: b0 + s, k: 'bassW', m: ch[0] + 12 + [0, 7, 12, 7][n] }));
-    if (song.bass === 'drive') for (let s = 0; s < 8; s++) ev.push({ at: b0 + s, k: 'drive', m: ch[0] + 12 + (s % 4 === 3 ? 12 : 0) });
-    // 아르페지오 (화음을 한 음씩)
-    if (song.arp === 'piano') for (let s = 0; s < 8; s++) ev.push({ at: b0 + s, k: 'piano', m: up[[0, 1, 2, 1][s % 4]] + (s >= 4 ? 12 : 0) });
-    if (song.arp === 'sparse') [0, 3, 5].forEach((s, n) => ev.push({ at: b0 + s, k: 'piano', m: up[n] + 12 }));
-    // 드럼
-    if (song.drums === 'brush') {
-      [0, 4].forEach(s => ev.push({ at: b0 + s, k: 'kickSoft' }));
-      [2, 6].forEach(s => ev.push({ at: b0 + s, k: 'brush' }));
-      for (let s = 0; s < 8; s++) ev.push({ at: b0 + s, k: 'ride' });
+  let off = 0;
+  form.forEach(sec => {
+    const part = parts[sec.p];
+    if (!sec.noMel) {
+      let pos = 0;
+      part.melody.forEach(([m, len]) => { if (m) ev.push({ at: off + pos, k: 'mel', m: m + (sec.oct || 0), len }); pos += len; });
     }
-    if (song.drums === 'taiko') {
-      [0, 3, 4, 6].forEach(s => ev.push({ at: b0 + s, k: 'taiko' }));
-      ev.push({ at: b0 + 7, k: 'tom' });
-      if (bar % 2 === 0) ev.push({ at: b0, k: 'cymbal' });
-    }
+    part.chords.forEach((c, bar) => {
+      const ch = CH[c], b0 = off + bar * 8, up = ch.slice(1);
+      if (song.pad) up.forEach(m => ev.push({ at: b0, k: 'pad', m, len: 8 }));
+      if (song.comp) [2, 6].forEach(st => up.forEach(m => ev.push({ at: b0 + st, k: 'comp', m })));
+      // 베이스
+      if (song.bass === 'long') ev.push({ at: b0, k: 'bassL', m: ch[0] + 12, len: 8 });
+      if (song.bass === 'walk') [0, 2, 4, 6].forEach((st, n) => ev.push({ at: b0 + st, k: 'bassW', m: ch[0] + 12 + [0, 7, 12, 7][n] }));
+      if (song.bass === 'drive') for (let st = 0; st < 8; st++) ev.push({ at: b0 + st, k: 'drive', m: ch[0] + 12 + (st % 4 === 3 ? 12 : 0) });
+      // 아르페지오 (화음을 한 음씩)
+      if (!sec.noArp) {
+        if (song.arp === 'piano') for (let st = 0; st < 8; st++) ev.push({ at: b0 + st, k: 'piano', m: up[[0, 1, 2, 1][st % 4]] + (st >= 4 ? 12 : 0) });
+        if (song.arp === 'sparse') [0, 3, 5].forEach((st, n) => ev.push({ at: b0 + st, k: 'piano', m: up[n] + 12 }));
+      }
+      // 드럼
+      if (!sec.noDrums && song.drums === 'brush') {
+        [0, 4].forEach(st => ev.push({ at: b0 + st, k: 'kickSoft' }));
+        [2, 6].forEach(st => ev.push({ at: b0 + st, k: 'brush' }));
+        for (let st = 0; st < 8; st++) ev.push({ at: b0 + st, k: 'ride' });
+      }
+      if (!sec.noDrums && song.drums === 'taiko') {
+        [0, 3, 4, 6].forEach(st => ev.push({ at: b0 + st, k: 'taiko' }));
+        ev.push({ at: b0 + 7, k: 'tom' });
+        if (bar % 2 === 0) ev.push({ at: b0, k: 'cymbal' });
+      }
+    });
+    off += part.chords.length * 8;
   });
-  song.len = song.chords.length * 8;
-  song.ev = ev;
-  return ev;
+  song.len = off;
+  song.byAt = Array.from({ length: off }, () => []);
+  ev.forEach(x => song.byAt[x.at].push(x));
+  return song.byAt;
 }
 function musicTick() {
   if (!AC || !MUS.cur || AC.state !== 'running') return;
@@ -848,10 +891,10 @@ function musicTick() {
   if (MUS.next < AC.currentTime - 0.05) MUS.next = AC.currentTime + 0.05;
   while (MUS.next < AC.currentTime + 0.4) {
     const at = MUS.step % song.len, dest = MUS.gain, v = song.vol;
+    const now = ev[at];
     // 스윙: 뒤쪽 8분음표를 조금 늦게
     const t = MUS.next + (song.swing && at % 2 === 1 ? e8 * song.swing : 0);
-    ev.forEach(x => {
-      if (x.at !== at) return;
+    now.forEach(x => {
       if (x.k === 'mel') INST[song.lead](dest, t, x.m, x.len * e8, v);
       else if (INST[x.k]) INST[x.k](dest, t, x.m, (x.len || 1) * e8, v);
       else if (x.k === 'kickSoft') mDrum(dest, t, 0.13 * v, 90, 42, 0.3);
@@ -1016,6 +1059,135 @@ function kingdomShopHTML() {
     </div>`;
 }
 
+// ===================== 🎉 이벤트 =====================
+// 서버 없이 날짜로 정한다: 3일마다 다음 이벤트. 이벤트 토큰을 모아 패스 보상, 마지막은 한정 펫
+const EVT_DAYS = 3;
+const EVENTS = [
+  { id: 'goldrush',  e: '💰', name: '골드 러시',     color: '#ffd24a', desc: '모든 골드 ×1.5', pet: 'ev_frog',   hot: ['collect'] },
+  { id: 'harvest',   e: '🌾', name: '풍년 축제',     color: '#7dff8f', desc: '수확 먹이 ×2',   pet: 'ev_hedge',  hot: ['harvest', 'feed'] },
+  { id: 'tourney',   e: '⚔️', name: '전투 대회',     color: '#ff6b6b', desc: '모험 전투 골드 ×2', pet: 'ev_lion', hot: ['win', 'gwar'] },
+  { id: 'hatchfest', e: '🐣', name: '부화 페스티벌', color: '#ffb3e6', desc: '몬스터 알 반값',  pet: 'ev_chick',  hot: ['hatch', 'buyEgg'] },
+  { id: 'breedrush', e: '🧬', name: '교배 러시',     color: '#5ce1e6', desc: '교배 시간 절반',  pet: 'ev_flamgo', hot: ['breed'] },
+  { id: 'element',   e: '🌈', name: '속성 축제',     color: '#c28cff', desc: '', pet: 'ev_bfly', hot: ['collect', 'breed'] },
+];
+// 이벤트 토큰: 평소 하는 일로 모은다 (이벤트 주제 활동은 2배)
+const EVT_TOKEN = { collect: 1, breed: 3, feed: 1, hatch: 2, harvest: 2, win: 3, buyEgg: 1, gwar: 4 };
+const EVT_NAME = { collect: '💰 골드 걷기', breed: '🏔️ 교배', feed: '🍖 레벨 올리기', hatch: '🐣 부화', harvest: '🌾 수확', win: '⚔️ 전투 승리', buyEgg: '🥚 알 사기', gwar: '🛡️ 길드전' };
+const EVT_PASS = [
+  { need: 15,  text: '💎 10',            give: () => { earn(10, 'gems'); } },
+  { need: 40,  text: '💰 골드 한 보따리', give: () => { const g = Math.max(5000, Math.round(totalIncome() * 900)); earn(g); return '💰 ' + fmt(g); } },
+  { need: 80,  text: '🎁 고급 룬 상자',   give: () => runeText(giveRune([0, 0.6, 0.4])) },
+  { need: 130, text: '💎 30',            give: () => { earn(30, 'gems'); } },
+  { need: 200, text: '🥚 펫 알',          give: () => { setTimeout(() => petEgg('normal', true), 400); return '펫 알을 깨요!'; } },
+  { need: 300, text: '💎 60',            give: () => { earn(60, 'gems'); } },
+  { need: 420, text: '👑 전설 알',        give: () => { const pool = CAT_LIST.filter(c => c.rarity === 'legendary' && !c.shop); const c = pool[Math.floor(Math.random() * pool.length)]; if (S.hatch.length < hatchCap()) { S.hatch.push(c.id); return c.face + ' ' + c.name + ' 알 (부화장)'; } earn(250, 'gems'); return '부화장이 가득 차서 💎 250'; } },
+  { need: 600, text: '🎉 한정 펫!',        give: () => { const p = petById(evtNow().pet); S.pets = S.pets || {}; S.pets[p.id] = Math.min(PET_MAX, (S.pets[p.id] || 0) + 1); return p.e + ' ' + p.name; } },
+];
+function evtGoldMult(el) {
+  const ev = evtNow();
+  if (ev.id === 'goldrush') return 1.5;
+  if (ev.id === 'element' && ev.el === el) return 2;
+  return 1;
+}
+const totalIncome = () => S.plots.reduce((s, p, i) => s + (p && p.kind === 'hab' ? habIncome(i) : 0), 0);
+function evtCycle() {
+  const d = new Date(), days = Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+  return Math.floor(days / EVT_DAYS);
+}
+function evtNow() {
+  const c = evtCycle(), ev = { ...EVENTS[c % EVENTS.length] };
+  if (ev.id === 'element') {
+    const el = BASE[Math.floor(c / EVENTS.length) % BASE.length];
+    ev.el = el;
+    ev.desc = `${habEmoji(el)} ${habName(el)} 골드 ×2`;
+  }
+  ev.key = ev.id + '-' + c;
+  // 끝나는 때 (다음 주기 시작 = 그날 자정)
+  const d = new Date();
+  const days = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+  const left = EVT_DAYS - (days % EVT_DAYS);
+  const end = new Date(d.getFullYear(), d.getMonth(), d.getDate() + left);
+  ev.end = end.getTime();
+  return ev;
+}
+const evtOn = (id) => evtNow().id === id;
+function evtState() {
+  const ev = evtNow();
+  if (!S.evt || S.evt.key !== ev.key) S.evt = { key: ev.key, tokens: 0, got: [] };
+  return S.evt;
+}
+function evtToken(kind, n = 1) {
+  if (!EVT_TOKEN[kind] || VISIT) return;
+  const ev = evtNow(), st = evtState();
+  const add = EVT_TOKEN[kind] * Math.min(5, n) * (ev.hot.includes(kind) ? 2 : 1);
+  const before = st.tokens;
+  st.tokens += add;
+  // 새 보상이 열리면 알려 준다
+  const opened = EVT_PASS.find(x => before < x.need && st.tokens >= x.need);
+  if (opened) setTimeout(() => toast(`🎉 이벤트 보상이 열렸어요! (${opened.text}) 왼쪽 🎉 버튼에서 받기`), 700);
+  updateEvtBtn();
+}
+function evtLeftText(ms) {
+  const h = Math.max(0, Math.floor(ms / 3600000));
+  return h >= 24 ? `${Math.floor(h / 24)}일 ${h % 24}시간` : h >= 1 ? `${h}시간` : `${Math.max(1, Math.ceil(ms / 60000))}분`;
+}
+function evtClaimable() {
+  const st = evtState();
+  return EVT_PASS.some((x, k) => st.tokens >= x.need && !st.got.includes(k));
+}
+function updateEvtBtn() {
+  const b = $('#evtBtn');
+  if (!b) return;
+  const ev = evtNow();
+  b.classList.toggle('hidden', tab !== 'island' || !!VISIT);
+  b.style.setProperty('--ec', ev.color);
+  b.innerHTML = `${ev.e}<small>${evtLeftText(ev.end - Date.now())}</small>`;
+  b.classList.toggle('ready', evtClaimable());
+}
+function openEvent() {
+  tutFlag('event', true);
+  const ev = evtNow(), st = evtState();
+  S.evtSeen = ev.key;
+  const pet = petById(ev.pet);
+  const next = EVT_PASS.find(x => st.tokens < x.need);
+  showModal(`<div class="evt-banner" style="--ec:${ev.color}">
+      <div class="evt-emoji">${ev.e}</div>
+      <div><h3>${ev.name}</h3><div class="evt-boost">🔥 ${ev.desc}</div><div class="muted">⏰ ${evtLeftText(ev.end - Date.now())} 남음 · 3일마다 새 이벤트</div></div>
+    </div>
+    <div class="evt-tokens">🎟️ 이벤트 토큰 <b>${fmt(st.tokens)}</b>${next ? ` <small>(다음 보상까지 ${next.need - st.tokens})</small>` : ' <small>(모두 열었어요!)</small>'}</div>
+    <div class="bar evt-bar"><i style="width:${Math.min(100, st.tokens / EVT_PASS[EVT_PASS.length - 1].need * 100)}%"></i></div>
+    <div class="evt-pass">${EVT_PASS.map((x, k) => { const got = st.got.includes(k), ok = st.tokens >= x.need, last = k === EVT_PASS.length - 1;
+      return `<div class="evt-step ${got ? 'got' : ok ? 'ok' : ''} ${last ? 'last' : ''}">
+        <span class="es-need">🎟️ ${x.need}</span>
+        <span class="es-text">${last ? `${pet.e} <b>${pet.name}</b><br><small>한정 펫 · ${petBonusText(pet, 1)}</small>` : x.text}</span>
+        ${got ? '<span class="es-done">✅</span>' : `<button class="btn small ${ok ? 'green' : ''}" data-act="evtClaim" data-k="${k}" ${ok ? '' : 'disabled'}>받기</button>`}
+      </div>`; }).join('')}</div>
+    <h3 class="sub">🎟️ 토큰 모으는 법 <small class="muted">🔥 표시는 이번 이벤트에서 2배!</small></h3>
+    <div class="evt-how">${Object.entries(EVT_TOKEN).map(([k, v]) => `<span class="${ev.hot.includes(k) ? 'hot' : ''}">${EVT_NAME[k]} +${v * (ev.hot.includes(k) ? 2 : 1)}${ev.hot.includes(k) ? ' 🔥' : ''}</span>`).join('')}</div>
+    <div class="row"><button class="btn ghost small" data-act="evtTrade" ${st.tokens >= 20 ? '' : 'disabled'}>🔄 토큰 20개 → 💎 5</button><button class="btn ghost small" data-act="close">닫기</button></div>`);
+  updateEvtBtn();
+}
+function evtClaim(k) {
+  k = Number(k);
+  const st = evtState(), x = EVT_PASS[k];
+  if (!x || st.got.includes(k) || st.tokens < x.need) return;
+  st.got.push(k);
+  const extra = x.give();
+  save(); updateHud(); sfx('yay');
+  toast(`🎉 ${typeof extra === 'string' ? extra : x.text} 받았어요!`);
+  if (k === 4) return;   // 펫 알은 깨는 화면이 따로 나온다
+  openEvent();
+}
+// 토큰 교환: 쓰고 남은 토큰으로 보석 (패스 진행에는 영향 없게 따로 센다)
+function evtTrade() {
+  const st = evtState();
+  if (st.tokens < 20) return;
+  st.tokens -= 20;
+  earn(5, 'gems'); save(); updateHud(); sfx('coin');
+  toast('💎 5 받았어요!');
+  openEvent();
+}
+
 // ===================== 🐾 펫 =====================
 // 펫 한 마리를 데리고 다니면 보너스! 간식으로 Lv.10까지 키운다. 같은 펫이 또 나오면 레벨 +1
 const PET_RAR = {
@@ -1038,6 +1210,13 @@ const PETS = [
   { id: 'bdragon', name: '아기용 크앙',   e: '🐲', r: 'epic',      b: { atk: 4, gold: 2 } },
   { id: 'peacock', name: '황금 공작',     e: '🦚', r: 'legendary', b: { gold: 5, food: 5, discount: 2 } },
   { id: 'skydrg',  name: '하늘 용',       e: '🐉', r: 'legendary', b: { atk: 5, hp: 5, gold: 2 } },
+  // 🎉 이벤트 한정 (이벤트 패스 마지막 보상으로만)
+  { id: 'ev_frog',   name: '황금 두꺼비',   e: '🐸', r: 'legendary', b: { gold: 6 }, event: true },
+  { id: 'ev_hedge',  name: '고슴도치 농부', e: '🦔', r: 'legendary', b: { food: 8, gold: 1 }, event: true },
+  { id: 'ev_lion',   name: '사자 챔피언',   e: '🦁', r: 'legendary', b: { atk: 5, hp: 4 }, event: true },
+  { id: 'ev_chick',  name: '병아리 삐약',   e: '🐣', r: 'legendary', b: { discount: 4, gold: 2 }, event: true },
+  { id: 'ev_flamgo', name: '플라밍고 댄서', e: '🦩', r: 'legendary', b: { gold: 3, food: 4 }, event: true },
+  { id: 'ev_bfly',   name: '무지개 나비',   e: '🦋', r: 'legendary', b: { gold: 4, atk: 2 }, event: true },
 ];
 const PET_MAX = 10;
 const PET_EGGS = [
@@ -1073,8 +1252,8 @@ function openPets() {
     </div>` : '<p class="muted">데리고 다닐 펫을 골라요!</p>'}
     <h3 class="sub">📚 펫 도감 <small class="muted">${owned} / ${PETS.length}</small></h3>
     <div class="pet-grid">${PETS.map(p => { const lv = petLv(p.id); return lv ? `<button class="pet-card ${S.petOn === p.id ? 'on' : ''}" data-act="petEquip" data-id="${p.id}" style="--pc:${PET_RAR[p.r].color}">
-        <span class="pc-face">${p.e}</span><b>${p.name}</b><small>Lv.${lv} · ${PET_RAR[p.r].name}</small><small class="pc-b">${petBonusText(p, lv)}</small><span class="pc-tag">${S.petOn === p.id ? '✅ 함께하는 중' : '데리고 다니기'}</span></button>`
-      : `<div class="pet-card locked" style="--pc:${PET_RAR[p.r].color}"><span class="pc-face">❔</span><b>???</b><small>${PET_RAR[p.r].name}</small></div>`; }).join('')}</div>
+        <span class="pc-face">${p.e}</span><b>${p.name}</b><small>Lv.${lv} · ${p.event ? '🎉 한정' : PET_RAR[p.r].name}</small><small class="pc-b">${petBonusText(p, lv)}</small><span class="pc-tag">${S.petOn === p.id ? '✅ 함께하는 중' : '데리고 다니기'}</span></button>`
+      : `<div class="pet-card locked" style="--pc:${PET_RAR[p.r].color}"><span class="pc-face">${p.event ? p.e : '❔'}</span><b>${p.event ? p.name : '???'}</b><small>${p.event ? '🎉 이벤트 한정' : PET_RAR[p.r].name}</small></div>`; }).join('')}</div>
     <h3 class="sub">🥚 펫 알 <small class="muted">같은 펫이 또 나오면 레벨 +1</small></h3>
     <div class="pet-eggs">${PET_EGGS.map(eg => `<button class="btn ${eg.cur === 'gems' ? '' : 'green'}" data-act="petEgg" data-id="${eg.id}">${eg.e} ${eg.name}<br><small>${eg.cur === 'gems' ? '💎' : '💰'} ${fmt(eg.cost)} · ${Object.entries(eg.w).filter(([, v]) => v).map(([r, v]) => PET_RAR[r].name + ' ' + Math.round(v * 100) + '%').join(' ')}</small></button>`).join('')}</div>
     <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
@@ -1090,13 +1269,13 @@ function petReveal(p, isNew, title) {
     <div class="row">${S.petOn === p.id ? '' : `<button class="btn green" data-act="petEquip" data-id="${p.id}">데리고 다니기</button>`}<button class="btn" data-act="pets">🐾 펫 목록</button></div>
   </div>`);
 }
-function petEgg(id) {
+function petEgg(id, free) {
   const eg = PET_EGGS.find(x => x.id === id);
-  if (!eg || !spend(eg.cost, eg.cur)) return;
+  if (!eg || (!free && !spend(eg.cost, eg.cur))) return;
   // 등급 뽑기 → 그 등급의 펫 중 하나
   let r = Math.random(), rar = 'common';
   for (const [k, v] of Object.entries(eg.w)) { if (r < v) { rar = k; break; } r -= v; }
-  const pool = PETS.filter(p => p.r === rar);
+  const pool = PETS.filter(p => p.r === rar && !p.event);
   const p = pool[Math.floor(Math.random() * pool.length)];
   S.pets = S.pets || {};
   const isNew = !S.pets[p.id];
@@ -1960,6 +2139,7 @@ function renderIslandBar() {
   const hb = $('#hideBtn');
   hb.classList.toggle('hidden', tab !== 'island');
   updatePetBtn();
+  updateEvtBtn();
   hb.classList.toggle('on', !!S.hideUI);
   hb.innerHTML = S.hideUI ? '👁️<span> 보이기</span>' : '🙈<span> 숨기기</span>';
   document.body.classList.toggle('ui-hidden', !!S.hideUI && tab === 'island');
@@ -2291,7 +2471,7 @@ function harvestReady() {
   farmIdx().forEach(k => {
     const p = S.plots[k];
     if (!farmReady(p)) return;
-    const got = Math.round(CROPS[p.crop].food * (1 + (petPct('food') + kdLv('food') * 15) / 100));
+    const got = Math.round(CROPS[p.crop].food * (1 + (petPct('food') + kdLv('food') * 15) / 100) * (evtOn('harvest') ? 2 : 1));
     food += got;
     n++;
     p.lastCrop = p.crop;
@@ -2370,7 +2550,7 @@ function harvest(i) {
   const p = S.plots[i];
   if (p.crop == null) return;
   if (Date.now() < p.end) { toast('아직 자라는 중이에요 🌱'); return; }
-  const food = Math.round(CROPS[p.crop].food * (1 + (petPct('food') + kdLv('food') * 15) / 100));
+  const food = Math.round(CROPS[p.crop].food * (1 + (petPct('food') + kdLv('food') * 15) / 100) * (evtOn('harvest') ? 2 : 1));
   S.food += food;
   p.crop = null;
   sfx('coin');
@@ -2596,7 +2776,7 @@ function startBreed(i = curMtn) {
   if (!spend(paid)) return;
   const type = breedResult(a.type, b.type);
   const base = RAR[CAT[type].rarity].time;
-  const total = base;
+  const total = Math.max(1, Math.round(base * (evtOn('breedrush') ? 0.5 : 1)));
   const logId = S.nextLog = (S.nextLog || 0) + 1;
   mtnSlots(p)[curSlot] = { type, total, base, end: Date.now() + total * 1000, parents: [CAT[a.type].name, CAT[b.type].name], logId, cost: S.infinite ? 0 : paid };
   // 다음에 창을 열면 비어 있는 다음 칸으로
@@ -3482,7 +3662,7 @@ const MON_PRICE = 500;
 // 기본 8속성 알 + 얼음/금속/마법 서식지 전용 알 (화염 살라맨더처럼 기본 한 마리씩, 모두 500)
 const SPECIAL_EGGS = ['p:ice', 'p:metal', 'p:magic'];
 const EGG_SHOP = [...BASE.map(e => 'p:' + e), ...SPECIAL_EGGS];
-const eggPrice = () => MON_PRICE;
+const eggPrice = () => Math.round(MON_PRICE * (evtOn('hatchfest') ? 0.5 : 1));
 function buyMon(type) {
   if (!CAT[type] || !EGG_SHOP.includes(type)) return;
   if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
@@ -4145,7 +4325,7 @@ function endBattle(win) {
   } else if (B.gwar) rewards.push(...gwarResult(win));
   else if (B.bossIdx != null) rewards.push(...bossRewards(win));
   else if (win) {
-    const gold = Math.round(120 * Math.pow(1.25, B.stage - 1));
+    const gold = Math.round(120 * Math.pow(1.25, B.stage - 1) * (evtOn('tourney') ? 2 : 1));
     earn(gold);
     rewards.push(`💰 ${fmt(gold)}`);
     const gems = B.stage % 5 === 0 ? 20 : 5;
@@ -5632,7 +5812,10 @@ function afterEnter() {
   if (!S.welcomed) { openWelcome(0, false); return; }
   if (AWAY.sec > 300 && openWelcomeBack()) return;
   // 튜토리얼 앞부분(첫 교배 전)에는 창을 띄우지 않고 🎁 빨간 점으로만 알려 준다
-  if (dailyReady() && (S.tutOff || tutStep() >= 8)) openDaily();
+  if (dailyReady() && (S.tutOff || tutStep() >= 8)) { openDaily(); return; }
+  const ev = evtNow();
+  if (S.tutCoreDone && S.evtSeen !== ev.key) openEvent();
+  else if (S.evtSeen !== ev.key) toast(`🎉 이벤트: ${ev.e} ${ev.name} (${ev.desc})`);
 }
 
 // ===================== 속성 상성표 =====================
@@ -5772,6 +5955,7 @@ function misToday() {
   return S.mis;
 }
 function mission(id, n = 1) {
+  evtToken(id, n);
   const m = misToday();
   if (!m.ids.includes(id)) return;
   const def = MISSIONS.find(x => x.id === id);
@@ -5790,6 +5974,7 @@ const ACH = [
   ...[1, 4, 8, 12].map((n, k) => ({ id: 'pets' + n, text: `🐾 펫 ${n}마리 모으기`, now: () => PETS.filter(p => petLv(p.id)).length, need: n, gems: [5, 20, 50, 150][k] })),
   ...[5, 20, 50, 100].map((n, k) => ({ id: 'kd' + n, text: `🏛️ 왕국 발전 합계 Lv.${n}`, now: () => KINGDOM.reduce((s, x) => s + kdLv(x.id), 0), need: n, gems: [20, 50, 120, 300][k] })),
   ...[1, 4, 8].map((n, k) => ({ id: 'wonder' + n, text: `🗽 랜드마크 ${n}개 세우기`, now: () => DECOS.filter(d => d.wonder && S.plots.some(p => p && p.kind === 'deco' && p.id === d.id)).length, need: n, gems: [30, 100, 500][k] })),
+  ...[1, 3, 6].map((n, k) => ({ id: 'evpet' + n, text: `🎉 이벤트 한정 펫 ${n}마리`, now: () => PETS.filter(p => p.event && petLv(p.id)).length, need: n, gems: [30, 100, 300][k] })),
   { id: 'guild1', text: '🛡️ 길드에 들어가거나 만들기', now: () => (S.guild ? 1 : 0), need: 1, gems: 20 },
   ...[200, 500, 900, 1400].map((n, k) => ({ id: 'troph' + n, text: `🏆 트로피 ${fmt(n)} 모으기`, now: () => S.trophies || 0, need: n, gems: [10, 20, 40, 60][k] })),
   ...[3, 6, 10, 20].map((n, k) => ({ id: 'habs' + n, text: `🏠 서식지 ${n}개 짓기`, now: () => S.plots.filter(p => p && p.kind === 'hab').length, need: n, gems: [5, 10, 20, 30][k] })),
@@ -6206,6 +6391,9 @@ TUT.push(
   { text: '🎯 섬 위쪽 🎯 다음 목표를 눌러 보상을 받아요', done: () => tutFlag('goal'), go: () => { closeModal(); tab = 'island'; render(); updateHud(); } },
 );
 TUT.push(
+  { text: '🎉 섬 왼쪽 🎉 이벤트 버튼을 눌러 지금 이벤트를 봐요 (한정 펫!)', done: () => tutFlag('event'), go: () => { closeModal(); openEvent(); } },
+);
+TUT.push(
   { text: '🔁 모험에서 🔁 연속 전투를 해 봐요 (이기면 다음 스테이지로 계속!)', done: () => tutFlag('loop'), go: () => { closeModal(); tab = 'adventure'; render(); } },
   { text: '🏛️ 상점의 🏛️ 왕국 발전을 한 번 올려 봐요 (골드로 영원히 강해져요)', done: () => KINGDOM.some(k => kdLv(k.id) > 0), go: () => goShop('shopKingdom') },
   { text: '💎 상점의 🗽 랜드마크와 💎 보석 상점을 둘러봐요 (로봇·부스터·전설 알)', done: () => tutFlag('bigshop'), go: () => goShop('shopWonder') },
@@ -6310,14 +6498,18 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=misClaim]:not([disabled])', '#modalBox [data-act=achClaim]:not([disabled])', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#goalChip:not(.hidden)'];
-    case 22: // 연속 전투
+    case 22: // 이벤트
+      if (inModal) return ['#modalBox [data-act=evtClaim]:not([disabled])', '#modalBox [data-act=close]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#evtBtn'];
+    case 23: // 연속 전투
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return S.team.length ? ['#view [data-act=fightLoop]'] : ['#view [data-act=teamAuto]'];
-    case 23: // 왕국 발전
+    case 24: // 왕국 발전
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['[data-act=kdUp]:not([disabled])'];
-    case 24: // 랜드마크·보석 상점
+    case 25: // 랜드마크·보석 상점
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['#shopGem', '#shopWonder'];
   }
@@ -6493,6 +6685,7 @@ const WELCOME = [
   { icon: '🐾', title: '펫', text: '섬 왼쪽 위 <b>🐾 펫 버튼</b>을 누르면 첫 펫 🐶을 선물로 받아요!<br>펫은 섬을 같이 돌아다니고, 💰골드·🍖먹이·⚔️공격·❤️체력·🏷️교배 할인 <b>보너스</b>를 줘요.<br>🍪 간식으로 Lv.10까지 키우고, 🥚 펫 알로 12마리를 모아 봐요.' },
   { icon: '🏝️', title: '섬 18개', text: '위쪽 <b>◀ ▶</b>로 섬을 옮겨 다녀요. 건물을 <b>꾹 눌러 끌면</b> 빈 땅으로 옮겨져요.<br>🎨 장식을 놓으면 그 섬 골드가 올라요.<br>두 손가락으로 <b>확대</b>, 🙈 숨기기로 이름표를 감출 수 있어요.' },
   { icon: '⚔️', title: '모험과 보스', text: '몬스터 3마리로 팀을 짜서 싸워요 (<b>⚡ 자동 편성</b>이면 가장 센 3마리!). 📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!<br><b>🔁 연속 전투</b>를 누르면 이길 때마다 다음 스테이지로 자동으로 계속 싸워요.<br>👹 보스전에서는 에너지가 엄청 많은 보스와 싸워요.' },
+  { icon: '🎉', title: '이벤트', text: '<b>3일마다</b> 새 이벤트가 열려요: 💰골드 러시, 🌾풍년 축제, ⚔️전투 대회, 🐣부화 페스티벌, 🧬교배 러시, 🌈속성 축제<br>평소처럼 놀면 <b>🎟️ 이벤트 토큰</b>이 모이고 (이벤트 주제 활동은 2배!), 패스 보상을 받아요.<br>마지막 보상은 <b>이벤트 한정 펫</b>! 섬 왼쪽 <b>🎉 버튼</b>에서 확인해요.' },
   { icon: '🏛️', title: '골드·보석 크게 쓰기', text: '상점의 <b>🏛️ 왕국 발전</b>: 골드로 끝없이 레벨 업 (골드·먹이·전투·교배 비용·매일 보석)<br><b>🗽 랜드마크</b>: 섬에 세우는 거대 건물, 모든 섬 골드 UP (최대 +170%)<br><b>💎 보석 상점</b>: 🤖 자동 수집 로봇, ⚡ 골드 2배 부스터, 👑 전설 알 상자' },
   { icon: '👥', title: '대전과 친구', text: '모험 탭 <b>👥 대전 · 친구</b> 칸에서<br>🌍 <b>랜덤 대전</b>으로 모르는 사람과 바로 싸우고, ⚔️ 방 코드로 <b>친구 대전</b>, 🎁 <b>선물</b>, 👀 <b>친구 섬 구경</b>도 해요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요.' },
   { icon: '🏆', title: '랭킹과 트로피', text: '🌍 랜덤 대전에서 이기면 <b>🏆 +30</b>, 지면 −15.<br>🥉브론즈 → 🥈실버 → 🥇골드 → 💠플래티넘 → 💎다이아 → 👑마스터 → 🏆챔피언!<br>모험 탭 <b>🏆 랭킹</b>에서 트로피·도감·모험·전투력 <b>전 세계 순위</b>를 봐요.' },
@@ -6722,6 +6915,9 @@ const ACTIONS = {
   achClaim: (d) => achClaim(d.id),
   sound: () => toggleSound(),
   pets: () => openPets(),
+  event: () => openEvent(),
+  evtClaim: (d) => evtClaim(d.k),
+  evtTrade: () => evtTrade(),
   kdUp: (d) => kdUp(d.id),
   bigshopSeen: () => { if (!tutFlag('bigshop')) { tutFlag('bigshop', true); toast('🗽 랜드마크는 모든 섬 골드를, 💎 보석 상점은 로봇·부스터·전설 알을 팔아요!'); updateGuide(); } },
   kdGem: () => kdGemClaim(),

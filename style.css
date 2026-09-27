@@ -1061,3 +1061,30 @@ body.ui-hidden .pet-btn { opacity: .55; }
 .loop-btn { width: 100%; background: linear-gradient(135deg, #ff9a3d, #ff4d6d); color: #fff; display: flex; flex-direction: column; }
 .loop-btn small { font-size: 11px; font-weight: 700; opacity: .9; }
 .loop-note { font-weight: 900; color: #ffe066; }
+
+/* 🎉 이벤트 */
+.evt-btn { top: 174px; background: radial-gradient(circle at 35% 30%, var(--ec, #ffd24a), #3a2294 85%); }
+.evt-btn.ready { animation: ready 1.1s ease-in-out infinite; border-color: #ffe066; }
+.evt-btn small { font-size: 9px; }
+@media (max-width: 560px) { .evt-btn { top: 146px; } }
+.evt-banner { display: flex; gap: 12px; align-items: center; text-align: left; padding: 12px; border-radius: 16px; margin-bottom: 8px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--ec) 45%, transparent), rgba(255, 255, 255, .04)); border: 2px solid var(--ec); }
+.evt-banner h3 { margin: 0; }
+.evt-emoji { font-size: 50px; animation: ldBob 1.2s ease-in-out infinite alternate; }
+.evt-boost { font-weight: 900; color: #ffe066; }
+.evt-tokens { font-size: 16px; margin: 6px 0; }
+.evt-tokens b { color: #ffe066; font-size: 20px; }
+.evt-bar { height: 10px; background: rgba(255, 255, 255, .1); border-radius: 99px; overflow: hidden; margin-bottom: 8px; }
+.evt-bar i { display: block; height: 100%; background: linear-gradient(90deg, #ff9a3d, #ffe066); }
+.evt-pass { display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.evt-step { display: grid; grid-template-columns: 62px 1fr auto; gap: 8px; align-items: center; padding: 7px 10px; border-radius: 12px; background: rgba(255, 255, 255, .05); border: 2px solid var(--line); }
+.evt-step.ok { border-color: #7dff8f; background: rgba(125, 255, 143, .1); }
+.evt-step.got { opacity: .55; }
+.evt-step.last { border-color: #ffb020; background: linear-gradient(90deg, rgba(255, 176, 32, .2), rgba(255, 255, 255, .03)); }
+.es-need { font-weight: 900; color: #ffe066; font-size: 13px; }
+.es-text small { color: #7dff8f; font-size: 11px; }
+.es-done { font-size: 18px; }
+.evt-how { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 6px 0; }
+.evt-how span { font-size: 12px; padding: 3px 9px; border-radius: 99px; background: rgba(255, 255, 255, .07); }
+.evt-how span.hot { background: rgba(255, 154, 61, .25); color: #ffcf9e; font-weight: 800; }
+.evt-step .btn[disabled] { opacity: .35; filter: grayscale(1); }
