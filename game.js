@@ -6884,10 +6884,12 @@ TUT.push(
   { text: '⭐ 몬스터 탭의 ⭐ 별 합성을 봐요 (같은 몬스터 3마리 → ★+1)', done: () => tutFlag('star') || (S.fuseCount || 0) > 0, go: () => { closeModal(); tab = 'mons'; render(); } },
 );
 TUT.push(
-  { text: '📜 섬 왼쪽 📜 퀘스트 버튼에서 루나의 이야기를 봐요 (스토리·주간 퀘스트)', done: () => tutFlag('quest'), go: () => { closeModal(); tab = 'island'; render(); } },
+  { text: '📜 왼쪽 📜 버튼에서 루나의 퀘스트를 받아요', done: () => tutFlag('quest'), go: () => { closeModal(); tab = 'island'; render(); } },
 );
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
+// 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
+{ const qi = TUT.findIndex(t => t.text.startsWith('📜')); if (qi > 10) TUT.splice(10, 0, TUT.splice(qi, 1)[0]); }
 function tutFlag(k, set) {
   S.tutFlags = S.tutFlags || {};
   if (set && !S.tutFlags[k]) { S.tutFlags[k] = true; save(); }
@@ -6936,34 +6938,34 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return S.team.length >= Math.min(3, S.monsters.length) ? ['[data-act=fight]'] : ['#view [data-act=teamAuto]'];
-    case 10: // 일일 보상
+    case 11: // 일일 보상
       if (inModal) return ['#modalBox [data-act=claimDaily]', '#modalBox [data-act=close]'];
       return ['.hud [data-act=daily]'];
-    case 11: // 도감 추천
+    case 12: // 도감 추천
       if (inModal) return ['#modalBox [data-act=goBreed]', '#modalBox [data-act=close]'];
       return need('dex') || ['#view [data-act=dexMon]'];
-    case 12: // 섬 꾸미기
+    case 13: // 섬 꾸미기
       if (inModal) return ['#modalBox [data-act=build][data-what^="deco:"]', '#modalBox [data-act=decoPick]', '#modalBox [data-act=close]'];
       return need('shop') || ['[data-act=buyDeco]'];
-    case 13: // 보스전
+    case 14: // 보스전
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return S.team.length ? ['[data-act=bossFight]:not([disabled])'] : ['#view [data-act=team]'];
-    case 14: // 계정
+    case 15: // 계정
       if (inModal) return ['#modalBox [data-act=accExport]', '#modalBox [data-act=close]'];
       return ['.hud [data-act=account]'];
-    case 15: // 친구 · 랜덤 대전
+    case 16: // 친구 · 랜덤 대전
       if (inModal) return ['#modalBox [data-act=pvpCancel]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=pvpRandom]', '.pvp-box [data-act=giftSend]'];
-    case 16: // 미션
+    case 17: // 미션
       if (inModal) return ['#modalBox [data-act=misClaim]:not([disabled])', '#modalBox [data-act=achClaim]:not([disabled])', '#modalBox [data-act=close]'];
       return ['.hud [data-act=missions]'];
-    case 17: // 길드
+    case 18: // 길드
       if (inModal) return ['#modalBox [data-act=guildJoin]:not([disabled])', '#modalBox [data-act=guildNew]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=guildOpen]'];
-    case 18: // 길드전
+    case 19: // 길드전
       if (inModal) {
         if (!S.guild) return ['#modalBox [data-act=guildJoin]:not([disabled])', '#modalBox [data-act=guildNew]', '#modalBox [data-act=guildCreate]', '#modalBox [data-act=close]'];
         if (guildTab !== 'war') return ['#modalBox [data-act=guildTab][data-t=war]'];
@@ -6973,18 +6975,18 @@ function tutPoint(k) {
       if (!S.team.length) return tab !== 'adventure' ? [bottomBtn('adventure')] : ['#view [data-act=team]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=guildOpen]'];
-    case 19: // 랭킹
+    case 20: // 랭킹
       if (inModal) return ['#modalBox [data-act=rankCat]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=ranking]'];
-    case 20: // 펫
+    case 21: // 펫
       if (inModal) return ['#modalBox [data-act=petEquip]', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#petBtn'];
-    case 21: // 재화 안내
+    case 22: // 재화 안내
       if (inModal) return ['#modalBox [data-act=close]'];
       return ['.hud [data-act=resInfo][data-r=gold]'];
-    case 22: // 다음 목표
+    case 23: // 다음 목표
       if (inModal) return ['#modalBox [data-act=misClaim]:not([disabled])', '#modalBox [data-act=achClaim]:not([disabled])', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#goalChip:not(.hidden)'];
@@ -6992,29 +6994,29 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=evtClaim]:not([disabled])', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#evtBtn'];
-    case 23: // 연속 전투
+    case 24: // 연속 전투
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return S.team.length ? ['#view [data-act=fightLoop]'] : ['#view [data-act=teamAuto]'];
-    case 24: // 왕국 발전
+    case 25: // 왕국 발전
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['[data-act=kdUp]:not([disabled])'];
-    case 25: // 랜드마크·보석 상점
+    case 26: // 랜드마크·보석 상점
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['#shopGem', '#shopWonder'];
-    case 26: // 오늘의 특가
+    case 27: // 오늘의 특가
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopDeals]'];
-    case 27: // 물약·교환소
+    case 28: // 물약·교환소
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopPotion]'];
-    case 28: // 합성 제단
+    case 29: // 합성 제단
       if (inModal) return ['#modalBox [data-act=altarFuse]:not([disabled])', '#modalBox [data-act=altarAuto]:not([disabled])', '#modalBox [data-act=close]'];
       return need('mons') || ['#view [data-act=altar]'];
-    case 29: // 별 합성
+    case 30: // 별 합성
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('mons') || ['#view [data-act=starList]'];
-    case 30: // 퀘스트
+    case 10: // 퀘스트
       if (inModal) return ['#modalBox [data-act=qClaim]:not([disabled])', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#questBtn'];
@@ -7145,8 +7147,8 @@ function tutStep() {
   while (S.tutStep < TUT.length && TUT[S.tutStep].done()) S.tutStep++;
   return S.tutStep;
 }
-// 말풍선으로 안내하는 건 기본 10단계뿐. 그 뒤(일일 보상·도감·길드…)는 🎓 창의 "더 알아보기"에서 원할 때만
-const TUT_CORE = 10;
+// 말풍선으로 안내하는 건 기본 11단계뿐. 그 뒤(일일 보상·도감·길드…)는 🎓 창의 "더 알아보기"에서 원할 때만
+const TUT_CORE = 11;
 const tutGuided = (k) => tutFocus != null || k < TUT_CORE;
 function updateGuide() {
   const g = $('#guide');
@@ -7201,7 +7203,7 @@ const WELCOME = [
   { icon: '🛡️', title: '길드', text: '모험 탭 <b>🛡️ 길드</b>에서 길드에 들어가거나 직접 만들어요 (💰5,000).<br>길드원이 트로피·도감을 모을수록 <b>길드 레벨</b>이 올라가고, 레벨마다 <b>서식지 골드 +2%</b>!<br>💬 길드 채팅은 정해진 말과 이모지로 안전하게 해요.' },
   { icon: '⚔️', title: '길드전', text: '매일 비슷한 길드와 짝이 돼요. 길드원마다 하루 <b>3번</b> 상대 길드원의 방어 팀을 공격해요.<br>이기면 ⭐1, 두 마리 살아남으면 ⭐2, 모두 살면 ⭐3!<br>길드 별이 ⭐10·25·50개가 되면 <b>🎁 길드전 상자</b>를 받아요. 내 모험 팀은 자동으로 <b>방어 팀</b>이 돼요.' },
   { icon: '📋', title: '미션과 도전 과제', text: '위쪽 <b>📋</b>에서 매일 <b>미션 3개</b>를 깨면 💎 보석! 셋 다 깨면 보너스 💎30.<br>🏆 <b>도전 과제</b>(도감·스테이지·등급·트로피)도 한 번씩 큰 보상을 줘요.<br>전투에서 <b>🤖 자동</b>을 켜면 알아서 싸워요.' },
-  { icon: '👤', title: '계정과 오프라인', text: '오른쪽 위 <b>👤</b>에서 <b>계정</b>을 여러 개 만들 수 있어요. 계정마다 <b>자기 섬</b>이 따로 있고, 🔒 비밀번호도 걸 수 있어요.<br>다른 기기로는 <b>📤 옮기기 코드</b>로 섬을 옮겨요.<br>한 번 접속하면 <b>인터넷 없이도</b> 켜지고, 홈 화면에 앱처럼 설치할 수 있어요.<br>👤 메뉴에서 <b>🎵 음악 · 🔊 소리</b>를 켜고 끄고, 폰에서는 <b>⛶ 전체화면</b>도 돼요.' },
+  { icon: '👤', title: '계정과 오프라인', text: '오른쪽 위 <b>👤</b>에서 <b>계정</b>을 여러 개 만들 수 있어요. 계정마다 <b>자기 섬</b>이 따로 있고, 🔒 비밀번호도 걸 수 있어요.<br>다른 기기로는 <b>📤 옮기기 코드</b>로 섬을 옮겨요.<br>한 번 접속하면 <b>인터넷 없이도</b> 켜지고, 홈 화면에 앱처럼 설치할 수 있어요.<br>👤 메뉴에서 <b>🎵 음악 · 🔊 소리</b>를 켜고 끄고, 폰에서는 <b>⛶ 전체화면</b>도 돼요.<br>🙅 이름에는 욕설·나쁜 말·전화번호 같은 개인정보를 쓸 수 없어요 (다른 사람에게 보이니까요!).' },
   { icon: '🎁', title: '매일 들어오면', text: '오른쪽 위 <b>🎁</b>에서 매일 <b>일일 보상</b>을 받아요. 7일째엔 큰 보상!' },
   { icon: '💡', title: '모르겠으면?', text: '화면 아래 <b>노란 말풍선</b>을 누르면 다음에 할 곳으로 데려가 주고, <b>👆 손가락</b>이 누를 곳을 알려 줘요.<br>오른쪽 위 <b>🎓 튜토리얼</b> 버튼으로 언제든 다시 볼 수 있어요.' },
 ];
