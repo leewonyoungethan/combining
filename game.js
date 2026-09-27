@@ -1029,6 +1029,125 @@ function buyLegendBox() {
   render();
   openHatchery();
 }
+// ===================== 🛒 상점 더하기: 특가 · 물약 · 교환소 · 분류 버튼 =====================
+// 날짜(+새로고침 횟수)로 정해지는 난수
+function seeded(str) { let h = 2166136261; for (const ch of str) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0; return () => ((h = Math.imul(h ^ (h >>> 15), 2246822507) >>> 0) / 4294967296); }
+const DEAL_RANKS = ['rare', 'special', 'masterwork', 'hero', 'epic'];
+const dealEggPrice = (t) => Math.round(2000 * Math.pow(3, RANK[CAT[t].rarity] - RANK.rare));
+function dealsToday() {
+  const day = dayKey();
+  if (!S.deals || S.deals.day !== day) S.deals = { day, seed: 0, bought: [] };
+  const rnd = seeded(day + '#' + S.deals.seed + '#' + (S.rankId || ''));
+  const pool = [
+    () => { const rk = DEAL_RANKS[Math.floor(rnd() * DEAL_RANKS.length)]; const list = CAT_LIST.filter(c => c.rarity === rk && !c.shop); const c = list[Math.floor(rnd() * list.length)];
+      return { id: 'egg', icon: c.face, name: `${RAR[c.rarity].name} 알: ${c.name}`, sub: '도감에 없으면 새로 등록!', cost: dealEggPrice(c.id), cur: 'gold', type: c.id }; },
+    () => ({ id: 'petegg', icon: '🥚', name: '펫 알 30% 할인', sub: '일반 72% · 희귀 23% · 서사 5%', cost: 14000, cur: 'gold', was: 20000 }),
+    () => ({ id: 'petegg2', icon: '🌟', name: '고급 펫 알 20% 할인', sub: '전설 펫 10%!', cost: 80, cur: 'gems', was: 100 }),
+    () => ({ id: 'legend', icon: '👑', name: '전설 알 상자 20% 할인', sub: '전설 몬스터 알 하나', cost: 200, cur: 'gems', was: 250 }),
+    () => ({ id: 'food', icon: '🍖', name: '먹이 10,000개 묶음', sub: '보통 💰15,000', cost: 9000, cur: 'gold', was: 15000 }),
+    () => ({ id: 'runes', icon: '🎁', name: '고급 룬 상자 ×3', sub: '★★ 60% · ★★★ 40%', cost: 45, cur: 'gems', was: 60 }),
+    () => ({ id: 'goldbag', icon: '💰', name: '골드 보따리', sub: '지금 수입 30분치', cost: 15, cur: 'gems' }),
+    () => ({ id: 'luck', icon: '🍀', name: '행운 물약 ×2', sub: '교배 결과를 두 번 뽑아 더 좋은 것', cost: 30, cur: 'gems', was: 50 }),
+  ];
+  const out = [], used = new Set();
+  // 몬스터 알 특가는 늘 하나, 나머지 3개는 겹치지 않게
+  out.push(pool[0]());
+  while (out.length < 4) { const k = 1 + Math.floor(rnd() * (pool.length - 1)); if (used.has(k)) continue; used.add(k); out.push(pool[k]()); }
+  return out.map((d, k) => ({ ...d, k }));
+}
+function buyDeal(k) {
+  k = Number(k);
+  const deals = dealsToday(), d = deals[k];
+  if (!d || S.deals.bought.includes(k)) return;
+  if (d.id === 'egg' && S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
+  if (d.id === 'legend' && S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
+  if (!spend(d.cost, d.cur)) return;
+  S.deals.bought.push(k);
+  sfx('buy');
+  if (d.id === 'egg') { S.hatch.push(d.type); toast(`🥚 ${CAT[d.type].name} 알! 부화장에서 깨워 주세요`); save(); render(); openHatchery(); return; }
+  if (d.id === 'petegg') { save(); petEgg('normal', true); render(); return; }
+  if (d.id === 'petegg2') { save(); petEgg('premium', true); render(); return; }
+  if (d.id === 'legend') { const pool = CAT_LIST.filter(c => c.rarity === 'legendary' && !c.shop); const c = pool[Math.floor(Math.random() * pool.length)]; S.hatch.push(c.id); toast(`👑 ${c.face} ${c.name} 알!`); save(); render(); openHatchery(); return; }
+  if (d.id === 'food') { S.food += 10000; toast('🍖 먹이 10,000개!'); }
+  if (d.id === 'runes') { const got = [0, 1, 2].map(() => runeText(giveRune([0, 0.6, 0.4]))); toast('💠 ' + got.join(' · ')); }
+  if (d.id === 'goldbag') { const g = Math.max(3000, Math.round(totalIncome() * 1800)); earn(g); toast(`💰 ${fmt(g)} 골드!`); }
+  if (d.id === 'luck') { S.potLuck = (S.potLuck || 0) + 2; toast('🍀 행운 물약 2개! 다음 교배에 자동으로 써요'); }
+  save(); updateHud(); render();
+}
+function refreshDeals() {
+  if (!spend(10, 'gems')) return;
+  dealsToday();
+  S.deals.seed++; S.deals.bought = [];
+  sfx('coin'); save(); updateHud(); render();
+  toast('🔄 새 특가가 나왔어요!');
+}
+// ----- 🧪 물약 -----
+const POTIONS = [
+  { id: 'luck',  icon: '🍀', name: '행운 물약 ×3',   sub: '다음 교배 3번: 결과를 두 번 뽑아 더 좋은 등급으로', cost: 25, cur: 'gems' },
+  { id: 'sand',  icon: '⏳', name: '시간 모래시계',  sub: '모든 교배산·농장 바로 완료', cost: 15, cur: 'gems' },
+  { id: 'grow',  icon: '📈', name: '성장 물약',      sub: '모험 팀(없으면 센 3마리) 모두 +3레벨', cost: 0, cur: 'gold' },
+  { id: 'fight', icon: '💪', name: '전투 물약 ×10',  sub: '다음 전투 10번: 공격 +30%', cost: 10, cur: 'gems' },
+];
+const growCost = () => Math.max(20000, Math.round(totalIncome() * 600));
+function buyPotion(id) {
+  const p = POTIONS.find(x => x.id === id);
+  if (!p) return;
+  const cost = id === 'grow' ? growCost() : p.cost;
+  if (id === 'grow') {
+    let team = S.team.map(byUid).filter(Boolean);
+    if (!team.length) team = S.monsters.slice().sort((a, b) => monPower(b) - monPower(a)).slice(0, 3);
+    if (!team.length || team.every(m => m.lv >= MAX_LV)) { toast('올릴 수 있는 몬스터가 없어요 (최고 레벨)'); return; }
+    if (!spend(cost, p.cur)) return;
+    team.forEach(m => { m.lv = Math.min(MAX_LV, m.lv + 3); });
+    toast(`📈 ${team.map(m => CAT[m.type].face + 'Lv.' + m.lv).join(' ')}`);
+  } else if (id === 'sand') {
+    const busy = S.plots.filter(pl => pl && ((pl.kind === 'mountain' && mtnSlots(pl).some(b => b && Date.now() < b.end)) || (pl.kind === 'farm' && pl.crop != null && Date.now() < pl.end)));
+    if (!busy.length) { toast('기다리는 교배나 농장이 없어요'); return; }
+    if (!spend(cost, p.cur)) return;
+    busy.forEach(pl => { if (pl.kind === 'mountain') mtnSlots(pl).forEach(b => { if (b) b.end = Date.now(); }); else pl.end = Date.now(); });
+    toast(`⏳ 교배산·농장 ${busy.length}곳이 바로 끝났어요!`);
+  } else {
+    if (!spend(cost, p.cur)) return;
+    if (id === 'luck') { S.potLuck = (S.potLuck || 0) + 3; toast('🍀 행운 물약 3개! 다음 교배에 자동으로 써요'); }
+    if (id === 'fight') { S.potBattle = (S.potBattle || 0) + 10; toast('💪 전투 물약 10개! 다음 전투부터 공격 +30%'); }
+  }
+  sfx('buy'); save(); updateHud(); refreshLive(); render();
+}
+// 전투를 시작할 때 전투 물약이 있으면 하나 쓴다
+function potBattleStart() {
+  S.potBattleOn = (S.potBattle || 0) > 0;
+  if (S.potBattleOn) { S.potBattle--; save(); }
+}
+// ----- 💱 교환소: 골드 → 보석 (오늘 살 때마다 값이 2배) -----
+const EXCH_GEMS = 10;
+const exchCost = () => { const t = S.exch && S.exch.day === dayKey() ? S.exch.n : 0; return Math.round(1e6 * Math.pow(2, t)); };
+function buyExchange() {
+  const cost = exchCost();
+  if (!spend(cost)) return;
+  if (!S.exch || S.exch.day !== dayKey()) S.exch = { day: dayKey(), n: 0 };
+  S.exch.n++;
+  earn(EXCH_GEMS, 'gems'); sfx('coin'); save(); updateHud(); render();
+  toast(`💱 💰${shortNum(cost)} → 💎 ${EXCH_GEMS}`);
+}
+function shopMoreHTML() {
+  const deals = dealsToday();
+  const left = new Date(); left.setHours(24, 0, 0, 0);
+  const secLeft = Math.round((left - Date.now()) / 1000);
+  const priceTag = (d) => `${d.cur === 'gems' ? '💎' : '💰'} ${d.cur === 'gems' ? fmt(d.cost) : shortNum(d.cost)}${d.was ? ` <s>${d.cur === 'gems' ? fmt(d.was) : shortNum(d.was)}</s>` : ''}`;
+  return `<h3 class="sub" id="shopDeals">🔥 오늘의 특가 <small class="muted">하루에 하나씩만 · ${Math.floor(secLeft / 3600)}시간 ${Math.floor(secLeft % 3600 / 60)}분 뒤 새 특가</small></h3>
+    <div class="deal-grid">${deals.map(d => { const got = S.deals.bought.includes(d.k); return `<button class="deal-card ${got ? 'got' : ''}" data-act="buyDeal" data-k="${d.k}" ${got ? 'disabled' : ''}>
+        <span class="dl-ico">${d.icon}</span><b>${d.name}</b><small>${d.sub}</small><span class="dl-cost">${got ? '✅ 샀어요' : priceTag(d)}</span></button>`; }).join('')}</div>
+    <div class="row"><button class="btn ghost small" data-act="refreshDeals">🔄 특가 새로고침 (💎 10)</button></div>
+    <h3 class="sub" id="shopPotion">🧪 물약 <small class="muted">${S.potLuck ? `🍀 ${S.potLuck}개 ` : ''}${S.potBattle ? `💪 ${S.potBattle}개 ` : ''}가지고 있어요</small></h3>
+    <div class="shop">${POTIONS.map(p => `<button class="shop-item" data-act="buyPotion" data-id="${p.id}"><span class="si-ico">${p.icon}</span><span class="si-nm">${p.name}<small>${p.sub}</small></span><span class="si-cost">${p.id === 'grow' ? '💰 ' + shortNum(growCost()) : (p.cur === 'gems' ? '💎 ' : '💰 ') + fmt(p.cost)}</span></button>`).join('')}</div>
+    <h3 class="sub" id="shopExch">💱 교환소 <small class="muted">골드를 보석으로 · 오늘 살 때마다 값이 2배 (자정에 다시 싸져요)</small></h3>
+    <div class="shop"><button class="shop-item" data-act="buyExchange"><span class="si-ico">💱</span><span class="si-nm">보석 ${EXCH_GEMS}개<small>오늘 ${S.exch && S.exch.day === dayKey() ? S.exch.n : 0}번 바꿨어요</small></span><span class="si-cost">💰 ${shortNum(exchCost())}</span></button></div>`;
+}
+function shopNavHTML() {
+  const items = [['shopHab', '🏠 서식지'], ['shopEgg', '🥚 알'], ['shopDeals', '🔥 특가'], ['shopPotion', '🧪 물약'], ['shopKingdom', '🏛️ 왕국'], ['shopWonder', '🗽 랜드마크'], ['shopGem', '💎 보석'], ['shopExch', '💱 교환'], ['shopDeco', '🎨 장식']];
+  return `<div class="shop-nav">${items.map(([id, t]) => `<button class="chip" data-act="shopJump" data-id="${id}">${t}</button>`).join('')}</div>`;
+}
+
 function kingdomShopHTML() {
   // 상점에서 이 칸이 화면에 보이면 "둘러봤다"로 친다
   setTimeout(() => {
@@ -2774,7 +2893,13 @@ function startBreed(i = curMtn) {
   if (a.lv < BREED_LV || b.lv < BREED_LV) { toast(`두 마리 모두 Lv.${BREED_LV} 이상이어야 해요`); return; }
   const paid = breedCost(a, b);
   if (!spend(paid)) return;
-  const type = breedResult(a.type, b.type);
+  let type = breedResult(a.type, b.type);
+  if ((S.potLuck || 0) > 0) {
+    const t2 = breedResult(a.type, b.type);
+    if (rIdx(t2) > rIdx(type)) type = t2;
+    S.potLuck--;
+    toast(`🍀 행운 물약을 썼어요! (${S.potLuck}개 남음)`);
+  }
   const base = RAR[CAT[type].rarity].time;
   const total = Math.max(1, Math.round(base * (evtOn('breedrush') ? 0.5 : 1)));
   const logId = S.nextLog = (S.nextLog || 0) + 1;
@@ -3527,7 +3652,8 @@ function renderShop() {
   });
   const list = Object.values(groups).sort((a, b) => b.lv - a.lv || a.t.localeCompare(b.t));
   view.innerHTML = `
-    <div class="sec-head"><h2>상점</h2><p>서식지와 알은 여기서! 룬·먹이·장식도 팔아요.</p></div>
+    <div class="sec-head"><h2>상점</h2><p>서식지와 알은 여기서! 특가·물약·왕국 발전·보석 상점도 있어요.</p></div>
+    ${shopNavHTML()}
     <h3 class="sub" id="shopHab">🏠 서식지 상점 <small class="muted">사면 섬의 빈 땅에 바로 지어져요</small></h3>
     <div class="grid small">${[...EL.map(e => e.id), 'legend'].map(el => {
       const n = S.plots.filter(p => p && p.kind === 'hab' && p.el === el).length;
@@ -3560,6 +3686,7 @@ function renderShop() {
     <h3 class="sub" id="shopEgg">🥚 몬스터 알 상점 <small class="muted">사면 부화장으로 가요. 알맞은 서식지가 있어야 키울 수 있어요</small></h3>
     <div class="grid small">${EGG_SHOP.map(t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini',
       `<div class="price-tag">💰 ${fmt(eggPrice(t))}</div>`)).join('')}</div>
+    ${shopMoreHTML()}
     ${kingdomShopHTML()}
     <h3 class="sub">🛍️ 룬 · 먹이 · 골드</h3>
     <div class="shop">
@@ -3917,7 +4044,7 @@ let B = null;
 function mkUnit(m, side, idx) {
   const c = CAT[m.type], st = stats(m);
   // 내 몬스터는 함께하는 펫의 전투 보너스를 받는다
-  if (side === 'me') { st.atk = Math.round(st.atk * (1 + (petPct('atk') + kdLv('army') * 5) / 100)); st.hp = Math.round(st.hp * (1 + (petPct('hp') + kdLv('army') * 5) / 100)); }
+  if (side === 'me') { st.atk = Math.round(st.atk * (1 + (petPct('atk') + kdLv('army') * 5 + (S.potBattleOn ? 30 : 0)) / 100)); st.hp = Math.round(st.hp * (1 + (petPct('hp') + kdLv('army') * 5) / 100)); }
   return {
     id: side + idx, side, c, lv: m.lv,
     maxHp: st.hp, hp: st.hp, dispHp: st.hp, shownDead: false,
@@ -3957,6 +4084,7 @@ function loopNext() {
 function startBattle() {
   const team = S.team.map(byUid).filter(Boolean);
   if (!team.length || B) return;
+  potBattleStart();
   const foes = enemyTeam(S.stage);
   B = {
     stage: S.stage,
@@ -4855,6 +4983,7 @@ function gwarAttack(pid) {
   w.left--;   // 시작할 때 쓴다 (도중에 포기해도 1번 사용)
   save();
   closeModal();
+  potBattleStart();
   const foes = def.dt.map((d, k) => netUnit(d, 'foe', k)).filter(Boolean);
   B = {
     stage: S.stage, gwar: { opp: { id: opp.id, name: opp.name, emblem: opp.emblem, wild: !!opp.wild }, def: { id: def.id, n: def.n } },
@@ -5203,6 +5332,7 @@ function onNet(msg) {
 
 // 방장: 전투 시작
 function startPvpBattle() {
+  S.potBattleOn = false;
   const mine = S.team.map(byUid).filter(Boolean).slice(0, 3);
   const opp = NET.oppTeam.map((d, k) => netUnit(d, 'foe', k)).filter(Boolean);
   if (!mine.length || !opp.length) { toast('양쪽 모두 팀이 있어야 해요'); netSend({ t: 'bye' }); netClose(); closeModal(); return; }
@@ -5887,6 +6017,7 @@ function startBossBattle(i) {
   const team = S.team.map(byUid).filter(Boolean);
   if (!team.length) { toast('먼저 팀을 짜 주세요'); return; }
   const b = BOSSES[i];
+  potBattleStart();
   B = {
     stage: S.stage, bossIdx: i,
     units: [...team.map((m, k) => mkUnit(m, 'me', k)), mkBossUnit(b)],
@@ -6921,6 +7052,11 @@ const ACTIONS = {
   evtClaim: (d) => evtClaim(d.k),
   evtTrade: () => evtTrade(),
   kdUp: (d) => kdUp(d.id),
+  buyDeal: (d) => buyDeal(d.k),
+  refreshDeals: () => refreshDeals(),
+  buyPotion: (d) => buyPotion(d.id),
+  buyExchange: () => buyExchange(),
+  shopJump: (d) => { const el = document.getElementById(d.id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); } },
   bigshopSeen: () => { if (!tutFlag('bigshop')) { tutFlag('bigshop', true); toast('🗽 랜드마크는 모든 섬 골드를, 💎 보석 상점은 로봇·부스터·전설 알을 팔아요!'); updateGuide(); } },
   kdGem: () => kdGemClaim(),
   buyBoost: () => buyBoost(),
