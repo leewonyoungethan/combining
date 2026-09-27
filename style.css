@@ -1039,3 +1039,20 @@ body.ui-hidden .pet-btn { opacity: .55; }
 .b-pet { font-size: 22px; margin-left: 6px; animation: ldBob 1s ease-in-out infinite alternate; display: inline-block; }
 /* 다음 목표 칩: 깜빡임 애니메이션이 가운데 정렬(transform)을 덮어쓰지 않게 margin으로 가운데 */
 .goal-chip { left: 0; right: 0; margin: 0 auto; width: fit-content; transform: none; }
+
+/* 🏛️ 왕국 발전 · 🗽 랜드마크 */
+.kd-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.kd-row { display: grid; grid-template-columns: 40px 1fr auto; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 14px; background: linear-gradient(90deg, rgba(255, 210, 74, .12), rgba(255, 255, 255, .03)); border: 1px solid rgba(255, 210, 74, .3); }
+.kd-ico { font-size: 28px; text-align: center; }
+.kd-info { display: flex; flex-direction: column; min-width: 0; }
+.kd-info b small { color: #ffe066; }
+.kd-info > small { color: var(--muted); font-size: 11px; }
+.kd-row .btn { white-space: nowrap; }
+.wonder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; margin: 8px 0; }
+.wonder-card { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; border-radius: 16px; font: inherit; color: var(--text); cursor: pointer;
+  border: 2px solid #ffd24a; background: radial-gradient(circle at 50% 20%, rgba(255, 210, 74, .25), rgba(0, 0, 0, .15)); }
+.wonder-card.got { border-color: #7dff8f; opacity: .7; cursor: default; }
+.wd-ico { font-size: 40px; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .4)); }
+.wonder-card b { font-size: 12px; }
+.wonder-card small { font-size: 10px; color: #7dff8f; }
+.wd-cost { font-weight: 900; color: #ffe066; font-size: 13px; }

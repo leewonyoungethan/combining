@@ -444,6 +444,17 @@ const DECOS = [
   { id: 'castle',   name: '성',             emoji: '🏰', cost: 20000, bonus: 6 },
   { id: 'crown',    name: '황금 왕관 동상', emoji: '👑', gems: 50,    bonus: 8 },
 ];
+// 🗽 랜드마크: 아주 비싼 대형 건물. 한 종류에 하나씩, 모든 섬의 골드를 올린다
+DECOS.push(
+  { id: 'w_statue',  name: '자유의 여신상', emoji: '🗽', cost: 1e7,  bonus: 0, wonder: true, global: 5 },
+  { id: 'w_temple',  name: '황금 신전',     emoji: '🛕', cost: 1e8,  bonus: 0, wonder: true, global: 8 },
+  { id: 'w_castle',  name: '천공의 성',     emoji: '🏯', cost: 1e9,  bonus: 0, wonder: true, global: 12 },
+  { id: 'w_volcano', name: '용암 화산',     emoji: '🌋', cost: 5e9,  bonus: 0, wonder: true, global: 15 },
+  { id: 'w_rocket',  name: '우주 로켓',     emoji: '🚀', cost: 2e10, bonus: 0, wonder: true, global: 20 },
+  { id: 'w_bridge',  name: '무지개 다리',   emoji: '🌉', cost: 1e11, bonus: 0, wonder: true, global: 25 },
+  { id: 'w_ufo',     name: '외계인 기지',   emoji: '🛸', cost: 1e12, bonus: 0, wonder: true, global: 35 },
+  { id: 'w_galaxy',  name: '은하 관측소',   emoji: '🔭', cost: 1e13, bonus: 0, wonder: true, global: 50 },
+);
 const DECO_CAP = 30;
 const decoById = (id) => DECOS.find(d => d.id === id);
 const decoPrice = (d) => d.gems ? `💎 ${d.gems}` : `💰 ${fmt(d.cost)}`;
@@ -565,11 +576,11 @@ const habMons = (i) => S.monsters.filter(m => m.hab === i);
 // 서식지에 들어갈 수 있는 몬스터 수 = 레벨 (최소 2마리, Lv.10이면 10마리). 쌓이는 골드는 무제한
 const habCap = (i) => Math.max(2, S.plots[i].lv);
 const habLvBonus = (i) => (S.plots[i].lv - 1) * HAB_LV_BONUS;
-const habIncome = (i) => habMons(i).reduce((s, m) => s + monIncome(m), 0) * (1 + (habLvBonus(i) + decoPercent(islandOf(i)) + guildPct() + petPct('gold')) / 100);
+const habIncome = (i) => habMons(i).reduce((s, m) => s + monIncome(m), 0) * (1 + (habLvBonus(i) + decoPercent(islandOf(i)) + guildPct() + petPct('gold') + kdLv('gold') * 10 + wonderPct()) / 100) * (boostOn() ? 2 : 1);
 const habGoldCap = () => Infinity;
 const feedCost = (m) => m.lv * 20;
 const sellPrice = (m) => Math.round(RAR[CAT[m.type].rarity].cost * 0.5 * (1 + m.lv * 0.2));
-const breedCost = (a, b) => Math.round(RAR[RAR_ORDER[Math.max(rIdx(a.type), rIdx(b.type))]].cost * (1 - petPct('discount') / 100));
+const breedCost = (a, b) => Math.round(RAR[RAR_ORDER[Math.max(rIdx(a.type), rIdx(b.type))]].cost * (1 - Math.min(80, petPct('discount') + kdLv('lab') * 3) / 100));
 const gemCost = (secLeft, per) => Math.max(1, Math.ceil(secLeft / per));
 
 function habsFor(type) {
@@ -902,6 +913,99 @@ function toggleMusic() {
   openAccountMenu();
 }
 
+// ===================== 🏛️ 왕국 발전 (골드를 크게 쓰는 곳) =====================
+// 끝없이 올릴 수 있고, 레벨마다 값이 몇 배씩 오른다
+const KINGDOM = [
+  { id: 'gold', e: '⛏️', name: '황금 광산',   desc: (lv) => `모든 골드 +${lv * 10}%`,        base: 1e6, mult: 2.5, max: 99 },
+  { id: 'food', e: '🌾', name: '풍요의 밭',   desc: (lv) => `수확 먹이 +${lv * 15}%`,        base: 5e5, mult: 2.5, max: 99 },
+  { id: 'army', e: '🏋️', name: '훈련장',      desc: (lv) => `전투 공격·체력 +${lv * 5}%`,    base: 2e6, mult: 2.6, max: 99 },
+  { id: 'lab',  e: '🧪', name: '교배 연구소', desc: (lv) => `교배 비용 -${lv * 3}%`,          base: 1e6, mult: 2.4, max: 20 },
+  { id: 'gem',  e: '💎', name: '보석 세공소', desc: (lv) => `매일 💎 ${lv * 5}개 받기`,       base: 5e6, mult: 3,   max: 50 },
+];
+const kdLv = (id) => (S.kd && S.kd[id]) || 0;
+const kdCost = (k) => Math.round(k.base * Math.pow(k.mult, kdLv(k.id)));
+function kdUp(id) {
+  const k = KINGDOM.find(x => x.id === id);
+  if (!k || kdLv(id) >= k.max) return;
+  if (!spend(kdCost(k))) return;
+  S.kd = S.kd || {};
+  S.kd[id] = kdLv(id) + 1;
+  sfx('level'); save(); updateHud();
+  toast(`${k.e} ${k.name} Lv.${S.kd[id]}! ${k.desc(S.kd[id])}`);
+  render();
+}
+function kdGemClaim() {
+  const n = kdLv('gem') * 5;
+  if (!n || S.kdGemDay === dayKey()) return;
+  S.kdGemDay = dayKey();
+  earn(n, 'gems'); sfx('coin'); save(); updateHud();
+  toast(`💎 보석 세공소에서 ${n}개를 받았어요!`);
+  render();
+}
+// 랜드마크 보너스 (모든 섬)
+function wonderPct() {
+  const got = new Set(S.plots.filter(p => p && p.kind === 'deco').map(p => p.id));
+  return DECOS.filter(d => d.wonder && got.has(d.id)).reduce((s, d) => s + d.global, 0);
+}
+// ⚡ 골드 부스터 (골드 2배)
+const boostOn = () => (S.boostEnd || 0) > Date.now();
+function buyBoost() {
+  if (!spend(40, 'gems')) return;
+  S.boostEnd = Math.max(Date.now(), S.boostEnd || 0) + 3600 * 1000;
+  sfx('yay'); save(); updateHud();
+  toast(`⚡ 골드 2배! ${mmss(Math.round((S.boostEnd - Date.now()) / 1000))} 남았어요`);
+  render();
+}
+// 🤖 자동 수집 로봇: 켜 있는 동안 1분마다 모든 서식지 골드를 걷는다
+function buyRobot() {
+  if (S.robot) return;
+  if (!spend(300, 'gems')) return;
+  S.robot = true; sfx('yay'); save(); updateHud();
+  toast('🤖 자동 수집 로봇이 일을 시작했어요! 1분마다 골드를 걷어요');
+  render();
+}
+function robotCollect() {
+  if (!S.robot || VISIT) return;
+  let sum = 0;
+  S.plots.forEach((p, i) => { if (p && p.kind === 'hab' && p.gold >= 1) { const n = Math.floor(p.gold); sum += n; p.gold -= n; if (islandOf(i) === (S.isl || 0)) floatAt(i, '🤖+' + shortNum(n)); } });
+  if (sum) { earn(sum); save(); refreshLive(); updateHud(); }
+}
+setInterval(robotCollect, 60000);
+// 👑 전설 알 상자
+function buyLegendBox() {
+  if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
+  if (!spend(250, 'gems')) return;
+  const pool = CAT_LIST.filter(c => c.rarity === 'legendary' && !c.shop);
+  const c = pool[Math.floor(Math.random() * pool.length)];
+  S.hatch.push(c.id);
+  sfx('yay'); save(); updateHud();
+  toast(`👑 ${c.face} ${c.name} 알이 나왔어요! 부화장에서 깨워 주세요`);
+  render();
+  openHatchery();
+}
+function kingdomShopHTML() {
+  const wonders = DECOS.filter(d => d.wonder);
+  const got = new Set(S.plots.filter(p => p && p.kind === 'deco').map(p => p.id));
+  const gemToday = kdLv('gem') * 5;
+  return `<h3 class="sub" id="shopKingdom">🏛️ 왕국 발전 <small class="muted">골드로 영원히 강해져요. 레벨이 오를수록 비싸져요</small></h3>
+    <div class="kd-list">${KINGDOM.map(k => { const lv = kdLv(k.id), max = lv >= k.max; return `<div class="kd-row">
+        <span class="kd-ico">${k.e}</span>
+        <span class="kd-info"><b>${k.name} <small>Lv.${lv}</small></b><small>지금: ${lv ? k.desc(lv) : '없음'}${max ? '' : ` → 다음: ${k.desc(lv + 1)}`}</small></span>
+        <button class="btn small ${S.gold >= kdCost(k) || S.infinite ? 'green' : ''}" data-act="kdUp" data-id="${k.id}" ${max ? 'disabled' : ''}>${max ? '최고!' : '💰 ' + shortNum(kdCost(k))}</button>
+      </div>`; }).join('')}</div>
+    ${gemToday ? `<div class="row"><button class="btn ${S.kdGemDay === dayKey() ? 'ghost' : 'green'}" data-act="kdGem" ${S.kdGemDay === dayKey() ? 'disabled' : ''}>💎 보석 세공소: 오늘 ${gemToday}개 ${S.kdGemDay === dayKey() ? '받았어요 ✅' : '받기'}</button></div>` : ''}
+    <h3 class="sub" id="shopWonder">🗽 랜드마크 <small class="muted">섬에 세우는 거대 건물 · 모든 섬 골드가 올라요 (지금 +${wonderPct()}%)</small></h3>
+    <div class="wonder-grid">${wonders.map(d => `<button class="wonder-card ${got.has(d.id) ? 'got' : ''}" data-act="buyDeco" data-id="${d.id}" ${got.has(d.id) ? 'disabled' : ''}>
+        <span class="wd-ico">${d.emoji}</span><b>${d.name}</b><small>모든 섬 골드 +${d.global}%</small><span class="wd-cost">${got.has(d.id) ? '✅ 완성' : '💰 ' + shortNum(d.cost)}</span></button>`).join('')}</div>
+    <h3 class="sub" id="shopGem">💎 보석 상점</h3>
+    <div class="shop">
+      <button class="shop-item" data-act="buyRobot" ${S.robot ? 'disabled' : ''}><span class="si-ico">🤖</span><span class="si-nm">자동 수집 로봇<small>${S.robot ? '✅ 일하는 중 (1분마다 모든 골드 걷기)' : '1분마다 모든 서식지 골드를 알아서 걷어요 (영구)'}</small></span><span class="si-cost">${S.robot ? '보유' : '💎 300'}</span></button>
+      <button class="shop-item" data-act="buyBoost"><span class="si-ico">⚡</span><span class="si-nm">골드 부스터 1시간<small>${boostOn() ? `⚡ 지금 2배! ${mmss(Math.round((S.boostEnd - Date.now()) / 1000))} 남음 (사면 시간이 늘어요)` : '모든 골드 2배'}</small></span><span class="si-cost">💎 40</span></button>
+      <button class="shop-item" data-act="buyLegendBox"><span class="si-ico">👑</span><span class="si-nm">전설 알 상자<small>전설 몬스터 알 하나가 무작위로!</small></span><span class="si-cost">💎 250</span></button>
+      <button class="shop-item" data-act="pets"><span class="si-ico">🌟</span><span class="si-nm">고급 펫 알<small>🐾 펫 창에서 사요 (전설 펫 10%)</small></span><span class="si-cost">💎 100</span></button>
+    </div>`;
+}
+
 // ===================== 🐾 펫 =====================
 // 펫 한 마리를 데리고 다니면 보너스! 간식으로 Lv.10까지 키운다. 같은 펫이 또 나오면 레벨 +1
 const PET_RAR = {
@@ -1025,11 +1129,11 @@ function petWalkPos(t) {
 // ----- 💰💎🍖 재화 안내: 위쪽 숫자를 누르면 어디서 얻고 어디에 쓰는지 -----
 const RES_INFO = {
   gold: { icon: '💰', name: '골드', get: ['🏠 서식지의 몬스터가 계속 벌어요 → 섬의 💰 말풍선을 누르거나 <b>모두 걷기</b>', '⚔️ 모험·길드전에서 이기기', '🎁 일일 보상, 📦 겹치는 몬스터 팔기'],
-    use: ['🏠 서식지·🌾 농장·🏔️ 교배산 짓기', '🥚 알 사기 (💰500), 🏔️ 교배 비용', '⬆️ 서식지 업그레이드 (몬스터 자리 + 골드 증가)'],
-    btns: '<button class="btn green" data-act="collectAll">💰 모두 걷기</button><button class="btn" data-act="resGo" data-to="shop">🛒 상점</button>' },
+    use: ['🏠 서식지·🌾 농장·🏔️ 교배산 짓기, 🥚 알, 🏔️ 교배 비용', '⬆️ 서식지 업그레이드, 🐾 펫 알·간식', '🏛️ <b>왕국 발전</b> (끝없이 강해지기), 🗽 <b>랜드마크</b> (모든 섬 골드 UP)'],
+    btns: '<button class="btn green" data-act="collectAll">💰 모두 걷기</button><button class="btn" data-act="shopGo" data-id="shopKingdom">🏛️ 왕국 발전</button>' },
   gems: { icon: '💎', name: '보석', get: ['📋 매일 미션, 🏆 도전 과제', '🎁 일일 보상, ⚔️ 모험 5스테이지마다', '🛡️ 길드전 상자, 🏆 티어 승급'],
-    use: ['⏩ 교배·농장 시간 바로 끝내기', '🎁 고급 룬 상자, 💰 골드로 바꾸기', '👑 황금 왕관 동상 장식'],
-    btns: '<button class="btn green" data-act="missions">📋 미션 보기</button>' },
+    use: ['🤖 자동 수집 로봇, ⚡ 골드 2배 부스터, 👑 전설 알 상자', '🌟 고급 펫 알, 🎁 고급 룬 상자', '⏩ 교배·농장 시간 바로 끝내기'],
+    btns: '<button class="btn green" data-act="shopGo" data-id="shopGem">💎 보석 상점</button><button class="btn" data-act="missions">📋 미션</button>' },
   food: { icon: '🍖', name: '먹이', get: ['🌾 농장에 작물을 심고 수확 (오래 걸리는 작물일수록 효율이 좋아요)', '🛒 상점에서 사기, 🎁 일일 보상'],
     use: ['⬆️ 몬스터 레벨 올리기 → <b>Lv.4가 되면 교배</b>할 수 있어요', '레벨이 높을수록 골드를 더 벌고 전투에서 더 세져요'],
     btns: '<button class="btn green" data-act="resGo" data-to="mons">🐾 몬스터 키우기</button>' },
@@ -1098,7 +1202,7 @@ const shortNum = (n) => {
       const v = n / u;
       // 버림으로 표시 (1.99M을 2M으로 올리지 않게)
       const d = Math.abs(v) >= 100 ? 0 : 1, p = Math.pow(10, d);
-      return (Math.floor(v * p) / p).toFixed(d).replace(/.0$/, '') + s;
+      return (Math.floor(v * p) / p).toFixed(d).replace(/\.0$/, '') + s;
     }
   }
   return fmt(n);
@@ -1471,6 +1575,15 @@ function drawPlot(p, i, x, y, t, dt) {
     diamond(x, y, hw, hh);
     ctx.fillStyle = 'rgba(255,255,255,.12)';
     ctx.fill();
+    if (d && d.wonder) {
+      diamond(x, y, hw, hh);
+      ctx.fillStyle = 'rgba(255,210,74,.28)';
+      ctx.fill();
+      shadow(x, y + 12, 70);
+      emoji(d.emoji, x, y - 46 + Math.sin(t * 1.2 + i) * 3, 132);
+      if (!S.hideUI) { emoji('✨', x - 60, y - 90 + Math.sin(t * 3) * 6, 26); emoji('✨', x + 58, y - 60 + Math.cos(t * 3) * 6, 20); }
+      return;
+    }
     shadow(x, y + 10, 46);
     if (d) emoji(d.emoji, x, y - 22 + Math.sin(t * 1.5 + i) * 2, 78);
     return;
@@ -1928,8 +2041,10 @@ function build(i, what) {
   if (S.plots[i]) return;
   if (what.startsWith('deco:')) {
     const d = decoById(what.slice(5));
+    if (d && d.wonder && S.plots.some(p => p && p.kind === 'deco' && p.id === d.id)) { toast('이미 지은 랜드마크예요'); return; }
     if (!d || !(d.gems ? spend(d.gems, 'gems') : spend(d.cost))) return;
     S.plots[i] = { kind: 'deco', id: d.id };
+    if (d.wonder) { sfx('yay'); toast(`${d.emoji} ${d.name} 완성! 모든 섬 골드 +${d.global}%`); save(); closeModal(); render(); return; }
     toast(`${d.emoji} ${d.name}을(를) 놓았어요! 이 섬 골드 +${decoPercent(islandOf(i))}%`);
   } else if (what === 'hatchery') {
     if (!spend(HATCHERY_COST)) return;
@@ -2166,7 +2281,7 @@ function harvestReady() {
   farmIdx().forEach(k => {
     const p = S.plots[k];
     if (!farmReady(p)) return;
-    const got = Math.round(CROPS[p.crop].food * (1 + petPct('food') / 100));
+    const got = Math.round(CROPS[p.crop].food * (1 + (petPct('food') + kdLv('food') * 15) / 100));
     food += got;
     n++;
     p.lastCrop = p.crop;
@@ -2245,7 +2360,7 @@ function harvest(i) {
   const p = S.plots[i];
   if (p.crop == null) return;
   if (Date.now() < p.end) { toast('아직 자라는 중이에요 🌱'); return; }
-  const food = Math.round(CROPS[p.crop].food * (1 + petPct('food') / 100));
+  const food = Math.round(CROPS[p.crop].food * (1 + (petPct('food') + kdLv('food') * 15) / 100));
   S.food += food;
   p.crop = null;
   sfx('coin');
@@ -3255,6 +3370,7 @@ function renderShop() {
     <h3 class="sub" id="shopEgg">🥚 몬스터 알 상점 <small class="muted">사면 부화장으로 가요. 알맞은 서식지가 있어야 키울 수 있어요</small></h3>
     <div class="grid small">${EGG_SHOP.map(t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini',
       `<div class="price-tag">💰 ${fmt(eggPrice(t))}</div>`)).join('')}</div>
+    ${kingdomShopHTML()}
     <h3 class="sub">🛍️ 룬 · 먹이 · 골드</h3>
     <div class="shop">
       <button class="shop-item" data-act="buyRune" data-kind="gold"><span class="si-ico">📦</span><span class="si-nm">룬 상자<small>★ 70% · ★★ 25% · ★★★ 5%</small></span><span class="si-cost">💰 1,000</span></button>
@@ -3265,7 +3381,7 @@ function renderShop() {
       <button class="shop-item" data-act="buyGold" data-n="50"><span class="si-ico">💰</span><span class="si-nm">골드 6,000</span><span class="si-cost">💎 50</span></button>
     </div>
     <h3 class="sub" id="shopDeco">🎨 섬 꾸미기 <small class="muted">장식을 놓으면 그 섬 서식지 골드가 올라요 (섬마다 최대 +${DECO_CAP}%) · 지금 섬 +${decoPercent(S.isl || 0)}%</small></h3>
-    <div class="grid small">${DECOS.map(d => `<div class="card mini hab-card" data-act="buyDeco" data-id="${d.id}">
+    <div class="grid small">${DECOS.filter(d => !d.wonder).map(d => `<div class="card mini hab-card" data-act="buyDeco" data-id="${d.id}">
         <div class="price-tag">${decoPrice(d)}</div>
         <div class="face" style="background:linear-gradient(135deg, #ff9ad5, #1a1a3d)">${d.emoji}</div>
         <div class="nm">${d.name}</div>
@@ -3334,7 +3450,7 @@ function buyDeco(id) {
 function openDecoPick(i) {
   showModal(`<h3>🎨 섬 꾸미기</h3>
     <p class="muted">이 섬 서식지 골드 +${decoPercent(islandOf(i))}% (최대 +${DECO_CAP}%)</p>
-    <div class="build-list">${DECOS.map(d => `
+    <div class="build-list">${DECOS.filter(d => !d.wonder).map(d => `
       <button class="build-opt" data-act="build" data-i="${i}" data-what="deco:${d.id}" style="--hc:#ff9ad5">
         <span class="bo-ico">${d.emoji}</span><span class="bo-nm">${d.name} <small>골드 +${d.bonus}%</small></span><span class="bo-cost">${decoPrice(d)}</span>
       </button>`).join('')}</div>
@@ -3610,7 +3726,7 @@ let B = null;
 function mkUnit(m, side, idx) {
   const c = CAT[m.type], st = stats(m);
   // 내 몬스터는 함께하는 펫의 전투 보너스를 받는다
-  if (side === 'me') { st.atk = Math.round(st.atk * (1 + petPct('atk') / 100)); st.hp = Math.round(st.hp * (1 + petPct('hp') / 100)); }
+  if (side === 'me') { st.atk = Math.round(st.atk * (1 + (petPct('atk') + kdLv('army') * 5) / 100)); st.hp = Math.round(st.hp * (1 + (petPct('hp') + kdLv('army') * 5) / 100)); }
   return {
     id: side + idx, side, c, lv: m.lv,
     maxHp: st.hp, hp: st.hp, dispHp: st.hp, shownDead: false,
@@ -5625,6 +5741,8 @@ const ACH = [
   ...[3, 5, 10, 15, 20, 30, 40, 50].map((n, k) => ({ id: 'stage' + n, text: `⚔️ 모험 스테이지 ${n} 도착`, now: () => S.stage, need: n, gems: [5, 10, 20, 30, 40, 60, 80, 100][k] })),
   ...['rare', 'epic', 'legendary', 'mythic', 'divine', 'holy', 'absolute', 'origin'].map((r, k) => ({ id: 'rank' + r, text: `✨ ${RAR[r].name} 등급 몬스터 얻기`, now: () => (S.monsters.some(m => RANK[CAT[m.type].rarity] >= RANK[r]) ? 1 : 0), need: 1, gems: [5, 10, 30, 60, 100, 150, 200, 300][k] })),
   ...[1, 4, 8, 12].map((n, k) => ({ id: 'pets' + n, text: `🐾 펫 ${n}마리 모으기`, now: () => PETS.filter(p => petLv(p.id)).length, need: n, gems: [5, 20, 50, 150][k] })),
+  ...[5, 20, 50, 100].map((n, k) => ({ id: 'kd' + n, text: `🏛️ 왕국 발전 합계 Lv.${n}`, now: () => KINGDOM.reduce((s, x) => s + kdLv(x.id), 0), need: n, gems: [20, 50, 120, 300][k] })),
+  ...[1, 4, 8].map((n, k) => ({ id: 'wonder' + n, text: `🗽 랜드마크 ${n}개 세우기`, now: () => DECOS.filter(d => d.wonder && S.plots.some(p => p && p.kind === 'deco' && p.id === d.id)).length, need: n, gems: [30, 100, 500][k] })),
   { id: 'guild1', text: '🛡️ 길드에 들어가거나 만들기', now: () => (S.guild ? 1 : 0), need: 1, gems: 20 },
   ...[200, 500, 900, 1400].map((n, k) => ({ id: 'troph' + n, text: `🏆 트로피 ${fmt(n)} 모으기`, now: () => S.trophies || 0, need: n, gems: [10, 20, 40, 60][k] })),
   ...[3, 6, 10, 20].map((n, k) => ({ id: 'habs' + n, text: `🏠 서식지 ${n}개 짓기`, now: () => S.plots.filter(p => p && p.kind === 'hab').length, need: n, gems: [5, 10, 20, 30][k] })),
@@ -6365,7 +6483,7 @@ function updateHud() {
   updateGoal();
   [['gold', S.gold], ['gems', S.gems]].forEach(([id, v]) => {
     const el = $('#' + id);
-    el.textContent = S.infinite ? '∞' : shortNum(v);
+    el.textContent = S.infinite ? '∞' : shortNum(v) + (id === 'gold' && boostOn() ? '⚡' : '');
     el.parentElement.title = S.infinite ? '무한' : fmt(v);
     el.classList.toggle('infinite', S.infinite);
   });
@@ -6538,11 +6656,17 @@ const ACTIONS = {
   achClaim: (d) => achClaim(d.id),
   sound: () => toggleSound(),
   pets: () => openPets(),
+  kdUp: (d) => kdUp(d.id),
+  kdGem: () => kdGemClaim(),
+  buyBoost: () => buyBoost(),
+  buyRobot: () => buyRobot(),
+  buyLegendBox: () => buyLegendBox(),
   petEgg: (d) => petEgg(d.id),
   petTreat: () => petTreat(),
   petEquip: (d) => petEquip(d.id),
   resInfo: (d) => openResInfo(d.r),
   resGo: (d) => { closeModal(); tab = d.to; render(); },
+  shopGo: (d) => goShop(d.id),
   goalGo: () => { tutFlag('goal', true); openMissions(); },
   music: () => toggleMusic(),
   fullscreen: () => toggleFullscreen(),
