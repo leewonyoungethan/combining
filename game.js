@@ -950,6 +950,7 @@ function wonderPct() {
 // ⚡ 골드 부스터 (골드 2배)
 const boostOn = () => (S.boostEnd || 0) > Date.now();
 function buyBoost() {
+  tutFlag('bigshop', true);
   if (!spend(40, 'gems')) return;
   S.boostEnd = Math.max(Date.now(), S.boostEnd || 0) + 3600 * 1000;
   sfx('yay'); save(); updateHud();
@@ -958,6 +959,7 @@ function buyBoost() {
 }
 // 🤖 자동 수집 로봇: 켜 있는 동안 1분마다 모든 서식지 골드를 걷는다
 function buyRobot() {
+  tutFlag('bigshop', true);
   if (S.robot) return;
   if (!spend(300, 'gems')) return;
   S.robot = true; sfx('yay'); save(); updateHud();
@@ -973,6 +975,7 @@ function robotCollect() {
 setInterval(robotCollect, 60000);
 // 👑 전설 알 상자
 function buyLegendBox() {
+  tutFlag('bigshop', true);
   if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
   if (!spend(250, 'gems')) return;
   const pool = CAT_LIST.filter(c => c.rarity === 'legendary' && !c.shop);
@@ -984,6 +987,13 @@ function buyLegendBox() {
   openHatchery();
 }
 function kingdomShopHTML() {
+  // 상점에서 이 칸이 화면에 보이면 "둘러봤다"로 친다
+  setTimeout(() => {
+    const el = document.getElementById('shopGem');
+    if (!el || tutFlag('bigshop') || !('IntersectionObserver' in window)) return;
+    const io = new IntersectionObserver((es) => { if (es.some(e => e.isIntersecting)) { tutFlag('bigshop', true); io.disconnect(); } });
+    io.observe(el);
+  }, 50);
   const wonders = DECOS.filter(d => d.wonder);
   const got = new Set(S.plots.filter(p => p && p.kind === 'deco').map(p => p.id));
   const gemToday = kdLv('gem') * 5;
@@ -994,10 +1004,10 @@ function kingdomShopHTML() {
         <button class="btn small ${S.gold >= kdCost(k) || S.infinite ? 'green' : ''}" data-act="kdUp" data-id="${k.id}" ${max ? 'disabled' : ''}>${max ? '최고!' : '💰 ' + shortNum(kdCost(k))}</button>
       </div>`; }).join('')}</div>
     ${gemToday ? `<div class="row"><button class="btn ${S.kdGemDay === dayKey() ? 'ghost' : 'green'}" data-act="kdGem" ${S.kdGemDay === dayKey() ? 'disabled' : ''}>💎 보석 세공소: 오늘 ${gemToday}개 ${S.kdGemDay === dayKey() ? '받았어요 ✅' : '받기'}</button></div>` : ''}
-    <h3 class="sub" id="shopWonder">🗽 랜드마크 <small class="muted">섬에 세우는 거대 건물 · 모든 섬 골드가 올라요 (지금 +${wonderPct()}%)</small></h3>
+    <h3 class="sub" id="shopWonder" data-act="bigshopSeen">🗽 랜드마크 <small class="muted">섬에 세우는 거대 건물 · 모든 섬 골드가 올라요 (지금 +${wonderPct()}%)</small></h3>
     <div class="wonder-grid">${wonders.map(d => `<button class="wonder-card ${got.has(d.id) ? 'got' : ''}" data-act="buyDeco" data-id="${d.id}" ${got.has(d.id) ? 'disabled' : ''}>
         <span class="wd-ico">${d.emoji}</span><b>${d.name}</b><small>모든 섬 골드 +${d.global}%</small><span class="wd-cost">${got.has(d.id) ? '✅ 완성' : '💰 ' + shortNum(d.cost)}</span></button>`).join('')}</div>
-    <h3 class="sub" id="shopGem">💎 보석 상점</h3>
+    <h3 class="sub" id="shopGem" data-act="bigshopSeen">💎 보석 상점</h3>
     <div class="shop">
       <button class="shop-item" data-act="buyRobot" ${S.robot ? 'disabled' : ''}><span class="si-ico">🤖</span><span class="si-nm">자동 수집 로봇<small>${S.robot ? '✅ 일하는 중 (1분마다 모든 골드 걷기)' : '1분마다 모든 서식지 골드를 알아서 걷어요 (영구)'}</small></span><span class="si-cost">${S.robot ? '보유' : '💎 300'}</span></button>
       <button class="shop-item" data-act="buyBoost"><span class="si-ico">⚡</span><span class="si-nm">골드 부스터 1시간<small>${boostOn() ? `⚡ 지금 2배! ${mmss(Math.round((S.boostEnd - Date.now()) / 1000))} 남음 (사면 시간이 늘어요)` : '모든 골드 2배'}</small></span><span class="si-cost">💎 40</span></button>
@@ -3741,6 +3751,7 @@ const unitById = (id) => B.units.find(u => u.id === id);
 // ----- 🔁 연속 전투: 이기면 잠깐 뒤 다음 스테이지를 자동으로 시작. 지거나 멈추기를 누르면 끝 -----
 let LOOP = null;   // { wins, start, gold }
 function startLoop() {
+  tutFlag('loop', true);
   if (!S.team.map(byUid).filter(Boolean).length) { toast('먼저 팀을 짜 주세요 (⚡ 자동 편성)'); return; }
   LOOP = { wins: 0, start: S.stage, gold: S.gold };
   toast('🔁 연속 전투 시작! 지거나 ⏹ 멈추기를 누르면 끝나요');
@@ -6194,6 +6205,11 @@ TUT.push(
   { text: '💰 위쪽 💰💎🍖 숫자를 눌러 재화를 얻고 쓰는 법을 봐요', done: () => tutFlag('res'), go: () => { closeModal(); openResInfo('gold'); } },
   { text: '🎯 섬 위쪽 🎯 다음 목표를 눌러 보상을 받아요', done: () => tutFlag('goal'), go: () => { closeModal(); tab = 'island'; render(); updateHud(); } },
 );
+TUT.push(
+  { text: '🔁 모험에서 🔁 연속 전투를 해 봐요 (이기면 다음 스테이지로 계속!)', done: () => tutFlag('loop'), go: () => { closeModal(); tab = 'adventure'; render(); } },
+  { text: '🏛️ 상점의 🏛️ 왕국 발전을 한 번 올려 봐요 (골드로 영원히 강해져요)', done: () => KINGDOM.some(k => kdLv(k.id) > 0), go: () => goShop('shopKingdom') },
+  { text: '💎 상점의 🗽 랜드마크와 💎 보석 상점을 둘러봐요 (로봇·부스터·전설 알)', done: () => tutFlag('bigshop'), go: () => goShop('shopWonder') },
+);
 function tutFlag(k, set) {
   S.tutFlags = S.tutFlags || {};
   if (set && !S.tutFlags[k]) { S.tutFlags[k] = true; save(); }
@@ -6294,6 +6310,16 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=misClaim]:not([disabled])', '#modalBox [data-act=achClaim]:not([disabled])', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#goalChip:not(.hidden)'];
+    case 22: // 연속 전투
+      if (inModal) return ['#modalBox [data-act=close]'];
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return S.team.length ? ['#view [data-act=fightLoop]'] : ['#view [data-act=teamAuto]'];
+    case 23: // 왕국 발전
+      if (inModal) return ['#modalBox [data-act=close]'];
+      return need('shop') || ['[data-act=kdUp]:not([disabled])'];
+    case 24: // 랜드마크·보석 상점
+      if (inModal) return ['#modalBox [data-act=close]'];
+      return need('shop') || ['#shopGem', '#shopWonder'];
   }
   return null;
 }
@@ -6466,7 +6492,8 @@ const WELCOME = [
   { icon: '💰', title: '재화 3가지', text: '💰 <b>골드</b>: 서식지 몬스터가 벌어요 → 건물·알·교배·업그레이드<br>🍖 <b>먹이</b>: 농장에서 키워요 → 몬스터 레벨 업 (Lv.4면 교배!)<br>💎 <b>보석</b>: 미션·일일 보상·도전 과제 → 시간 단축·고급 룬<br>위쪽 <b>💰💎🍖 숫자를 누르면</b> 언제든 자세히 볼 수 있어요. 섬 위쪽 <b>🎯 다음 목표</b>도 따라가 봐요!' },
   { icon: '🐾', title: '펫', text: '섬 왼쪽 위 <b>🐾 펫 버튼</b>을 누르면 첫 펫 🐶을 선물로 받아요!<br>펫은 섬을 같이 돌아다니고, 💰골드·🍖먹이·⚔️공격·❤️체력·🏷️교배 할인 <b>보너스</b>를 줘요.<br>🍪 간식으로 Lv.10까지 키우고, 🥚 펫 알로 12마리를 모아 봐요.' },
   { icon: '🏝️', title: '섬 18개', text: '위쪽 <b>◀ ▶</b>로 섬을 옮겨 다녀요. 건물을 <b>꾹 눌러 끌면</b> 빈 땅으로 옮겨져요.<br>🎨 장식을 놓으면 그 섬 골드가 올라요.<br>두 손가락으로 <b>확대</b>, 🙈 숨기기로 이름표를 감출 수 있어요.' },
-  { icon: '⚔️', title: '모험과 보스', text: '몬스터 3마리로 팀을 짜서 싸워요. 📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!<br>👹 보스전에서는 에너지가 엄청 많은 보스와 싸워요.' },
+  { icon: '⚔️', title: '모험과 보스', text: '몬스터 3마리로 팀을 짜서 싸워요 (<b>⚡ 자동 편성</b>이면 가장 센 3마리!). 📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!<br><b>🔁 연속 전투</b>를 누르면 이길 때마다 다음 스테이지로 자동으로 계속 싸워요.<br>👹 보스전에서는 에너지가 엄청 많은 보스와 싸워요.' },
+  { icon: '🏛️', title: '골드·보석 크게 쓰기', text: '상점의 <b>🏛️ 왕국 발전</b>: 골드로 끝없이 레벨 업 (골드·먹이·전투·교배 비용·매일 보석)<br><b>🗽 랜드마크</b>: 섬에 세우는 거대 건물, 모든 섬 골드 UP (최대 +170%)<br><b>💎 보석 상점</b>: 🤖 자동 수집 로봇, ⚡ 골드 2배 부스터, 👑 전설 알 상자' },
   { icon: '👥', title: '대전과 친구', text: '모험 탭 <b>👥 대전 · 친구</b> 칸에서<br>🌍 <b>랜덤 대전</b>으로 모르는 사람과 바로 싸우고, ⚔️ 방 코드로 <b>친구 대전</b>, 🎁 <b>선물</b>, 👀 <b>친구 섬 구경</b>도 해요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요.' },
   { icon: '🏆', title: '랭킹과 트로피', text: '🌍 랜덤 대전에서 이기면 <b>🏆 +30</b>, 지면 −15.<br>🥉브론즈 → 🥈실버 → 🥇골드 → 💠플래티넘 → 💎다이아 → 👑마스터 → 🏆챔피언!<br>모험 탭 <b>🏆 랭킹</b>에서 트로피·도감·모험·전투력 <b>전 세계 순위</b>를 봐요.' },
   { icon: '🛡️', title: '길드', text: '모험 탭 <b>🛡️ 길드</b>에서 길드에 들어가거나 직접 만들어요 (💰5,000).<br>길드원이 트로피·도감을 모을수록 <b>길드 레벨</b>이 올라가고, 레벨마다 <b>서식지 골드 +2%</b>!<br>💬 길드 채팅은 정해진 말과 이모지로 안전하게 해요.' },
@@ -6696,6 +6723,7 @@ const ACTIONS = {
   sound: () => toggleSound(),
   pets: () => openPets(),
   kdUp: (d) => kdUp(d.id),
+  bigshopSeen: () => { if (!tutFlag('bigshop')) { tutFlag('bigshop', true); toast('🗽 랜드마크는 모든 섬 골드를, 💎 보석 상점은 로봇·부스터·전설 알을 팔아요!'); updateGuide(); } },
   kdGem: () => kdGemClaim(),
   buyBoost: () => buyBoost(),
   buyRobot: () => buyRobot(),
