@@ -1056,6 +1056,7 @@ function dealsToday() {
   return out.map((d, k) => ({ ...d, k }));
 }
 function buyDeal(k) {
+  tutFlag('deals', true);
   k = Number(k);
   const deals = dealsToday(), d = deals[k];
   if (!d || S.deals.bought.includes(k)) return;
@@ -1090,6 +1091,7 @@ const POTIONS = [
 ];
 const growCost = () => Math.max(20000, Math.round(totalIncome() * 600));
 function buyPotion(id) {
+  tutFlag('potion', true);
   const p = POTIONS.find(x => x.id === id);
   if (!p) return;
   const cost = id === 'grow' ? growCost() : p.cost;
@@ -1122,6 +1124,7 @@ function potBattleStart() {
 const EXCH_GEMS = 10;
 const exchCost = () => { const t = S.exch && S.exch.day === dayKey() ? S.exch.n : 0; return Math.round(1e6 * Math.pow(2, t)); };
 function buyExchange() {
+  tutFlag('potion', true);
   const cost = exchCost();
   if (!spend(cost)) return;
   if (!S.exch || S.exch.day !== dayKey()) S.exch = { day: dayKey(), n: 0 };
@@ -1134,11 +1137,11 @@ function shopMoreHTML() {
   const left = new Date(); left.setHours(24, 0, 0, 0);
   const secLeft = Math.round((left - Date.now()) / 1000);
   const priceTag = (d) => `${d.cur === 'gems' ? '💎' : '💰'} ${d.cur === 'gems' ? fmt(d.cost) : shortNum(d.cost)}${d.was ? ` <s>${d.cur === 'gems' ? fmt(d.was) : shortNum(d.was)}</s>` : ''}`;
-  return `<h3 class="sub" id="shopDeals">🔥 오늘의 특가 <small class="muted">하루에 하나씩만 · ${Math.floor(secLeft / 3600)}시간 ${Math.floor(secLeft % 3600 / 60)}분 뒤 새 특가</small></h3>
+  return `<h3 class="sub" id="shopDeals" data-act="shopJump" data-id="shopDeals">🔥 오늘의 특가 <small class="muted">하루에 하나씩만 · ${Math.floor(secLeft / 3600)}시간 ${Math.floor(secLeft % 3600 / 60)}분 뒤 새 특가</small></h3>
     <div class="deal-grid">${deals.map(d => { const got = S.deals.bought.includes(d.k); return `<button class="deal-card ${got ? 'got' : ''}" data-act="buyDeal" data-k="${d.k}" ${got ? 'disabled' : ''}>
         <span class="dl-ico">${d.icon}</span><b>${d.name}</b><small>${d.sub}</small><span class="dl-cost">${got ? '✅ 샀어요' : priceTag(d)}</span></button>`; }).join('')}</div>
     <div class="row"><button class="btn ghost small" data-act="refreshDeals">🔄 특가 새로고침 (💎 10)</button></div>
-    <h3 class="sub" id="shopPotion">🧪 물약 <small class="muted">${S.potLuck ? `🍀 ${S.potLuck}개 ` : ''}${S.potBattle ? `💪 ${S.potBattle}개 ` : ''}가지고 있어요</small></h3>
+    <h3 class="sub" id="shopPotion" data-act="shopJump" data-id="shopPotion">🧪 물약 <small class="muted">${S.potLuck ? `🍀 ${S.potLuck}개 ` : ''}${S.potBattle ? `💪 ${S.potBattle}개 ` : ''}가지고 있어요</small></h3>
     <div class="shop">${POTIONS.map(p => `<button class="shop-item" data-act="buyPotion" data-id="${p.id}"><span class="si-ico">${p.icon}</span><span class="si-nm">${p.name}<small>${p.sub}</small></span><span class="si-cost">${p.id === 'grow' ? '💰 ' + shortNum(growCost()) : (p.cur === 'gems' ? '💎 ' : '💰 ') + fmt(p.cost)}</span></button>`).join('')}</div>
     <h3 class="sub" id="shopExch">💱 교환소 <small class="muted">골드를 보석으로 · 오늘 살 때마다 값이 2배 (자정에 다시 싸져요)</small></h3>
     <div class="shop"><button class="shop-item" data-act="buyExchange"><span class="si-ico">💱</span><span class="si-nm">보석 ${EXCH_GEMS}개<small>오늘 ${S.exch && S.exch.day === dayKey() ? S.exch.n : 0}번 바꿨어요</small></span><span class="si-cost">💰 ${shortNum(exchCost())}</span></button></div>`;
@@ -6529,6 +6532,10 @@ TUT.push(
   { text: '🏛️ 상점의 🏛️ 왕국 발전을 한 번 올려 봐요 (골드로 영원히 강해져요)', done: () => KINGDOM.some(k => kdLv(k.id) > 0), go: () => goShop('shopKingdom') },
   { text: '💎 상점의 🗽 랜드마크와 💎 보석 상점을 둘러봐요 (로봇·부스터·전설 알)', done: () => tutFlag('bigshop'), go: () => goShop('shopWonder') },
 );
+TUT.push(
+  { text: '🔥 상점의 🔥 오늘의 특가를 봐요 (매일 바뀌는 할인!)', done: () => tutFlag('deals'), go: () => goShop('shopDeals') },
+  { text: '🧪 상점의 🧪 물약과 💱 교환소를 봐요 (행운 물약·골드→보석)', done: () => tutFlag('potion'), go: () => goShop('shopPotion') },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 function tutFlag(k, set) {
@@ -6645,6 +6652,12 @@ function tutPoint(k) {
     case 25: // 랜드마크·보석 상점
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['#shopGem', '#shopWonder'];
+    case 26: // 오늘의 특가
+      if (inModal) return ['#modalBox [data-act=close]'];
+      return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopDeals]'];
+    case 27: // 물약·교환소
+      if (inModal) return ['#modalBox [data-act=close]'];
+      return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopPotion]'];
   }
   return null;
 }
@@ -6819,6 +6832,7 @@ const WELCOME = [
   { icon: '🏝️', title: '섬 18개', text: '위쪽 <b>◀ ▶</b>로 섬을 옮겨 다녀요. 건물을 <b>꾹 눌러 끌면</b> 빈 땅으로 옮겨져요.<br>🎨 장식을 놓으면 그 섬 골드가 올라요.<br>두 손가락으로 <b>확대</b>, 🙈 숨기기로 이름표를 감출 수 있어요.' },
   { icon: '⚔️', title: '모험과 보스', text: '몬스터 3마리로 팀을 짜서 싸워요 (<b>⚡ 자동 편성</b>이면 가장 센 3마리!). 📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!<br><b>🔁 연속 전투</b>를 누르면 이길 때마다 다음 스테이지로 자동으로 계속 싸워요.<br>👹 보스전에서는 에너지가 엄청 많은 보스와 싸워요.' },
   { icon: '🎉', title: '이벤트', text: '<b>3일마다</b> 새 이벤트가 열려요: 💰골드 러시, 🌾풍년 축제, ⚔️전투 대회, 🐣부화 페스티벌, 🧬교배 러시, 🌈속성 축제<br>평소처럼 놀면 <b>🎟️ 이벤트 토큰</b>이 모이고 (이벤트 주제 활동은 2배!), 패스 보상을 받아요.<br>마지막 보상은 <b>이벤트 한정 펫</b>! 섬 왼쪽 <b>🎉 버튼</b>에서 확인해요.' },
+  { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🏛️', title: '골드·보석 크게 쓰기', text: '상점의 <b>🏛️ 왕국 발전</b>: 골드로 끝없이 레벨 업 (골드·먹이·전투·교배 비용·매일 보석)<br><b>🗽 랜드마크</b>: 섬에 세우는 거대 건물, 모든 섬 골드 UP (최대 +170%)<br><b>💎 보석 상점</b>: 🤖 자동 수집 로봇, ⚡ 골드 2배 부스터, 👑 전설 알 상자' },
   { icon: '👥', title: '대전과 친구', text: '모험 탭 <b>👥 대전 · 친구</b> 칸에서<br>🌍 <b>랜덤 대전</b>으로 모르는 사람과 바로 싸우고, ⚔️ 방 코드로 <b>친구 대전</b>, 🎁 <b>선물</b>, 👀 <b>친구 섬 구경</b>도 해요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요.' },
   { icon: '🏆', title: '랭킹과 트로피', text: '🌍 랜덤 대전에서 이기면 <b>🏆 +30</b>, 지면 −15.<br>🥉브론즈 → 🥈실버 → 🥇골드 → 💠플래티넘 → 💎다이아 → 👑마스터 → 🏆챔피언!<br>모험 탭 <b>🏆 랭킹</b>에서 트로피·도감·모험·전투력 <b>전 세계 순위</b>를 봐요.' },
@@ -7056,7 +7070,7 @@ const ACTIONS = {
   refreshDeals: () => refreshDeals(),
   buyPotion: (d) => buyPotion(d.id),
   buyExchange: () => buyExchange(),
-  shopJump: (d) => { const el = document.getElementById(d.id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); } },
+  shopJump: (d) => { if (d.id === 'shopDeals') tutFlag('deals', true); if (d.id === 'shopPotion' || d.id === 'shopExch') tutFlag('potion', true); updateGuide(); const el = document.getElementById(d.id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); } },
   bigshopSeen: () => { if (!tutFlag('bigshop')) { tutFlag('bigshop', true); toast('🗽 랜드마크는 모든 섬 골드를, 💎 보석 상점은 로봇·부스터·전설 알을 팔아요!'); updateGuide(); } },
   kdGem: () => kdGemClaim(),
   buyBoost: () => buyBoost(),
