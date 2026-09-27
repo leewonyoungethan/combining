@@ -969,3 +969,6 @@ body.visiting .zoom-btns { top: 160px; }
 .gw-chest small { font-size: 10px; color: var(--muted); }
 .gw-chest.ok { border-color: #ffe066; background: rgba(255, 224, 102, .15); cursor: pointer; animation: ready 1.2s ease-in-out infinite; }
 .gw-chest.got { opacity: .55; }
+
+/* 👆 튜토리얼 손가락도 누를 수 있게 (누르면 가리키는 버튼이 눌린다) */
+.finger { pointer-events: auto; cursor: pointer; }

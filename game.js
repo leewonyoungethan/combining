@@ -3292,7 +3292,8 @@ function enemyTeam(stage) {
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const tier = Math.min(RANK.mythic, Math.floor((stage - 1) / 2));
   const res = [];
-  for (let i = 0; i < 3; i++) {
+  const count = stage === 1 ? 1 : stage === 2 ? 2 : 3;
+  for (let i = 0; i < count; i++) {
     const ri = Math.max(0, tier - (rnd() < 0.35 ? 1 : 0));
     const pool = CAT_LIST.filter(c => c.rarity === RAR_ORDER[ri]);
     const c = pool[Math.floor(rnd() * pool.length)];
@@ -3319,7 +3320,7 @@ function renderAdventure() {
     <div class="stage-box mine">
       <h3>🛡️ 내 팀</h3>
       <div class="team-row">${slots}</div>
-      <div class="row"><button class="btn big" data-act="fight" ${team.length ? '' : 'disabled'}>⚔️ 전투 시작</button></div>
+      <div class="row"><button class="btn green" data-act="teamAuto" ${S.monsters.length ? '' : 'disabled'}>⚡ 자동 편성</button><button class="btn big" data-act="fight" ${team.length ? '' : 'disabled'}>⚔️ 전투 시작</button></div>
     </div>
     <div class="stage-box pvp-box">
       <h3>👥 대전 · 친구</h3>
@@ -3389,6 +3390,15 @@ function teamPickHTML(foeEls) {
   </div>`;
 }
 
+// 가장 센 몬스터 3마리로 팀 짜기
+function teamAuto() {
+  S.team = S.monsters.slice().sort((a, b) => monPower(b) - monPower(a)).slice(0, 3).map(m => m.uid);
+  save();
+  toast(`⚡ 가장 센 ${S.team.length}마리로 팀을 짰어요!`);
+  const p = $('#panel'), y = p.scrollTop;
+  renderAdventure();
+  p.scrollTop = y;
+}
 function toggleTeam(uid) {
   uid = Number(uid);
   const i = S.team.indexOf(uid);
@@ -5799,15 +5809,15 @@ function goPlot(i) {
   openPlot(i);
 }
 const TUT = [
-  { text: '🏠 서식지를 지어요! 몬스터가 사는 집이에요', done: () => S.plots.some(p => p && p.kind === 'hab'), go: () => goShop('shopHab') },
-  { text: '🥚 몬스터 알을 사요 (지은 서식지와 같은 속성으로!)', done: () => S.monsters.length > 0 || S.hatch.length > 0 || allIncs().some(x => x.b), go: () => goShop('shopEgg') },
-  { text: '🐣 부화장에서 알을 깨요', done: () => S.monsters.length > 0, go: () => goPlot(hatcheries()[0]) },
-  { text: '🥚 몬스터를 한 마리 더 모아요 (교배하려면 2마리!)', done: () => S.monsters.length >= 2, go: () => (S.hatch.length || allIncs().some(x => x.b) ? goPlot(hatcheries()[0]) : goShop('shopEgg')) },
-  { text: '🌾 농장을 지어요. 먹이 🍖를 키우는 곳이에요', done: () => farmIdx().length > 0, go: () => goShop('shopHab') },
+  { text: '🏠 상점에서 서식지를 지어요', done: () => S.plots.some(p => p && p.kind === 'hab'), go: () => goShop('shopHab') },
+  { text: '🥚 같은 속성 알을 사요', done: () => S.monsters.length > 0 || S.hatch.length > 0 || allIncs().some(x => x.b), go: () => goShop('shopEgg') },
+  { text: '🐣 알을 눌러 깨워요', done: () => S.monsters.length > 0, go: () => goPlot(hatcheries()[0]) },
+  { text: '🥚 알을 하나 더 사서 깨워요 (교배는 2마리!)', done: () => S.monsters.length >= 2, go: () => (S.hatch.length || allIncs().some(x => x.b) ? goPlot(hatcheries()[0]) : goShop('shopEgg')) },
+  { text: '🌾 농장을 지어요 (먹이 🍖를 키워요)', done: () => farmIdx().length > 0, go: () => goShop('shopHab') },
   { text: '🌱 농장을 눌러 작물을 심어요', done: () => farmIdx().some(k => S.plots[k].crop != null || S.plots[k].lastCrop != null), go: () => goPlot(farmIdx()[0]) },
-  { text: `🍖 먹이를 줘서 두 마리를 Lv.${BREED_LV}까지 키워요`, done: () => S.monsters.filter(m => m.lv >= BREED_LV).length >= 2, go: () => { closeModal(); tab = 'mons'; render(); } },
-  { text: '🏔️ 교배산에서 두 마리를 섞어 새 몬스터를 만들어요!', done: () => (S.breedLog || []).length > 0, go: () => goPlot(mountains().find(k => mtnFreeSlot(S.plots[k]) >= 0) ?? mountains()[0]) },
-  { text: '⚔️ 모험에서 팀을 짜고 첫 전투를 해 봐요', done: () => S.stage > 1 || Object.keys(S.bossCleared || {}).length > 0, go: () => { closeModal(); tab = 'adventure'; render(); } },
+  { text: `🍖 먹이를 줘서 두 마리를 Lv.${BREED_LV}로!`, done: () => S.monsters.filter(m => m.lv >= BREED_LV).length >= 2, go: () => { closeModal(); tab = 'mons'; render(); } },
+  { text: '🏔️ 교배산에서 두 마리를 섞어요!', done: () => (S.breedLog || []).length > 0, go: () => goPlot(mountains().find(k => mtnFreeSlot(S.plots[k]) >= 0) ?? mountains()[0]) },
+  { text: '⚔️ 모험에서 첫 전투를 해요', done: () => S.stage > 1 || Object.keys(S.bossCleared || {}).length > 0, go: () => { closeModal(); tab = 'adventure'; render(); } },
   // --- 새로 추가된 기능 둘러보기 ---
   { text: '🎁 오른쪽 위 🎁 버튼으로 일일 보상을 받아요', done: () => !!(S.daily && S.daily.last), go: () => { closeModal(); openDaily(); } },
   { text: '📖 도감에서 몬스터를 눌러 추천 교배 조합을 봐요', done: () => tutFlag('dex'), go: () => { closeModal(); tab = 'dex'; render(); } },
@@ -5850,8 +5860,8 @@ function tutPoint(k) {
       const el = firstHabEl();
       return need('shop') || [el ? `[data-act=buyMon][data-type="p:${el}"]` : '#shopEgg', '[data-act=buyMon]'];
     }
-    case 2: // 부화
-      if (inModal) return ['#modalBox [data-act=placeInc]', '#modalBox [data-act=crack]', '#modalBox [data-act=incubate]', '#modalBox [data-act=incSlot].done', '#modalBox [data-act=close]'];
+    case 2: // 부화 → 살 곳 고르기 (살 곳이 없으면 "짓고 넣기")
+      if (inModal) return ['#modalBox [data-act=place]', '#modalBox [data-act=buildPlace]', '#modalBox [data-act=upPlace]', '#modalBox [data-act=hatchAll]', '#modalBox [data-act=crack]', '#modalBox [data-act=incubate]', '#modalBox [data-act=close]'];
       return onIsland ? { plot: hatcheries()[0] } : [bottomBtn('island')];
     case 4: // 농장 짓기
       if (inModal) return ['#modalBox [data-act=build][data-what="farm"]', '#modalBox [data-act=close]'];
@@ -5873,7 +5883,7 @@ function tutPoint(k) {
     case 8: // 모험
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
-      return S.team.length ? ['[data-act=fight]'] : ['#view [data-act=team]'];
+      return S.team.length >= Math.min(3, S.monsters.length) ? ['[data-act=fight]'] : ['#view [data-act=teamAuto]'];
     case 9: // 일일 보상
       if (inModal) return ['#modalBox [data-act=claimDaily]', '#modalBox [data-act=close]'];
       return ['.hud [data-act=daily]'];
@@ -5928,16 +5938,33 @@ function setGlow(el) {
   glowEl = el;
   if (el) el.classList.add('tut-glow');
 }
+// 아이들은 손가락 그림 자체를 누르는 경우가 많다 → 손가락을 누르면 가리키는 곳을 대신 눌러 준다
+let fingerTarget = null;
+function pressFinger(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const t = fingerTarget;
+  if (!t) return;
+  if (t.el && document.body.contains(t.el)) { t.el.click(); return; }
+  if (t.plot != null) {
+    if (islandOf(t.plot) !== (S.isl || 0)) { S.isl = islandOf(t.plot); render(); updateFinger(); return; }
+    openPlot(t.plot);
+  }
+}
+document.addEventListener('DOMContentLoaded', () => {});
+setTimeout(() => { const f = $('#finger'); if (f) f.addEventListener('click', pressFinger); }, 0);
 function updateFinger() {
   const f = $('#finger');
   if (!f) return;
   const k = tutShown();
   // 튜토리얼 창·설명 슬라이드가 열려 있을 때는 손가락을 숨긴다
   const reading = !!document.querySelector('#modalBox .tut-list, #modalBox .welcome');
-  const active = !B && !S.tutOff && !S.hideUI && k < TUT.length && !reading;
+  const active = !B && !S.tutOff && !S.hideUI && k < TUT.length && !reading && tutGuided(k);
   const target = active ? tutPoint(k) : null;
   let x = null, y = null, down = false, glow = null;
+  fingerTarget = null;
   if (target && target.plot != null && target.plot >= 0) {
+    fingerTarget = { plot: target.plot };
     if (islandOf(target.plot) !== (S.isl || 0)) {
       const r = $('#islandBar .ib-name');
       if (r) { const b = r.getBoundingClientRect(); x = b.left + b.width / 2; y = b.bottom; }
@@ -5963,6 +5990,7 @@ function updateFinger() {
       }
       b = el.getBoundingClientRect();
       glow = el;
+      fingerTarget = { el };
       x = b.left + b.width / 2;
       // 손가락 끝이 버튼 안쪽을 누르도록: 화면 아래쪽 버튼은 위에서, 나머지는 아래에서 가리킨다
       down = b.bottom > innerHeight - 140;
@@ -5980,6 +6008,7 @@ function updateFinger() {
 }
 
 let tutFocus = null;   // 🎓 튜토리얼 창에서 "다시 보기"를 누른 단계
+let tutFocusWasDone = false;
 const tutShown = () => (tutFocus != null ? tutFocus : tutStep());
 
 function openTutorial() {
@@ -5987,11 +6016,18 @@ function openTutorial() {
   showModal(`<h3>🎓 튜토리얼</h3>
     <p class="muted">단계를 골라 <b>👉 다시 보기</b>를 누르면 손가락이 어디를 누를지 알려 줘요.</p>
     <div class="row"><button class="btn" data-act="welcome" data-n="0" data-full="1">📖 게임 설명 보기</button></div>
-    <div class="tut-list">${TUT.map((t, k) => `<div class="tut-row ${k < cur ? 'done' : k === cur ? 'now' : ''}">
+    <h3 class="sub">📘 기본 튜토리얼 <small class="muted">${Math.min(cur, TUT_CORE)} / ${TUT_CORE}</small></h3>
+    <div class="tut-list">${TUT.slice(0, TUT_CORE).map((t, k) => `<div class="tut-row ${k < cur ? 'done' : k === cur ? 'now' : ''}">
         <span class="tut-num">${k < cur ? '✅' : k === cur ? '👉' : k + 1}</span>
         <span class="tut-text">${t.text}</span>
         <button class="btn small ${k === cur ? 'green' : 'ghost'}" data-act="tutFocus" data-k="${k}">👉 ${k === cur ? '지금 하기' : '다시 보기'}</button>
       </div>`).join('')}</div>
+    <h3 class="sub">💡 더 알아보기 <small class="muted">하고 싶을 때만 눌러요</small></h3>
+    <div class="tut-list">${TUT.slice(TUT_CORE).map((t, n) => { const k = n + TUT_CORE, done = t.done(); return `<div class="tut-row ${done ? 'done' : ''}">
+        <span class="tut-num">${done ? '✅' : '💡'}</span>
+        <span class="tut-text">${t.text}</span>
+        <button class="btn small ghost" data-act="tutFocus" data-k="${k}">👉 보기</button>
+      </div>`; }).join('')}</div>
     <div class="row">
       ${S.tutOff ? '<button class="btn ghost small" data-act="tutOn">💡 안내 말풍선 켜기</button>' : '<button class="btn ghost small" data-act="tutSkip">🔕 안내 말풍선 끄기</button>'}
       <button class="btn ghost small danger" data-act="reset">🔄 처음부터 다시 하기</button>
@@ -6001,7 +6037,8 @@ function openTutorial() {
 function focusTutorial(k) {
   k = Number(k);
   S.tutOff = false;
-  tutFocus = k === tutStep() ? null : k;
+  tutFocus = k === tutStep() && k < TUT_CORE ? null : k;
+  tutFocusWasDone = tutFocus != null && TUT[k].done();
   closeModal();
   const g = $('#guide');
   if (g) g.dataset.k = '';
@@ -6015,19 +6052,31 @@ function tutStep() {
   while (S.tutStep < TUT.length && TUT[S.tutStep].done()) S.tutStep++;
   return S.tutStep;
 }
+// 말풍선으로 안내하는 건 기본 9단계뿐. 그 뒤(일일 보상·도감·길드…)는 🎓 창의 "더 알아보기"에서 원할 때만
+const TUT_CORE = 9;
+const tutGuided = (k) => tutFocus != null || k < TUT_CORE;
 function updateGuide() {
   const g = $('#guide');
-  tutStep();
-  const k = tutShown();
-  if (k >= TUT.length && S.tutDoneN !== TUT.length) {
-    S.tutDoneN = TUT.length;
-    save();
-    toast(`🎉 튜토리얼 완료! 이제 도감 ${fmt(CAT_LIST.length)}마리를 모두 모아 보세요!`);
+  const cur = tutStep();
+  // "보기"로 연 단계를 방금 해냈으면 안내를 끝낸다
+  if (tutFocus != null && !tutFocusWasDone && TUT[tutFocus] && TUT[tutFocus].done()) {
+    tutFocus = null;
+    g.dataset.k = '';
+    toast('✅ 완료! 잘했어요');
   }
-  const show = !B && !S.tutOff && !(S.hideUI && tab === 'island') && k < TUT.length;
+  const k = tutShown();
+  if (cur >= TUT_CORE && !S.tutCoreDone) {
+    S.tutCoreDone = true;
+    earn(30, 'gems');
+    save();
+    updateHud();
+    sfx('yay');
+    toast('🎉 튜토리얼 완료! 선물로 💎 30. 더 궁금한 건 🎓에서 "더 알아보기"를 눌러 봐요');
+  }
+  const show = !B && !S.tutOff && !(S.hideUI && tab === 'island') && k < TUT.length && tutGuided(k);
   g.classList.toggle('hidden', !show);
   if (!show) return;
-  const html = `<div class="g-step">${tutFocus != null ? '🎓 다시 보기' : '튜토리얼'} ${k + 1} / ${TUT.length}</div>
+  const html = `<div class="g-step">${k >= TUT_CORE ? '💡 더 알아보기' : `${tutFocus != null ? '🎓 다시 보기' : '튜토리얼'} ${k + 1} / ${TUT_CORE}`}</div>
     <div class="g-text">${TUT[k].text}</div>
     <div class="g-go">👉 여기를 누르면 바로 가요</div>
     <button class="g-x" data-act="tutSkip" title="튜토리얼 끄기">✕</button>`;
@@ -6036,7 +6085,7 @@ function updateGuide() {
 }
 function tutGo() {
   const k = tutShown();
-  if (k < TUT.length) TUT[k].go();
+  if (k < TUT.length && tutGuided(k)) TUT[k].go();
 }
 
 // ----- 처음 온 사람을 위한 설명 슬라이드 -----
@@ -6172,6 +6221,7 @@ const ACTIONS = {
   hatchAll: () => hatchAll(),
   feedAll: (d) => feedAll(d.mode),
   team: (d) => toggleTeam(d.uid),
+  teamAuto: () => teamAuto(),
   fight: () => startBattle(),
   bSkill: (d) => playerSkill(d.i),
   bTarget: (d) => setTarget(d.id),
