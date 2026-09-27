@@ -7272,6 +7272,48 @@ document.addEventListener('click', (e) => {
 
 // ----- 🎬 오프닝 영상 -----
 // 소리 있는 영상은 브라우저가 자동 재생을 막는다 → 막히면 "화면을 눌러 시작"을 보여 주고, 누르면 소리와 함께 재생
+// ----- 🎬 오프닝 효과음: 영상의 타이핑 소리 대신 웅장한 소리 (영화 예고편처럼) -----
+// 0초 "쿵" + 현악·금관이 서서히 커짐 → 1초(글자 완성) "쾅" 큰 화음 + 심벌 → 반짝이는 종소리 → 메아리로 사라짐
+function playOpeningSting() {
+  if (!audioCtx() || AC.state !== 'running') return false;
+  const t0 = AC.currentTime + 0.05;
+  const out = AC.createGain();
+  out.gain.value = 0.9;
+  out.connect(musicBus());
+  if (MUS.wet) MUS.wet.gain.setTargetAtTime(0.4, AC.currentTime, 0.05);
+  // 1) 첫 "쿵": 큰북 + 아주 낮은 소리
+  mDrum(out, t0, 0.55, 90, 32, 1.6);
+  mDrum(out, t0, 0.35, 150, 50, 0.6);
+  mNoise(out, t0, 0.25, 0.12, 200, 'lowpass');
+  // 2) 서서히 커지는 현악·금관 (필터가 열리면서 밝아진다) — D 단조 느낌
+  const swell = AC.createBiquadFilter();
+  swell.type = 'lowpass'; swell.Q.value = 1.5;
+  swell.frequency.setValueAtTime(250, t0);
+  swell.frequency.exponentialRampToValueAtTime(3200, t0 + 1.05);
+  swell.connect(out);
+  [38, 50, 57, 62, 65, 69].forEach(m => voice(swell, t0, hz(m), 1.05, { vol: 0.03, attack: 1.0, release: 0.12, oscs: [{ type: 'sawtooth', detune: -9 }, { type: 'sawtooth', detune: 9 }] }));
+  // 올라가는 쉭 소리
+  const riser = AC.createBufferSource(), rf = AC.createBiquadFilter(), rg = AC.createGain();
+  if (!MUS.noise) mNoise(out, t0, 0.01, 0.0001, 1000);
+  riser.buffer = MUS.noise; rf.type = 'bandpass'; rf.Q.value = 2;
+  rf.frequency.setValueAtTime(400, t0); rf.frequency.exponentialRampToValueAtTime(6000, t0 + 1.0);
+  rg.gain.setValueAtTime(0.0001, t0); rg.gain.exponentialRampToValueAtTime(0.08, t0 + 0.95); rg.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.05);
+  riser.connect(rf); rf.connect(rg); rg.connect(out); riser.start(t0); riser.stop(t0 + 1.1);
+  // 3) 1초: "쾅!" 큰 화음 (D 장조로 밝게 끝남) + 심벌 + 큰북
+  const hit = t0 + 1.05;
+  mDrum(out, hit, 0.6, 110, 35, 2.2);
+  mDrum(out, hit, 0.3, 200, 70, 0.5);
+  mNoise(out, hit, 2.6, 0.09, 4500);
+  mNoise(out, hit, 0.3, 0.15, 300, 'lowpass');
+  [26, 38, 50, 57, 62, 66, 69, 74].forEach((m, k) => voice(out, hit, hz(m), 1.9, { vol: k < 2 ? 0.07 : 0.035, attack: 0.02, release: 1.1, cutoff: k < 2 ? 500 : 2600, q: 1, oscs: [{ type: 'sawtooth', detune: -6 }, { type: 'sawtooth', detune: 6 }, { type: 'sine', mul: 0.5, gain: 0.5 }] }));
+  // 합창 같은 긴 소리
+  [62, 66, 69].forEach(m => voice(out, hit, hz(m), 2.0, { vol: 0.03, attack: 0.25, release: 1.2, cutoff: 1800, oscs: [{ type: 'sine' }, { type: 'sine', mul: 2, gain: 0.3 }, { type: 'triangle', detune: 7, gain: 0.5 }] }));
+  // 4) 반짝이는 종소리 (D 장조 화음을 위로)
+  [74, 78, 81, 86, 90].forEach((m, k) => INST.bell(out, hit + 0.18 + k * 0.11, m, 0.5, 0.9));
+  // 끝나면 메아리 양을 원래대로
+  setTimeout(() => { if (MUS.wet && AC) MUS.wet.gain.setTargetAtTime(MUS.cur && SONGS[MUS.cur] ? SONGS[MUS.cur].echo || 0.2 : 0.2, AC.currentTime, 0.5); }, 4000);
+  return true;
+}
 function runOpening() {
   const box = $('#opening'), v = $('#openingVideo');
   if (!box || !v) { startLoading(); return; }
@@ -7289,27 +7331,30 @@ function runOpening() {
   v.addEventListener('error', end);
   v.addEventListener('stalled', () => { clearTimeout(hard); hard = setTimeout(end, 2500); });
   $('#openingSkip').addEventListener('click', (e) => { e.stopPropagation(); end(); });
-  const playMuted = () => {
-    v.muted = true;
-    const q = v.play();
-    if (q && q.catch) q.catch(end);
-    if (soundOn()) {
-      // 소리 켜기: 처음부터 소리와 함께 다시
+  // 영상은 소리 없이, 소리는 직접 만든 웅장한 효과음으로
+  v.muted = true;
+  const start = () => { v.currentTime = 0; const q = v.play(); if (q && q.catch) q.catch(end); };
+  start();
+  if (!soundOn()) return;
+  const tryStart = () => {
+    if (!audioCtx()) return;
+    const go = () => { if (!done && AC.state === 'running' && playOpeningSting()) { start(); return true; } return false; };
+    if (AC.state === 'running') { go(); return; }
+    const r = AC.resume();
+    // 브라우저가 소리를 막으면(누르기 전) "소리 켜기" 버튼: 누르면 영상도 처음부터 + 효과음
+    setTimeout(() => {
+      if (done || AC.state === 'running') { if (!done) go(); return; }
       const b = $('#openingTap');
       b.classList.remove('hidden');
-      b.addEventListener('click', (e) => {
-        e.stopPropagation();
+      b.addEventListener('click', (ev) => {
+        ev.stopPropagation();
         b.classList.add('hidden');
-        v.muted = false; v.currentTime = 0;
-        clearTimeout(hard); hard = setTimeout(end, 7000);
-        const r = v.play(); if (r && r.catch) r.catch(() => { v.muted = true; v.play().catch(end); });
+        AC.resume().then(() => { clearTimeout(hard); hard = setTimeout(end, 7000); go(); });
       }, { once: true });
-    }
+    }, 250);
+    if (r && r.then) r.then(() => { if (!done && !$('#openingTap').classList.contains('hidden')) { $('#openingTap').classList.add('hidden'); go(); } }).catch(() => {});
   };
-  if (!soundOn()) { playMuted(); return; }
-  v.muted = false;
-  const p = v.play();
-  if (p && p.catch) p.catch(playMuted);
+  tryStart();
 }
 // ----- ⏳ 로딩 화면: 글꼴 준비, 지금 섬 몬스터 그림 미리 그리기, 친구 대전 준비 -----
 const LOAD_TIPS = [
