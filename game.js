@@ -571,7 +571,7 @@ const AWAY = { sec: (Date.now() - (S.last || Date.now())) / 1000, gold0: S.plots
 
 // ===================== 계산 =====================
 const byUid = (uid) => S.monsters.find(m => m.uid === Number(uid));
-const monIncome = (m) => RAR[CAT[m.type].rarity].income * m.lv;
+const monIncome = (m) => RAR[CAT[m.type].rarity].income * m.lv * (1 + 0.3 * (m.star || 0));
 const habMons = (i) => S.monsters.filter(m => m.hab === i);
 // 서식지에 들어갈 수 있는 몬스터 수 = 레벨 (최소 2마리, Lv.10이면 10마리). 쌓이는 골드는 무제한
 const habCap = (i) => Math.max(2, S.plots[i].lv);
@@ -604,8 +604,8 @@ function stats(m) {
   const sp = c.els.reduce((s, e) => s + EL[ELI[e]].sp, 0) / c.els.length;
   const md = c.mod || { hp: 1, atk: 1, spd: 1 };
   return {
-    hp: Math.round(r.hp * md.hp * (1 + 0.12 * (m.lv - 1)) * (1 + rb.hp / 100)),
-    atk: Math.round(r.atk * md.atk * (1 + 0.1 * (m.lv - 1)) * (1 + rb.atk / 100)),
+    hp: Math.round(r.hp * md.hp * (1 + 0.12 * (m.lv - 1)) * (1 + rb.hp / 100) * (1 + 0.2 * (m.star || 0))),
+    atk: Math.round(r.atk * md.atk * (1 + 0.1 * (m.lv - 1)) * (1 + rb.atk / 100) * (1 + 0.2 * (m.star || 0))),
     spd: Math.round((r.spd + sp) * md.spd * (1 + 0.01 * (m.lv - 1)) * (1 + rb.spd / 100)),
   };
 }
@@ -1538,6 +1538,7 @@ function card(m, attrs = '', cls = '', extra = '') {
     <div class="face" style="background:${grad(c)}">${c.face}</div>
     <div class="nm">${c.name}</div>
     <div class="meta"><span class="rar" style="color:${r.color}">${r.name}</span> · Lv.${m.lv}</div>
+    ${m.star ? `<div class="stars">${'★'.repeat(m.star)}</div>` : ''}
     <div class="els">${elBadges(c.els)}</div>
   </div>`;
 }
@@ -3362,6 +3363,7 @@ function openMon(uid) {
     <div class="face big" style="background:${grad(c)}">${c.face}</div>
     <h3>${c.name}</h3>
     <div class="rar" style="color:${r.color}">${r.name} · Lv.${m.lv}${max ? ' (MAX)' : ''}</div>
+    <div class="stars big">${'★'.repeat(m.star || 0)}<span class="dim">${'☆'.repeat(STAR_MAX - (m.star || 0))}</span></div>
     <div class="els">${elNames(c.els)}</div>
     <div class="statbox">
       <div>❤️ 체력<b>${fmt(st.hp)}</b></div>
@@ -3369,6 +3371,7 @@ function openMon(uid) {
       <div>👟 속도<b>${fmt(st.spd)}</b></div>
       <div>💰 초당<b>${fmt(monIncome(m))}</b></div>
     </div>
+    ${starBoxHTML(m)}
     <h4 class="sub">스킬</h4>
     <div class="skill-list">${c.skills.map(sk => `
       <div class="skill-info"><span>${EL[ELI[sk.el]].emoji} <b>${sk.name}</b></span><span class="muted">${skDesc(sk)}</span><span class="sta">⚡${sk.cost}</span></div>`).join('')}</div>
@@ -3382,6 +3385,131 @@ function openMon(uid) {
     </div>
     <div class="row"><button class="btn ghost small" data-act="${back ? 'back' : 'close'}">${back ? '← 뒤로' : '닫기'}</button></div>`);
   modalStack = back;
+}
+
+// ===================== ⭐ 별 합성 · 🔮 합성 제단 =====================
+// ⭐ 같은 몬스터 3마리 → 한 마리가 별 +1 (최대 ★5). 별마다 체력·공격 +20%, 골드 +30%
+const STAR_MAX = 5;
+const starCost = (m) => RAR[CAT[m.type].rarity].cost * 10 * ((m.star || 0) + 1);
+// 재료로 쓸 같은 몬스터 (팀·높은 별·높은 레벨은 나중에)
+function starMats(m) {
+  return S.monsters.filter(x => x.uid !== m.uid && x.type === m.type)
+    .sort((a, b) => (S.team.includes(a.uid) - S.team.includes(b.uid)) || (a.star || 0) - (b.star || 0) || a.lv - b.lv);
+}
+function starBoxHTML(m) {
+  const star = m.star || 0;
+  if (star >= STAR_MAX) return '<div class="star-box done">⭐ 최고 별 ★5! 체력·공격 +100%, 골드 +150%</div>';
+  const mats = starMats(m);
+  const ok = mats.length >= 2;
+  return `<div class="star-box">
+    <div><b>⭐ 별 합성</b> <small class="muted">같은 몬스터 2마리를 재료로 ★${star} → ★${star + 1}</small></div>
+    <div class="muted">★${star + 1}: 체력·공격 +${(star + 1) * 20}%, 골드 +${(star + 1) * 30}% · 재료 ${mats.length}/2마리</div>
+    <button class="btn small ${ok ? 'green' : ''}" data-act="starFuse" data-uid="${m.uid}" ${ok ? '' : 'disabled'}>⭐ 합성 (💰 ${shortNum(starCost(m))})</button>
+  </div>`;
+}
+function removeMons(list) {
+  const ids = new Set(list.map(x => x.uid));
+  list.forEach(x => (x.runes || []).forEach(id => { const r = S.runes.find(q => q.id === id); if (r) r.on = null; }));
+  S.monsters = S.monsters.filter(x => !ids.has(x.uid));
+  S.team = S.team.filter(u => !ids.has(u));
+  sel = sel.filter(u => !ids.has(u));
+}
+function starFuse(uid) {
+  const m = byUid(uid);
+  if (!m || (m.star || 0) >= STAR_MAX) return;
+  const mats = starMats(m).slice(0, 2);
+  if (mats.length < 2) { toast('같은 몬스터가 2마리 더 있어야 해요'); return; }
+  if (mats.some(x => S.team.includes(x.uid)) && !confirm('재료 중에 모험 팀 몬스터가 있어요. 그래도 합칠까요?')) return;
+  if (!spend(starCost(m))) return;
+  removeMons(mats);
+  m.star = (m.star || 0) + 1;
+  S.fuseCount = (S.fuseCount || 0) + 1;
+  mission('breed');
+  sfx('yay'); save(); updateHud();
+  toast(`⭐ ${CAT[m.type].name} ★${m.star}! 더 강해졌어요`);
+  render();
+  openMon(m.uid);
+}
+// 별 합성할 수 있는 종류들 (같은 몬스터 3마리 이상)
+function starReady() {
+  const by = {};
+  S.monsters.forEach(m => { (by[m.type] = by[m.type] || []).push(m); });
+  return Object.values(by).filter(l => l.length >= 3 && l.some(m => (m.star || 0) < STAR_MAX)).map(l => l.slice().sort((a, b) => (b.star || 0) - (a.star || 0) || b.lv - a.lv)[0]);
+}
+function openStarList() {
+  tutFlag('star', true);
+  const list = starReady();
+  showModal(`<h3>⭐ 별 합성</h3>
+    <p class="muted">같은 몬스터가 3마리 이상 있으면, 한 마리에 나머지 2마리를 합쳐 <b>별 ★</b>을 올려요.<br>별마다 체력·공격 +20%, 골드 +30% (최대 ★5)</p>
+    ${list.length ? `<div class="grid small">${list.map(m => card(m, `data-act="openMon" data-uid="${m.uid}"`, 'mini', `<div class="price-tag">${S.monsters.filter(x => x.type === m.type).length}마리</div>`)).join('')}</div>`
+      : '<p class="muted">지금은 같은 몬스터가 3마리 이상인 게 없어요. 교배로 모아 봐요!</p>'}
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+  backTo(openStarList);
+}
+
+// 🔮 합성 제단: 같은 등급 5마리 → 한 단계 위 등급 1마리 (재료와 속성이 겹칠수록 잘 나온다)
+const ALTAR_N = 5;
+const ALTAR_RANKS = RAR_ORDER.slice(0, RANK.legendary + 1);   // 일반 ~ 전설 (→ 신화까지)
+let altarRank = 'common', altarSel = [];
+const altarNext = (rk) => RAR_ORDER[RANK[rk] + 1];
+const altarCost = (rk) => RAR[altarNext(rk)].cost * 5;
+function altarCands(rk) {
+  return S.monsters.filter(m => CAT[m.type].rarity === rk)
+    .sort((a, b) => (S.team.includes(a.uid) - S.team.includes(b.uid)) || (a.star || 0) - (b.star || 0) || a.lv - b.lv);
+}
+function openAltar(rk) {
+  tutFlag('altar', true);
+  if (rk && rk !== altarRank) { altarRank = rk; altarSel = []; }
+  altarSel = altarSel.filter(u => byUid(u) && CAT[byUid(u).type].rarity === altarRank);
+  const cands = altarCands(altarRank), next = altarNext(altarRank);
+  const counts = Object.fromEntries(ALTAR_RANKS.map(r => [r, S.monsters.filter(m => CAT[m.type].rarity === r).length]));
+  showModal(`<h3>🔮 합성 제단</h3>
+    <p class="muted">같은 등급 몬스터 <b>${ALTAR_N}마리</b>를 바치면 <b>한 단계 위 등급</b> 몬스터 알이 나와요!<br>재료와 속성이 겹치는 몬스터가 더 잘 나와요.</p>
+    <div class="chips">${ALTAR_RANKS.map(r => `<button class="chip ${r === altarRank ? 'on' : ''}" data-act="altarRank" data-r="${r}" style="--rc:${RAR[r].color}">${RAR[r].name} <small>${counts[r]}</small></button>`).join('')}</div>
+    <div class="altar-flow"><span style="color:${RAR[altarRank].color}">${RAR[altarRank].name} ×${ALTAR_N}</span> ➜ <b style="color:${RAR[next].color}">${RAR[next].name} ×1</b></div>
+    <div class="altar-slots">${Array.from({ length: ALTAR_N }, (_, k) => { const m = byUid(altarSel[k]); return `<div class="altar-slot ${m ? 'on' : ''}">${m ? CAT[m.type].face : '?'}</div>`; }).join('')}</div>
+    <div class="row">
+      <button class="btn small" data-act="altarAuto" ${cands.length >= ALTAR_N ? '' : 'disabled'}>✨ 자동 채우기 (약한 것부터)</button>
+      <button class="btn small ghost" data-act="altarClear" ${altarSel.length ? '' : 'disabled'}>비우기</button>
+    </div>
+    <div class="grid small altar-grid">${cands.length ? cands.map(m => card(m, `data-act="altarPick" data-uid="${m.uid}"`, `mini ${altarSel.includes(m.uid) ? 'sel' : ''}`, S.team.includes(m.uid) ? '<div class="price-tag">⚔️ 팀</div>' : '')).join('') : `<p class="muted">${RAR[altarRank].name} 몬스터가 없어요</p>`}</div>
+    <div class="row"><button class="btn big green" data-act="altarFuse" ${altarSel.length === ALTAR_N ? '' : 'disabled'}>🔮 합성하기 (💰 ${shortNum(altarCost(altarRank))})</button><button class="btn ghost small" data-act="close">닫기</button></div>`);
+}
+function altarPick(uid) {
+  uid = Number(uid);
+  if (altarSel.includes(uid)) altarSel = altarSel.filter(u => u !== uid);
+  else if (altarSel.length < ALTAR_N) altarSel.push(uid);
+  else { toast(`${ALTAR_N}마리까지만 넣을 수 있어요`); return; }
+  const box = $('#modalBox'), y = box.scrollTop;
+  openAltar(); box.scrollTop = y;
+}
+function altarAuto() {
+  altarSel = altarCands(altarRank).filter(m => !S.team.includes(m.uid)).slice(0, ALTAR_N).map(m => m.uid);
+  if (altarSel.length < ALTAR_N) altarSel = altarCands(altarRank).slice(0, ALTAR_N).map(m => m.uid);
+  openAltar();
+}
+function altarFuse() {
+  const mats = altarSel.map(byUid).filter(Boolean);
+  if (mats.length !== ALTAR_N || mats.some(m => CAT[m.type].rarity !== altarRank)) return;
+  if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
+  if (mats.some(m => S.team.includes(m.uid)) && !confirm('재료 중에 모험 팀 몬스터가 있어요. 그래도 바칠까요?')) return;
+  if (mats.some(m => (m.star || 0) > 0) && !confirm('재료 중에 별(★)이 있는 몬스터가 있어요. 그래도 바칠까요?')) return;
+  if (!spend(altarCost(altarRank))) return;
+  // 재료 속성과 겹칠수록 가중치 ↑
+  const els = new Set(mats.flatMap(m => CAT[m.type].els));
+  const pool = CAT_LIST.filter(c => c.rarity === altarNext(altarRank) && !c.shop);
+  const w = pool.map(c => 1 + 3 * c.els.filter(e => els.has(e)).length);
+  let r = Math.random() * w.reduce((a, b) => a + b, 0), pick = pool[0];
+  for (let k = 0; k < pool.length; k++) { r -= w[k]; if (r <= 0) { pick = pool[k]; break; } }
+  removeMons(mats);
+  altarSel = [];
+  S.altarCount = (S.altarCount || 0) + 1;
+  S.hatch.push(pick.id);
+  mission('breed');
+  save(); updateHud(); render();
+  sfx('yay');
+  toast(`🔮 합성 성공! ${RAR[pick.rarity].name} 알이 나왔어요`);
+  oldHatchReveal(S.hatch.length - 1);
 }
 
 // 살 곳이 없을 때 고를 수 있는 것: 새 서식지 짓기 / 가득 찬 서식지 업그레이드 (둘 다 바로 이사)
@@ -3571,6 +3699,10 @@ function renderMons() {
         ? `<div class="all-box row"><button class="btn small sell-dups" data-act="sellDups">💸 겹치는 몬스터 팔기 (${plan.sellList.length}마리 · +💰${fmt(plan.gold)})</button></div>`
         : '';
     })()}
+    <div class="fuse-bar">
+      <button class="btn fuse-btn" data-act="altar"><span>🔮</span><b>합성 제단</b><small>같은 등급 ${ALTAR_N}마리 → 한 등급 위</small></button>
+      <button class="btn fuse-btn star ${starReady().length ? 'ready' : ''}" data-act="starList"><span>⭐</span><b>별 합성</b><small>${starReady().length ? `지금 ${starReady().length}종류 가능!` : '같은 몬스터 3마리 → ★+1'}</small></button>
+    </div>
     ${monSummaryHTML()}
     ${monControlsHTML()}
     ${monGroupsHTML()}`;
@@ -6109,6 +6241,8 @@ const ACH = [
   ...[5, 20, 50, 100].map((n, k) => ({ id: 'kd' + n, text: `🏛️ 왕국 발전 합계 Lv.${n}`, now: () => KINGDOM.reduce((s, x) => s + kdLv(x.id), 0), need: n, gems: [20, 50, 120, 300][k] })),
   ...[1, 4, 8].map((n, k) => ({ id: 'wonder' + n, text: `🗽 랜드마크 ${n}개 세우기`, now: () => DECOS.filter(d => d.wonder && S.plots.some(p => p && p.kind === 'deco' && p.id === d.id)).length, need: n, gems: [30, 100, 500][k] })),
   ...[1, 3, 6].map((n, k) => ({ id: 'evpet' + n, text: `🎉 이벤트 한정 펫 ${n}마리`, now: () => PETS.filter(p => p.event && petLv(p.id)).length, need: n, gems: [30, 100, 300][k] })),
+  ...[1, 3, 5].map((n, k) => ({ id: 'star' + n, text: `⭐ ★${n} 몬스터 만들기`, now: () => Math.max(0, ...S.monsters.map(m => m.star || 0)), need: n, gems: [10, 40, 150][k] })),
+  ...[1, 10, 50].map((n, k) => ({ id: 'altar' + n, text: `🔮 합성 제단 ${n}번 쓰기`, now: () => S.altarCount || 0, need: n, gems: [10, 40, 150][k] })),
   { id: 'guild1', text: '🛡️ 길드에 들어가거나 만들기', now: () => (S.guild ? 1 : 0), need: 1, gems: 20 },
   ...[200, 500, 900, 1400].map((n, k) => ({ id: 'troph' + n, text: `🏆 트로피 ${fmt(n)} 모으기`, now: () => S.trophies || 0, need: n, gems: [10, 20, 40, 60][k] })),
   ...[3, 6, 10, 20].map((n, k) => ({ id: 'habs' + n, text: `🏠 서식지 ${n}개 짓기`, now: () => S.plots.filter(p => p && p.kind === 'hab').length, need: n, gems: [5, 10, 20, 30][k] })),
@@ -6536,6 +6670,10 @@ TUT.push(
   { text: '🔥 상점의 🔥 오늘의 특가를 봐요 (매일 바뀌는 할인!)', done: () => tutFlag('deals'), go: () => goShop('shopDeals') },
   { text: '🧪 상점의 🧪 물약과 💱 교환소를 봐요 (행운 물약·골드→보석)', done: () => tutFlag('potion'), go: () => goShop('shopPotion') },
 );
+TUT.push(
+  { text: '🔮 몬스터 탭의 🔮 합성 제단을 봐요 (같은 등급 5마리 → 한 등급 위!)', done: () => tutFlag('altar') || (S.altarCount || 0) > 0, go: () => { closeModal(); tab = 'mons'; render(); } },
+  { text: '⭐ 몬스터 탭의 ⭐ 별 합성을 봐요 (같은 몬스터 3마리 → ★+1)', done: () => tutFlag('star') || (S.fuseCount || 0) > 0, go: () => { closeModal(); tab = 'mons'; render(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 function tutFlag(k, set) {
@@ -6658,6 +6796,12 @@ function tutPoint(k) {
     case 27: // 물약·교환소
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopPotion]'];
+    case 28: // 합성 제단
+      if (inModal) return ['#modalBox [data-act=altarFuse]:not([disabled])', '#modalBox [data-act=altarAuto]:not([disabled])', '#modalBox [data-act=close]'];
+      return need('mons') || ['#view [data-act=altar]'];
+    case 29: // 별 합성
+      if (inModal) return ['#modalBox [data-act=close]'];
+      return need('mons') || ['#view [data-act=starList]'];
   }
   return null;
 }
@@ -6832,6 +6976,7 @@ const WELCOME = [
   { icon: '🏝️', title: '섬 18개', text: '위쪽 <b>◀ ▶</b>로 섬을 옮겨 다녀요. 건물을 <b>꾹 눌러 끌면</b> 빈 땅으로 옮겨져요.<br>🎨 장식을 놓으면 그 섬 골드가 올라요.<br>두 손가락으로 <b>확대</b>, 🙈 숨기기로 이름표를 감출 수 있어요.' },
   { icon: '⚔️', title: '모험과 보스', text: '몬스터 3마리로 팀을 짜서 싸워요 (<b>⚡ 자동 편성</b>이면 가장 센 3마리!). 📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!<br><b>🔁 연속 전투</b>를 누르면 이길 때마다 다음 스테이지로 자동으로 계속 싸워요.<br>👹 보스전에서는 에너지가 엄청 많은 보스와 싸워요.' },
   { icon: '🎉', title: '이벤트', text: '<b>3일마다</b> 새 이벤트가 열려요: 💰골드 러시, 🌾풍년 축제, ⚔️전투 대회, 🐣부화 페스티벌, 🧬교배 러시, 🌈속성 축제<br>평소처럼 놀면 <b>🎟️ 이벤트 토큰</b>이 모이고 (이벤트 주제 활동은 2배!), 패스 보상을 받아요.<br>마지막 보상은 <b>이벤트 한정 펫</b>! 섬 왼쪽 <b>🎉 버튼</b>에서 확인해요.' },
+  { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🏛️', title: '골드·보석 크게 쓰기', text: '상점의 <b>🏛️ 왕국 발전</b>: 골드로 끝없이 레벨 업 (골드·먹이·전투·교배 비용·매일 보석)<br><b>🗽 랜드마크</b>: 섬에 세우는 거대 건물, 모든 섬 골드 UP (최대 +170%)<br><b>💎 보석 상점</b>: 🤖 자동 수집 로봇, ⚡ 골드 2배 부스터, 👑 전설 알 상자' },
   { icon: '👥', title: '대전과 친구', text: '모험 탭 <b>👥 대전 · 친구</b> 칸에서<br>🌍 <b>랜덤 대전</b>으로 모르는 사람과 바로 싸우고, ⚔️ 방 코드로 <b>친구 대전</b>, 🎁 <b>선물</b>, 👀 <b>친구 섬 구경</b>도 해요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요.' },
@@ -7033,6 +7178,14 @@ const ACTIONS = {
   teamView: (d) => { const v = teamView(); v[d.k] = d.k === 'strong' ? d.v === 'true' : d.v; save(); const p = $('#panel'), y = p.scrollTop; renderAdventure(); p.scrollTop = y; },
   breedView: (d) => { const v = breedView(); v[d.k] = d.k === 'ready' ? d.v === 'true' : d.v; save(); const box = $('#modalBox'); const y = box.scrollTop; openBreed(curMtn); box.scrollTop = y; },
   sellDups: (d) => openSellDups(d.type),
+  starFuse: (d) => starFuse(d.uid),
+  starList: () => openStarList(),
+  altar: () => openAltar(),
+  altarRank: (d) => openAltar(d.r),
+  altarPick: (d) => altarPick(d.uid),
+  altarAuto: () => altarAuto(),
+  altarClear: () => { altarSel = []; openAltar(); },
+  altarFuse: () => altarFuse(),
   sellDupsOk: (d) => sellDups(d.type),
   zoomIn: () => zoomAt(cam.z * 1.3),
   zoomOut: () => zoomAt(cam.z / 1.3),
