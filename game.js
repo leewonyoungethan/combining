@@ -4963,11 +4963,11 @@ function myRankData() {
   const top = S.monsters.slice().sort((a, b) => monPower(b) - monPower(a)).slice(0, 3);
   return {
     v: 1, id: S.rankId,
-    n: String(S.nick || (ACC && ACC.name) || '플레이어').slice(0, 10),
+    n: safeName(String(S.nick || (ACC && ACC.name) || '플레이어').slice(0, 10)),
     f: top[0] ? CAT[top[0].type].face : '🥚',
     tr: S.trophies || 0, dex: Object.keys(S.dex).length, st: S.stage || 1,
     pw: top.reduce((s, m) => s + monPower(m), 0),
-    ...(S.guild ? { g: S.guild.id, gn: S.guild.name, ge: S.guild.emblem, gl: S.guild.leader ? 1 : 0, dt: defenseTeam() } : {}),
+    ...(S.guild ? { g: S.guild.id, gn: safeName(S.guild.name, '길드'), ge: S.guild.emblem, gl: S.guild.leader ? 1 : 0, dt: defenseTeam() } : {}),
   };
 }
 // 길드전 방어 팀: 모험 팀, 없으면 가장 센 3마리
@@ -5006,9 +5006,9 @@ async function rankFetch() {
       const d = JSON.parse(ev.message);
       if (!d || d.v !== 1 || typeof d.id !== 'string' || RANK_HIDE.has(d.id)) return;
       const num = (x, hi) => Math.max(0, Math.min(hi, Math.floor(Number(x) || 0)));
-      const p = { id: d.id.slice(0, 20), n: String(d.n || '플레이어').slice(0, 10), f: String(d.f || '🥚').slice(0, 4),
+      const p = { id: d.id.slice(0, 20), n: safeName(String(d.n || '플레이어').slice(0, 10)), f: String(d.f || '🥚').slice(0, 4),
         tr: num(d.tr, 99999), dex: num(d.dex, CAT_LIST.length), st: num(d.st, 9999), pw: num(d.pw, 1e8), t: ev.time,
-        g: typeof d.g === 'string' ? d.g.slice(0, 12) : '', gn: String(d.gn || '').slice(0, 12), ge: String(d.ge || '🛡️').slice(0, 4), gl: d.gl ? 1 : 0,
+        g: typeof d.g === 'string' ? d.g.slice(0, 12) : '', gn: d.gn ? safeName(String(d.gn).slice(0, 12), '길드') : '', ge: String(d.ge || '🛡️').slice(0, 4), gl: d.gl ? 1 : 0,
         dt: Array.isArray(d.dt) ? d.dt.slice(0, 3).filter(x => x && CAT[x.type]) : [] };
       if (!best[p.id] || best[p.id].t <= p.t) best[p.id] = p;   // 한 사람은 가장 최근 기록만
     } catch (e) { /* 잘못된 줄은 건너뛴다 */ }
@@ -5161,6 +5161,7 @@ function guildNew() {
 async function guildCreate() {
   const name = ($('#guildName') ? $('#guildName').value : '').trim().slice(0, 12);
   if (!name) { toast('길드 이름을 적어 주세요'); return; }
+  if (nameProblem(name)) { toast(nameProblem(name)); return; }
   if (!S.monsters.length) { toast('몬스터가 한 마리는 있어야 길드를 만들 수 있어요'); return; }
   if (!spend(GUILD_COST)) return;
   const id = Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
@@ -5168,7 +5169,7 @@ async function guildCreate() {
   save(); updateHud(); sfx('yay');
   toast(`🛡️ ${name} 길드를 만들었어요!`);
   S.rankLast = null;
-  guildSay(`🎉 ${S.nick || ACC.name}님이 길드를 만들었어요!`, true);
+  guildSay(`🎉 ${safeName(S.nick || ACC.name)}님이 길드를 만들었어요!`, true);
   guildCache = null; guildTab = 'home';
   openGuild();
 }
@@ -5181,13 +5182,13 @@ async function guildJoin(id) {
   save(); sfx('yay');
   toast(`🛡️ ${g.name} 길드에 들어갔어요!`);
   S.rankLast = null;
-  guildSay(`👋 ${S.nick || ACC.name}님이 길드에 들어왔어요!`, true);
+  guildSay(`👋 ${safeName(S.nick || ACC.name)}님이 길드에 들어왔어요!`, true);
   guildCache = null; guildTab = 'home';
   openGuild();
 }
 function guildLeave() {
   if (!S.guild || !confirm(`${S.guild.name} 길드에서 나갈까요?${S.guild.leader ? ' (길드장이 나가도 길드원이 남아 있으면 길드는 계속돼요)' : ''}`)) return;
-  guildSay(`🚪 ${S.nick || ACC.name}님이 길드를 떠났어요`, true);
+  guildSay(`🚪 ${safeName(S.nick || ACC.name)}님이 길드를 떠났어요`, true);
   S.guild = null;
   S.rankLast = null;
   save(); guildCache = null;
@@ -5234,7 +5235,7 @@ async function gwarFetch() {
   const txt = await (await fetch(GWAR_URL() + '/json?poll=1&since=24h')).text();
   return txt.split('\n').filter(Boolean).map(l => { try { const e = JSON.parse(l); const d = JSON.parse(e.message); return d && d.v === 1 ? d : null; } catch (e) { return null; } })
     .filter(d => d && typeof d.g === 'string')
-    .map(d => ({ g: d.g.slice(0, 12), gn: String(d.gn || '').slice(0, 12), ge: String(d.ge || '🛡️').slice(0, 4), id: String(d.id || '').slice(0, 20), n: String(d.n || '').slice(0, 10), st: Math.max(0, Math.min(3, Math.floor(Number(d.st) || 0))), tgt: String(d.tgt || '').slice(0, 20), vs: String(d.vs || '').slice(0, 12) }));
+    .map(d => ({ g: d.g.slice(0, 12), gn: safeName(String(d.gn || '').slice(0, 12), '길드'), ge: String(d.ge || '🛡️').slice(0, 4), id: String(d.id || '').slice(0, 20), n: safeName(String(d.n || '').slice(0, 10)), st: Math.max(0, Math.min(3, Math.floor(Number(d.st) || 0))), tgt: String(d.tgt || '').slice(0, 20), vs: String(d.vs || '').slice(0, 12) }));
 }
 async function gwarBody(guilds) {
   const w = gwarToday();
@@ -5365,14 +5366,14 @@ async function guildChatLoad() {
     const msgs = txt.split('\n').filter(Boolean).map(l => { try { const e = JSON.parse(l); const d = JSON.parse(e.message); return { ...d, t: e.time }; } catch (e) { return null; } })
       .filter(d => d && d.v === 1 && typeof d.m === 'string')
       // 정해진 말과 시스템 알림만 보여 준다 (다른 글은 무시)
-      .filter(d => GUILD_CHAT.includes(d.m) || (d.sys && /^(🎉|👋|🚪) .{1,20}님이 (길드를 만들었어요!|길드에 들어왔어요!|길드를 떠났어요)$/.test(d.m)))
+      .filter(d => GUILD_CHAT.includes(d.m) || (d.sys && /^(🎉|👋|🚪) .{1,20}님이 (길드를 만들었어요!|길드에 들어왔어요!|길드를 떠났어요)$/.test(d.m) && !badName(d.m)))
       .slice(-60);
     const b = $('#gChat');
     if (!b) return;
     const me = S.rankId;
     b.innerHTML = msgs.length ? msgs.map(d => d.sys
       ? `<div class="gc-sys">${esc(d.m)}</div>`
-      : `<div class="gc-msg ${d.id === me ? 'mine' : ''}"><span class="gc-face">${esc(String(d.f || '🥚').slice(0, 4))}</span><div><b>${esc(String(d.n || '').slice(0, 10))}</b><span>${esc(d.m)}</span></div><small>${new Date(d.t * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</small></div>`).join('')
+      : `<div class="gc-msg ${d.id === me ? 'mine' : ''}"><span class="gc-face">${esc(String(d.f || '🥚').slice(0, 4))}</span><div><b>${esc(safeName(String(d.n || '').slice(0, 10)))}</b><span>${esc(d.m)}</span></div><small>${new Date(d.t * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</small></div>`).join('')
       : '<p class="muted">아직 메시지가 없어요. 첫 인사를 해 봐요! 👋</p>';
     b.scrollTop = b.scrollHeight;
   } catch (e) { box.innerHTML = '<p class="warn">채팅을 불러오지 못했어요</p>'; }
@@ -5383,6 +5384,27 @@ async function guildChatLoad() {
 // 켜 있는 동안 가끔 점수 올리기
 setInterval(() => rankSubmit(false), 120000);
 let NET = null;   // { peer, conn, role, code, oppName, oppTeam, started }
+// ----- 🙅 이름 검사: 욕설·부적절한 말·개인정보(전화번호·링크)는 이름으로 못 쓴다 -----
+const BAD_WORDS = [
+  '씨발', '시발', '씨빨', '씨바', '씹', '십새', '쌍년', '썅', 'ㅅㅂ', 'ㅆㅂ', 'ㅄ', '병신', '븅신', '빙신', 'ㅂㅅ', '좆', '조까', '좃', '존나', '졸라', 'ㅈㄴ',
+  '지랄', 'ㅈㄹ', '개새', '개색', '개세끼', '개쉐', '새끼', '섀끼', 'ㅅㄲ', '애미', '애비', '느금', '니미', '엠창', '엿먹', '꺼져', '닥쳐', '미친', '또라이', '돌아이',
+  '등신', '찐따', '한남', '김치녀', '보지', '자지', '섹스', '섹시', '야동', '야사', '성기', '강간', '자위', '죽어', '죽일', '자살', '살인', '마약', '대마', '틀딱',
+  '급식충', '맘충', '히틀러', '나치', 'ㅆㅣㅂㅏㄹ', 'ㅅㅣㅂㅏㄹ',
+  'fuck', 'fck', 'fuk', 'shit', 'bitch', 'btch', 'dick', 'pussy', 'sex', 'porn', 'nigg', 'cunt', 'asshole', 'bastard', 'whore', 'slut', 'rape', 'nazi', 'hitler',
+];
+// 숫자·기호·띄어쓰기로 끼워 넣어도 잡히게: 한글·영어만 남긴다 ("시1발", "씨 발", "ㅅ.ㅂ" → 시발/씨발/ㅅㅂ)
+const nameCore = (s) => String(s || '').toLowerCase().replace(/[^a-z가-힣ㄱ-ㅎㅏ-ㅣ]/g, '');
+const badName = (s) => { const c = nameCore(s); return BAD_WORDS.some(w => c.includes(w)); };
+function nameProblem(s) {
+  const t = String(s || '').trim();
+  if (!t) return '이름을 적어 주세요';
+  if (badName(t)) return '🙅 부적절한 말이 들어간 이름은 쓸 수 없어요';
+  if ((t.match(/\d/g) || []).length >= 7) return '📵 전화번호 같은 개인정보는 이름에 쓸 수 없어요';
+  if (/https?:|www\.|\.com|\.kr|@/i.test(t)) return '📵 링크나 이메일은 이름에 쓸 수 없어요';
+  return '';
+}
+// 다른 사람 이름을 보여 줄 때: 부적절하면 가린다
+const safeName = (s, fb = '플레이어') => { const t = String(s || '').trim(); if (!t) return fb; return nameProblem(t) ? '🙊 ***' : t; };
 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const flipId = (id) => (!id ? id : id.startsWith('me') ? 'foe' + id.slice(2) : 'me' + id.slice(3));
 const newFx = () => ({ burn: 0, burnDmg: 0, poison: 0, poisonDmg: 0, stun: 0, shield: 0, buff: 0, curse: 0 });
@@ -5434,16 +5456,21 @@ function openPvp() {
 }
 function saveNick() {
   const el = $('#pvpName');
-  if (el) S.nick = el.value.trim().slice(0, 10) || '플레이어';
-  if (!S.nick) S.nick = '플레이어';
+  if (el) {
+    const v = el.value.trim().slice(0, 10);
+    if (v && nameProblem(v)) { toast(nameProblem(v)); el.value = ''; return false; }
+    S.nick = v || '플레이어';
+  }
+  if (!S.nick || nameProblem(S.nick)) S.nick = '플레이어';
   save();
+  return true;
 }
 function pvpWaitModal(title, body) {
   showModal(`<h3>${title}</h3>${body}
     <div class="row"><button class="btn ghost" data-act="pvpCancel">취소</button></div>`);
 }
 function pvpHost(retry = 0) {
-  saveNick();
+  if (!saveNick()) return;
   netClose();
   const code = pvpCode();
   const peer = new Peer(PVP_PREFIX + code);
@@ -5466,7 +5493,7 @@ function pvpHost(retry = 0) {
   });
 }
 function pvpJoin() {
-  saveNick();
+  if (!saveNick()) return;
   const code = ($('#pvpCode') ? $('#pvpCode').value : '').trim().toUpperCase();
   if (!/^[A-Z0-9]{6}$/.test(code)) { toast('방 코드 6자리를 입력해 주세요'); return; }
   netClose();
@@ -5616,7 +5643,7 @@ function onNet(msg) {
   if (!msg || typeof msg !== 'object' || !NET) return;
   switch (msg.t) {
     case 'hello':
-      NET.oppName = esc(String(msg.name || '친구').slice(0, 10));
+      NET.oppName = esc(safeName(String(msg.name || '친구').slice(0, 10), '친구'));
       NET.oppTeam = Array.isArray(msg.team) ? msg.team.slice(0, 3) : [];
       if (NET.role === 'host' && !NET.started) startPvpBattle();
       break;
@@ -5692,7 +5719,7 @@ function startPvpGuest(msg) {
   if (!Array.isArray(msg.units)) return;
   NET.started = true;
   clearInterval(NET.uiTimer);
-  NET.oppName = esc(String(msg.name || NET.oppName || '친구').slice(0, 10));
+  NET.oppName = esc(safeName(String(msg.name || '').slice(0, 10), NET.oppName || '친구'));
   closeModal();
   B = {
     stage: S.stage, pvp: { role: 'guest', oppName: NET.oppName, random: !!NET.random }, anim: 0,
@@ -6146,6 +6173,7 @@ function accNewOk() {
   const name = ($('#accName').value || '').trim().slice(0, 10);
   const pin = ($('#accNewPin').value || '').trim();
   if (!name) { toast('이름을 적어 주세요'); return; }
+  if (nameProblem(name)) { toast(nameProblem(name)); return; }
   if (pin && !/^\d{4}$/.test(pin)) { toast('비밀번호는 숫자 4자리예요'); return; }
   const list = accounts();
   if (list.some(a => a.name === name)) { toast('같은 이름의 계정이 이미 있어요'); return; }
@@ -6221,6 +6249,7 @@ function accRename() {
 function accRenameOk() {
   const name = ($('#accNewName').value || '').trim().slice(0, 10);
   if (!name) return;
+  if (nameProblem(name)) { toast(nameProblem(name)); return; }
   const list = accounts();
   if (list.some(a => a.name === name && a.id !== ACC.id)) { toast('같은 이름의 계정이 이미 있어요'); return; }
   const a = list.find(x => x.id === ACC.id);
@@ -7356,9 +7385,10 @@ const ACTIONS = {
   rankName: () => {
     const v = ($('#rankName') ? $('#rankName').value : '').trim().slice(0, 10);
     if (!v) { toast('이름을 적어 주세요'); return; }
+    if (nameProblem(v)) { toast(nameProblem(v)); return; }
     S.nick = v; save(); toast('✏️ 이름을 바꿨어요'); rankSubmit(true).then(() => { rankCache = null; openRanking(); });
   },
-  pvpRandom: () => { if ($('#pvpName')) saveNick(); if (!S.nick) { openPvp(); toast('상대에게 보일 이름을 적고 🌍 랜덤 대전을 눌러요'); return; } tutFlag('friends', true); pvpRandom(); },
+  pvpRandom: () => { if ($('#pvpName') && !saveNick()) return; if (!S.nick) { openPvp(); toast('상대에게 보일 이름을 적고 🌍 랜덤 대전을 눌러요'); return; } tutFlag('friends', true); pvpRandom(); },
   pvpHost: () => pvpHost(),
   pvpJoin: () => pvpJoin(),
   pvpCancel: () => { if (NET) clearInterval(NET.uiTimer); netClose(); closeModal(); toast('대전을 취소했어요'); },
