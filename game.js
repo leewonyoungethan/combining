@@ -915,6 +915,7 @@ const RES_INFO = {
     btns: '<button class="btn green" data-act="resGo" data-to="mons">🐾 몬스터 키우기</button>' },
 };
 function openResInfo(r) {
+  tutFlag('res', true);
   const x = RES_INFO[r];
   if (!x) return;
   const now = r === 'gold' ? S.gold : r === 'gems' ? S.gems : S.food;
@@ -938,7 +939,7 @@ function updateGoal() {
   const c = $('#goalChip');
   if (!c) return;
   const g = $('#guide');
-  const show = tab === 'island' && !B && !VISIT && !S.hideUI && S.tutCoreDone && (!g || g.classList.contains('hidden'));
+  const show = tab === 'island' && !B && !VISIT && !S.hideUI && S.tutCoreDone && (!g || g.classList.contains('hidden') || tutFocus === TUT.length - 1);
   const goal = show ? nextGoal() : null;
   c.classList.toggle('hidden', !goal);
   if (!goal) return;
@@ -5884,7 +5885,7 @@ const TUT = [
   { text: '🌱 농장을 눌러 작물을 심어요', done: () => farmIdx().some(k => S.plots[k].crop != null || S.plots[k].lastCrop != null), go: () => goPlot(farmIdx()[0]) },
   { text: `🍖 먹이를 줘서 두 마리를 Lv.${BREED_LV}로!`, done: () => S.monsters.filter(m => m.lv >= BREED_LV).length >= 2, go: () => { closeModal(); tab = 'mons'; render(); } },
   { text: '🏔️ 교배산에서 두 마리를 섞어요!', done: () => (S.breedLog || []).length > 0, go: () => goPlot(mountains().find(k => mtnFreeSlot(S.plots[k]) >= 0) ?? mountains()[0]) },
-  { text: '⚔️ 모험에서 첫 전투를 해요', done: () => S.stage > 1 || Object.keys(S.bossCleared || {}).length > 0, go: () => { closeModal(); tab = 'adventure'; render(); } },
+  { text: '⚔️ 모험에서 ⚡자동 편성 → 첫 전투!', done: () => S.stage > 1 || Object.keys(S.bossCleared || {}).length > 0, go: () => { closeModal(); tab = 'adventure'; render(); } },
   // --- 새로 추가된 기능 둘러보기 ---
   { text: '🎁 오른쪽 위 🎁 버튼으로 일일 보상을 받아요', done: () => !!(S.daily && S.daily.last), go: () => { closeModal(); openDaily(); } },
   { text: '📖 도감에서 몬스터를 눌러 추천 교배 조합을 봐요', done: () => tutFlag('dex'), go: () => { closeModal(); tab = 'dex'; render(); } },
@@ -5902,6 +5903,10 @@ TUT.push(
     go: () => { closeModal(); openGuild(S.guild ? 'war' : undefined); } },
   { text: '🏆 모험 탭의 🏆 랭킹에서 전 세계 순위를 봐요 (랜덤 대전에서 이기면 트로피!)', done: () => tutFlag('ranking'),
     go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
+);
+TUT.push(
+  { text: '💰 위쪽 💰💎🍖 숫자를 눌러 재화를 얻고 쓰는 법을 봐요', done: () => tutFlag('res'), go: () => { closeModal(); openResInfo('gold'); } },
+  { text: '🎯 섬 위쪽 🎯 다음 목표를 눌러 보상을 받아요', done: () => tutFlag('goal'), go: () => { closeModal(); tab = 'island'; render(); updateHud(); } },
 );
 function tutFlag(k, set) {
   S.tutFlags = S.tutFlags || {};
@@ -5992,6 +5997,13 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=rankCat]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=ranking]'];
+    case 19: // 재화 안내
+      if (inModal) return ['#modalBox [data-act=close]'];
+      return ['.hud [data-act=resInfo][data-r=gold]'];
+    case 20: // 다음 목표
+      if (inModal) return ['#modalBox [data-act=misClaim]:not([disabled])', '#modalBox [data-act=achClaim]:not([disabled])', '#modalBox [data-act=close]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#goalChip:not(.hidden)'];
   }
   return null;
 }
@@ -6044,7 +6056,7 @@ function updateFinger() {
     }
   } else if (Array.isArray(target)) {
     for (const sel of target) {
-      const el = [...document.querySelectorAll(sel)].find(e => e.offsetParent !== null);
+      const el = [...document.querySelectorAll(sel)].find(e => e.getClientRects().length > 0);   // 화면에 보이는 것 (고정 위치 요소도 포함)
       if (!el) continue;
       let b = el.getBoundingClientRect();
       // 목록 아래쪽에 있어서 안 보이면 한 번만 스크롤해 준다
@@ -6138,7 +6150,7 @@ function updateGuide() {
     save();
     updateHud();
     sfx('yay');
-    toast('🎉 튜토리얼 완료! 선물로 💎 30. 더 궁금한 건 🎓에서 "더 알아보기"를 눌러 봐요');
+    toast('🎉 튜토리얼 완료! 선물로 💎 30. 이제 위쪽 🎯 다음 목표를 따라가 봐요 (💰💎🍖를 누르면 쓰는 법이 나와요)');
   }
   const show = !B && !S.tutOff && !(S.hideUI && tab === 'island') && k < TUT.length && tutGuided(k);
   g.classList.toggle('hidden', !show);
@@ -6161,6 +6173,7 @@ const WELCOME = [
   { icon: '🏠', title: '서식지와 알', text: '몬스터는 <b>같은 속성 서식지</b>에서 살아요. 🔥 불 몬스터 → 🔥 불 서식지<br>🛒 상점에서 서식지와 알(💰500)을 사고, 🪺 부화장에서 알을 누르면 <b>바로 깨어나요</b>.<br>서식지 레벨만큼 몬스터가 살고, 골드 💰가 계속 쌓여요.' },
   { icon: '🌾', title: '농장과 먹이', text: '농장에 작물을 심으면 먹이 🍖가 생겨요. 오래 걸리는 작물일수록 효율이 좋아요.<br>작물을 고를 때 <b>🌾 모든 농장에</b>를 누르면 한 번에 심어요.<br>몬스터에게 먹이를 주면 <b>레벨이 올라요</b>.' },
   { icon: '🏔️', title: '교배', text: '<b>Lv.4</b> 몬스터 두 마리를 교배산에 넣으면 <b>새 몬스터</b>가 태어나요!<br>등급은 <b>일반 → … → 서사 → 전설 → 신화</b>까지 15단계. 타이머가 길수록 좋은 등급이에요.<br>📖 도감에서 몬스터를 누르면 <b>추천 교배 조합</b>을 알려 줘요.' },
+  { icon: '💰', title: '재화 3가지', text: '💰 <b>골드</b>: 서식지 몬스터가 벌어요 → 건물·알·교배·업그레이드<br>🍖 <b>먹이</b>: 농장에서 키워요 → 몬스터 레벨 업 (Lv.4면 교배!)<br>💎 <b>보석</b>: 미션·일일 보상·도전 과제 → 시간 단축·고급 룬<br>위쪽 <b>💰💎🍖 숫자를 누르면</b> 언제든 자세히 볼 수 있어요. 섬 위쪽 <b>🎯 다음 목표</b>도 따라가 봐요!' },
   { icon: '🏝️', title: '섬 18개', text: '위쪽 <b>◀ ▶</b>로 섬을 옮겨 다녀요. 건물을 <b>꾹 눌러 끌면</b> 빈 땅으로 옮겨져요.<br>🎨 장식을 놓으면 그 섬 골드가 올라요.<br>두 손가락으로 <b>확대</b>, 🙈 숨기기로 이름표를 감출 수 있어요.' },
   { icon: '⚔️', title: '모험과 보스', text: '몬스터 3마리로 팀을 짜서 싸워요. 📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!<br>👹 보스전에서는 에너지가 엄청 많은 보스와 싸워요.' },
   { icon: '👥', title: '대전과 친구', text: '모험 탭 <b>👥 대전 · 친구</b> 칸에서<br>🌍 <b>랜덤 대전</b>으로 모르는 사람과 바로 싸우고, ⚔️ 방 코드로 <b>친구 대전</b>, 🎁 <b>선물</b>, 👀 <b>친구 섬 구경</b>도 해요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요.' },
@@ -6389,7 +6402,7 @@ const ACTIONS = {
   sound: () => toggleSound(),
   resInfo: (d) => openResInfo(d.r),
   resGo: (d) => { closeModal(); tab = d.to; render(); },
-  goalGo: () => openMissions(),
+  goalGo: () => { tutFlag('goal', true); openMissions(); },
   music: () => toggleMusic(),
   fullscreen: () => toggleFullscreen(),
   wbCollect: () => { collectAll(); closeModal(); if (dailyReady() && tutStep() >= 8) setTimeout(openDaily, 300); },
