@@ -1152,3 +1152,17 @@ body.ui-hidden .pet-btn { opacity: .55; }
 .q-dots i.done { background: #7dff8f; }
 .q-dots i.now { background: #ffe066; box-shadow: 0 0 6px #ffe066; }
 .q-goal .btn[disabled], .mis-row .btn[disabled] { opacity: .45; filter: grayscale(1); }
+
+/* 🏆 업적 */
+.ach-head { padding: 10px; border-radius: 14px; background: linear-gradient(135deg, rgba(255, 210, 74, .2), rgba(255, 255, 255, .03)); border: 2px solid #ffd24a; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+.ach-head b { color: #ffe066; font-size: 18px; }
+.ach-head .bar { height: 8px; background: rgba(255, 255, 255, .1); border-radius: 99px; overflow: hidden; }
+.ach-head .bar i { display: block; height: 100%; background: linear-gradient(90deg, #ffb020, #ffe066); }
+.ach-title { font-weight: 900; font-size: 20px; }
+.ach-title.small { font-size: 14px; color: #ffe066; margin: -4px 0 6px; cursor: pointer; }
+.ach-list { max-height: 46vh; overflow-y: auto; }
+.ach-medals { display: flex; gap: 3px; margin: 3px 0; }
+.ach-medals i { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, .15); }
+.ach-medals i.got { background: #ffd24a; box-shadow: 0 0 5px #ffd24a; }
+.rk-title { color: #ffe066; font-size: 10px; }
+.ach-head .bar { width: 100%; align-self: stretch; flex: none; }

@@ -1013,7 +1013,7 @@ function robotCollect() {
   if (!S.robot || VISIT) return;
   let sum = 0;
   S.plots.forEach((p, i) => { if (p && p.kind === 'hab' && p.gold >= 1) { const n = Math.floor(p.gold); sum += n; p.gold -= n; if (islandOf(i) === (S.isl || 0)) floatAt(i, '🤖+' + shortNum(n)); } });
-  if (sum) { earn(sum); save(); refreshLive(); updateHud(); }
+  if (sum) { earn(sum); statAdd('gold', sum); save(); refreshLive(); updateHud(); }
 }
 setInterval(robotCollect, 60000);
 // 👑 전설 알 상자
@@ -1630,7 +1630,7 @@ function openQuests(t) {
         ${w.bonus ? '<span class="mis-ok">✅</span>' : `<button class="btn small ${w.got.length >= w.ids.length ? 'green' : ''}" data-act="weekBonus" ${w.got.length >= w.ids.length ? '' : 'disabled'}>${rText(WEEK_BONUS)}</button>`}</div></div>`;
   }
   showModal(`<h3>📜 퀘스트</h3>
-    <div class="chips"><button class="chip ${questTab === 'story' ? 'on' : ''}" data-act="questTab" data-t="story">📜 스토리${qReady() ? ' 🔴' : ''}</button><button class="chip ${questTab === 'week' ? 'on' : ''}" data-act="questTab" data-t="week">📆 주간${weekReady() ? ' 🔴' : ''}</button><button class="chip" data-act="missions">📋 일일 미션 · 🏆 도전 과제</button></div>
+    <div class="chips"><button class="chip ${questTab === 'story' ? 'on' : ''}" data-act="questTab" data-t="story">📜 스토리${qReady() ? ' 🔴' : ''}</button><button class="chip ${questTab === 'week' ? 'on' : ''}" data-act="questTab" data-t="week">📆 주간${weekReady() ? ' 🔴' : ''}</button><button class="chip" data-act="missions">📋 일일 미션</button><button class="chip" data-act="achOpen">🏆 업적${ACH.some(achReady) ? ' 🔴' : ''}</button></div>
     ${body}
     <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
 }
@@ -2476,6 +2476,7 @@ function collectAll() {
   });
   if (!sum) { toast('아직 걷을 골드가 없어요'); return; }
   earn(sum);
+  statAdd('gold', sum);
   sfx('coin');
   mission('collect');
   if (tab !== 'island') toast(`💰 ${fmt(sum)} 골드를 걷었어요!`);
@@ -2666,6 +2667,7 @@ function collectHab(i, quiet = false) {
   if (!n) { toast('아직 걷을 골드가 없어요'); return; }
   p.gold -= n;
   earn(n);
+  statAdd('gold', n);
   sfx('coin');
   mission('collect');
   floatAt(i, `+${fmt(n)}`);
@@ -4965,7 +4967,7 @@ function myRankData() {
     v: 1, id: S.rankId,
     n: safeName(String(S.nick || (ACC && ACC.name) || '플레이어').slice(0, 10)),
     f: top[0] ? CAT[top[0].type].face : '🥚',
-    tr: S.trophies || 0, dex: Object.keys(S.dex).length, st: S.stage || 1,
+    tr: S.trophies || 0, dex: Object.keys(S.dex).length, st: S.stage || 1, tt: titleIdx(),
     pw: top.reduce((s, m) => s + monPower(m), 0),
     ...(S.guild ? { g: S.guild.id, gn: safeName(S.guild.name, '길드'), ge: S.guild.emblem, gl: S.guild.leader ? 1 : 0, dt: defenseTeam() } : {}),
   };
@@ -4981,7 +4983,7 @@ let rankBusy = false;
 async function rankSubmit(force) {
   // 몬스터가 한 마리도 없는 빈 계정은 올리지 않는다
   if (VISIT || !ACC || rankBusy || !navigator.onLine || !S.monsters.length) return;
-  const d = myRankData(), key = JSON.stringify([d.n, d.f, d.tr, d.dex, d.st, d.pw, d.g || '', (d.dt || []).map(x => x.type + x.lv).join()]);
+  const d = myRankData(), key = JSON.stringify([d.n, d.f, d.tr, d.dex, d.st, d.pw, d.tt, d.g || '', (d.dt || []).map(x => x.type + x.lv).join()]);
   const last = S.rankLast || {};
   const age = Date.now() - (last.t || 0);
   if (age < 60000) return;
@@ -5007,7 +5009,7 @@ async function rankFetch() {
       if (!d || d.v !== 1 || typeof d.id !== 'string' || RANK_HIDE.has(d.id)) return;
       const num = (x, hi) => Math.max(0, Math.min(hi, Math.floor(Number(x) || 0)));
       const p = { id: d.id.slice(0, 20), n: safeName(String(d.n || '플레이어').slice(0, 10)), f: String(d.f || '🥚').slice(0, 4),
-        tr: num(d.tr, 99999), dex: num(d.dex, CAT_LIST.length), st: num(d.st, 9999), pw: num(d.pw, 1e8), t: ev.time,
+        tr: num(d.tr, 99999), dex: num(d.dex, CAT_LIST.length), st: num(d.st, 9999), pw: num(d.pw, 1e8), t: ev.time, tt: num(d.tt, TITLES.length - 1),
         g: typeof d.g === 'string' ? d.g.slice(0, 12) : '', gn: d.gn ? safeName(String(d.gn).slice(0, 12), '길드') : '', ge: String(d.ge || '🛡️').slice(0, 4), gl: d.gl ? 1 : 0,
         dt: Array.isArray(d.dt) ? d.dt.slice(0, 3).filter(x => x && CAT[x.type]) : [] };
       if (!best[p.id] || best[p.id].t <= p.t) best[p.id] = p;   // 한 사람은 가장 최근 기록만
@@ -5049,7 +5051,7 @@ async function openRanking(cat) {
   const row = (p, k) => `<div class="rank-row ${p.id === me.id ? 'me' : ''} ${k < 3 ? 'top' : ''}">
       <span class="rk-pos">${medal(k)}</span>
       <span class="rk-face">${esc(p.f)}</span>
-      <span class="rk-name">${esc(p.n)}${p.id === me.id ? ' <small>(나)</small>' : ''}<br>${tierBadge(p.tr)}</span>
+      <span class="rk-name">${esc(p.n)}${p.id === me.id ? ' <small>(나)</small>' : ''}<br>${tierBadge(p.tr)} <small class="rk-title">${titleName(p.tt)}</small></span>
       <span class="rk-val">${fmt(p[rankCat])}<small>${c.unit}</small></span>
     </div>`;
   const shown = list.slice(0, 50);
@@ -5316,6 +5318,7 @@ function gwarResult(win) {
   const stars = win ? 1 + (alive >= 2 ? 1 : 0) + (alive >= 3 ? 1 : 0) : 0;
   mission('gwar');
   w.stars += stars;
+  statAdd('gwarStars', stars);
   const gold = 200 + stars * 400, gems = stars * 2;
   earn(gold); if (gems) earn(gems, 'gems');
   if (stars && S.guild) {
@@ -6220,7 +6223,7 @@ async function accImportOk() {
 }
 function openAccountMenu() {
   tutFlag('account', true);
-  showModal(`<h3>👤 ${esc(ACC.name)}</h3>
+  showModal(`<h3>👤 ${esc(ACC.name)}</h3><div class="ach-title small" data-act="achOpen">${titleName(titleIdx())} · 🏅 ${fmt(achPoints())}</div>
     <p class="muted">${accSummary(ACC)}</p>
     <div class="build-list">
       <button class="build-opt" data-act="guildOpen" style="--hc:#7dff8f"><span class="bo-ico">🛡️</span><span class="bo-nm">길드<br><small>${S.guild ? `${esc(S.guild.emblem)} ${esc(S.guild.name)}` : '길드에 들어가거나 만들기'}</small></span></button>
@@ -6278,7 +6281,14 @@ function accPinSetOk() {
   toast(pin ? '🔒 비밀번호를 만들었어요' : '🔓 비밀번호를 없앴어요');
 }
 // 게임에 들어온 뒤: 처음이면 설명, 아니면 일일 보상
+function countLoginDay() {
+  if (S.lastLoginDay === dayKey()) return;
+  S.lastLoginDay = dayKey();
+  S.loginDays = (S.loginDays || 0) + 1;
+  save();
+}
 function afterEnter() {
+  countLoginDay();
   if (!$('#modal').classList.contains('hidden') || B || !$('#login').classList.contains('hidden')) return;
   if (!S.welcomed) { openWelcome(0, false); return; }
   if (AWAY.sec > 300 && openWelcomeBack()) return;
@@ -6456,6 +6466,121 @@ const ACH = [
   ...[200, 500, 900, 1400].map((n, k) => ({ id: 'troph' + n, text: `🏆 트로피 ${fmt(n)} 모으기`, now: () => S.trophies || 0, need: n, gems: [10, 20, 40, 60][k] })),
   ...[3, 6, 10, 20].map((n, k) => ({ id: 'habs' + n, text: `🏠 서식지 ${n}개 짓기`, now: () => S.plots.filter(p => p && p.kind === 'hab').length, need: n, gems: [5, 10, 20, 30][k] })),
 ];
+function statAdd(k, n) { S.stat = S.stat || {}; S.stat[k] = (S.stat[k] || 0) + n; }
+// 🏆 새 업적 (단계별로 쭉)
+const ACH_MORE = [
+  ['breed',    '🏔️ 교배', 'stat', [10, 50, 200, 1000, 5000], [5, 15, 40, 100, 300]],
+  ['hatch',    '🐣 몬스터 탄생', 'stat', [10, 50, 200, 1000], [5, 15, 40, 120]],
+  ['feed',     '🍖 레벨 올리기', 'stat', [50, 300, 1500, 5000], [5, 15, 40, 120]],
+  ['win',      '⚔️ 전투 승리', 'stat', [10, 50, 200, 1000], [5, 20, 50, 150]],
+  ['collect',  '💰 골드 걷기', 'stat', [20, 100, 500, 2000], [5, 15, 40, 100]],
+  ['gold',     '💰 번 골드 합계', 'stat', [1e5, 1e7, 1e9, 1e11, 1e13], [5, 20, 50, 150, 400]],
+  ['harvest',  '🌾 수확', 'stat', [10, 50, 200, 1000], [5, 15, 40, 100]],
+  ['gwarStars', '🛡️ 길드전 별 모으기', 'stat', [10, 50, 200], [10, 40, 120]],
+  ['quest',    '📜 스토리 퀘스트 깨기', () => (S.quest ? S.quest.k : 0), [5, 10, 20, 30], [10, 20, 50, 200]],
+  ['login',    '📅 접속한 날', () => S.loginDays || 0, [3, 7, 30, 100, 365], [5, 15, 50, 150, 500]],
+  ['boss',     '👹 보스 물리치기', () => Object.keys(S.bossCleared || {}).length, [1, 3, 6], [10, 30, 80]],
+  ['lv20',     '⬆️ Lv.20 몬스터', () => S.monsters.filter(m => m.lv >= MAX_LV).length, [1, 10, 50], [10, 40, 120]],
+  ['myth',     '🌌 신화 이상 몬스터', () => S.monsters.filter(m => RANK[CAT[m.type].rarity] >= RANK.mythic).length, [1, 10, 50], [20, 80, 250]],
+];
+ACH_MORE.forEach(([key, name, src, needs, gems]) => needs.forEach((n, k) => ACH.push({
+  id: key + 'T' + n, text: `${name} ${shortNum(n)}${key === 'gold' ? '' : key === 'login' ? '일' : key === 'quest' || key === 'boss' ? '개' : key === 'lv20' || key === 'myth' ? '마리' : '번'}`,
+  now: src === 'stat' ? () => stat(key) : src, need: n, gems: gems[k],
+})));
+ACH.push(
+  { id: 'allhab', text: '🌈 11가지 속성 서식지 모두 짓기', now: () => EL.filter(e => S.plots.some(p => p && p.kind === 'hab' && p.el === e.id)).length, need: 11, gems: 50 },
+  { id: 'gems1k', text: '💎 보석 1,000개 모으기', now: () => (S.infinite ? 1000 : S.gems), need: 1000, gems: 50 },
+  { id: 'allpets', text: '🐾 펫 18마리 모두 모으기', now: () => PETS.filter(p => petLv(p.id)).length, need: PETS.length, gems: 500 },
+  { id: 'maxpet', text: '🐾 Lv.10 펫 만들기', now: () => Math.max(0, ...PETS.map(p => petLv(p.id))), need: 10, gems: 60 },
+  { id: 'fivestars', text: '⭐ ★5 몬스터 3마리', now: () => S.monsters.filter(m => (m.star || 0) >= 5).length, need: 3, gems: 300 },
+);
+// 분류
+const ACH_CATS = [['all', '전체'], ['collect', '📚 수집'], ['grow', '🧬 교배·성장'], ['battle', '⚔️ 전투'], ['kingdom', '🏰 왕국·경제'], ['social', '🤝 함께'], ['special', '✨ 특별']];
+const achChain = (id) => (id.startsWith('rank') ? 'rank' : id.replace(/T?\d[\d.e+]*$/, ''));
+function achCat(id) {
+  const c = achChain(id);
+  if (['allhab', 'gems1k', 'allpets', 'maxpet', 'fivestars', 'evpet'].includes(c)) return 'special';
+  if (['dex', 'pets', 'evpet', 'allpets', 'maxpet'].includes(c)) return 'collect';
+  if (['breed', 'hatch', 'feed', 'star', 'altar', 'rank', 'lv', 'myth', 'fivestars'].includes(c) || c.startsWith('lv')) return 'grow';
+  if (['stage', 'win', 'troph', 'gwarStars', 'boss'].includes(c)) return 'battle';
+  if (['habs', 'kd', 'wonder', 'gold', 'collect', 'harvest', 'gems1k', 'allhab'].includes(c) || c.startsWith('gems')) return 'kingdom';
+  if (['guild', 'quest', 'login'].includes(c)) return 'social';
+  return 'special';
+}
+// 업적 점수(받은 보석 합) → 칭호
+const TITLES = [[0, '🌱 새싹 조련사'], [50, '🐣 견습 조련사'], [200, '🌿 숙련 조련사'], [500, '⚔️ 베테랑 조련사'], [1000, '💎 엘리트 조련사'], [2000, '👑 마스터 조련사'], [4000, '🏆 전설의 조련사'], [8000, '🌌 신화의 조련사']];
+const achPoints = () => ACH.filter(a => (S.achGot || []).includes(a.id)).reduce((s, a) => s + a.gems, 0);
+const titleIdx = (ap = achPoints()) => TITLES.filter(t => ap >= t[0]).length - 1;
+const titleName = (i) => (TITLES[Math.max(0, Math.min(TITLES.length - 1, i || 0))] || TITLES[0])[1];
+let achTab = 'all';
+function openAch(t) {
+  tutFlag('ach', true);
+  if (t) achTab = t;
+  const got = S.achGot || [], ap = achPoints(), ti = titleIdx(ap), nextT = TITLES[ti + 1];
+  // 같은 줄(체인)끼리 묶어서: 지금 도전 중인 단계 하나 + 메달
+  const chains = {};
+  ACH.forEach(a => { const c = achChain(a.id); (chains[c] = chains[c] || []).push(a); });
+  const rows = Object.entries(chains).map(([c, list]) => {
+    const cur = list.find(a => !got.includes(a.id)) || list[list.length - 1];
+    const doneN = list.filter(a => got.includes(a.id)).length;
+    return { c, list, cur, doneN, all: doneN === list.length, ready: list.some(achReady), cat: achCat(cur.id) };
+  }).filter(r => achTab === 'all' || r.cat === achTab)
+    .sort((a, b) => b.ready - a.ready || a.all - b.all || (b.cur.now() / b.cur.need) - (a.cur.now() / a.cur.need));
+  const readyN = ACH.filter(achReady).length;
+  showModal(`<h3>🏆 업적</h3>
+    <div class="ach-head">
+      <div class="ach-title">${titleName(ti)}</div>
+      <div>🏅 업적 점수 <b>${fmt(ap)}</b>${nextT ? ` <small class="muted">· 다음 칭호 ${nextT[1]}까지 ${fmt(nextT[0] - ap)}</small>` : ' <small class="muted">· 최고 칭호!</small>'}</div>
+      <div class="bar"><i style="width:${nextT ? Math.min(100, (ap - TITLES[ti][0]) / (nextT[0] - TITLES[ti][0]) * 100) : 100}%"></i></div>
+      <small class="muted">완료 ${got.filter(id => ACH.some(a => a.id === id)).length} / ${ACH.length} · 칭호는 랭킹에서 이름 옆에 보여요</small>
+    </div>
+    <div class="chips">${ACH_CATS.map(([id, nm]) => `<button class="chip ${achTab === id ? 'on' : ''}" data-act="achTab" data-t="${id}">${nm}</button>`).join('')}</div>
+    ${readyN ? `<div class="row"><button class="btn green" data-act="achAll">🎁 받을 수 있는 업적 모두 받기 (${readyN}개)</button></div>` : ''}
+    <div class="mis-list ach-list">${rows.map(r => {
+      const a = r.cur, p = Math.min(a.need, a.now()), ok = achReady(a);
+      return `<div class="mis-row ${r.all ? 'taken' : ok ? 'done' : ''}">
+        <div class="mis-info"><b>${a.text}</b> <small>${r.all ? '모두 완료!' : `${shortNum(p)}/${shortNum(a.need)}`}</small>
+          <div class="ach-medals">${r.list.map(x => `<i class="${got.includes(x.id) ? 'got' : ''}"></i>`).join('')}</div>
+          ${r.all ? '' : `<div class="bar"><i style="width:${p / a.need * 100}%"></i></div>`}</div>
+        ${r.all ? '<span class="mis-ok">🏆</span>' : `<button class="btn small ${ok ? 'green' : ''}" data-act="achClaim2" data-id="${a.id}" ${ok ? '' : 'disabled'}>💎 ${a.gems}</button>`}
+      </div>`;
+    }).join('') || '<p class="muted">이 분류에는 업적이 없어요</p>'}</div>
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+}
+function achClaimOne(id) {
+  const a = ACH.find(x => x.id === id);
+  if (!a || !achReady(a)) return 0;
+  const t0 = titleIdx();
+  S.achGot = [...(S.achGot || []), id];
+  earn(a.gems, 'gems');
+  const t1 = titleIdx();
+  if (t1 > t0) setTimeout(() => { sfx('yay'); toast(`🎖️ 새 칭호: ${titleName(t1)}!`); }, 900);
+  return a.gems;
+}
+function achClaim2(id) {
+  const g = achClaimOne(id);
+  if (!g) return;
+  sfx('yay'); toast(`🏆 업적 달성! 💎 ${g}`);
+  save(); updateHud(); S.rankLast = null; openAch();
+}
+function achAll() {
+  let n = 0, gems = 0;
+  // 한 번 받으면 다음 단계가 열릴 수 있으니 몇 번 돌린다
+  for (let loop = 0; loop < 10; loop++) { const ready = ACH.filter(achReady); if (!ready.length) break; ready.forEach(a => { gems += achClaimOne(a.id); n++; }); }
+  if (!n) return;
+  sfx('yay'); toast(`🏆 업적 ${n}개 달성! 💎 ${gems}`);
+  save(); updateHud(); S.rankLast = null; openAch();
+}
+// 새로 달성한 업적 알림 (한 번씩)
+function achNotify() {
+  if (!ACH || VISIT) return;
+  S.achSeen = S.achSeen || [];
+  const fresh = ACH.filter(a => achReady(a) && !S.achSeen.includes(a.id));
+  if (!fresh.length) return;
+  fresh.forEach(a => S.achSeen.push(a.id));
+  if (S.achSeen.length > fresh.length || S.tutCoreDone) toast(`🏆 업적 달성! ${fresh[0].text}${fresh.length > 1 ? ` 외 ${fresh.length - 1}개` : ''} → 📜 퀘스트의 🏆 업적에서 받기`);
+}
+setInterval(achNotify, 5000);
 const achReady = (a) => !(S.achGot || []).includes(a.id) && a.now() >= a.need;
 function misClaimable() {
   const m = misToday();
@@ -6482,6 +6607,7 @@ function openMissions() {
     <div class="mis-row bonus ${m.bonus ? 'taken' : ''}"><div class="mis-info"><b>🎉 셋 다 깨기 보너스</b> <small>${m.got.length}/3</small></div>
       ${m.bonus ? '<span class="mis-ok">✅</span>' : `<button class="btn small ${m.got.length >= 3 ? 'green' : ''}" data-act="misBonus" ${m.got.length >= 3 ? '' : 'disabled'}>💎 ${MIS_BONUS}</button>`}</div>
     </div>
+    <div class="row"><button class="btn big" data-act="achOpen">🏆 업적 전체 보기 (${titleName(titleIdx())})</button></div>
     <h3 class="sub">🏆 도전 과제 <small class="muted">한 번씩 받는 큰 목표 · ${got.length}/${ACH.length} 완료</small></h3>
     <div class="mis-list">${achList.map(a => {
       const p = Math.min(a.need, a.now()), ok = achReady(a);
@@ -6886,6 +7012,9 @@ TUT.push(
 TUT.push(
   { text: '📜 왼쪽 📜 버튼에서 루나의 퀘스트를 받아요', done: () => tutFlag('quest'), go: () => { closeModal(); tab = 'island'; render(); } },
 );
+TUT.push(
+  { text: '🏆 📜 퀘스트 창의 🏆 업적에서 칭호를 모아요 (업적 점수 → 칭호)', done: () => tutFlag('ach'), go: () => { closeModal(); openQuests('story'); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -7018,6 +7147,10 @@ function tutPoint(k) {
       return need('mons') || ['#view [data-act=starList]'];
     case 10: // 퀘스트
       if (inModal) return ['#modalBox [data-act=qClaim]:not([disabled])', '#modalBox [data-act=close]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#questBtn'];
+    case 31: // 업적
+      if (inModal) return ['#modalBox [data-act=achAll]', '#modalBox [data-act=achOpen]', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#questBtn'];
   }
@@ -7194,6 +7327,7 @@ const WELCOME = [
   { icon: '🏝️', title: '섬 18개', text: '위쪽 <b>◀ ▶</b>로 섬을 옮겨 다녀요. 건물을 <b>꾹 눌러 끌면</b> 빈 땅으로 옮겨져요.<br>🎨 장식을 놓으면 그 섬 골드가 올라요.<br>두 손가락으로 <b>확대</b>, 🙈 숨기기로 이름표를 감출 수 있어요.' },
   { icon: '⚔️', title: '모험과 보스', text: '몬스터 3마리로 팀을 짜서 싸워요 (<b>⚡ 자동 편성</b>이면 가장 센 3마리!). 📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!<br><b>🔁 연속 전투</b>를 누르면 이길 때마다 다음 스테이지로 자동으로 계속 싸워요.<br>👹 보스전에서는 에너지가 엄청 많은 보스와 싸워요.' },
   { icon: '🎉', title: '이벤트', text: '<b>3일마다</b> 새 이벤트가 열려요: 💰골드 러시, 🌾풍년 축제, ⚔️전투 대회, 🐣부화 페스티벌, 🧬교배 러시, 🌈속성 축제<br>평소처럼 놀면 <b>🎟️ 이벤트 토큰</b>이 모이고 (이벤트 주제 활동은 2배!), 패스 보상을 받아요.<br>마지막 보상은 <b>이벤트 한정 펫</b>! 섬 왼쪽 <b>🎉 버튼</b>에서 확인해요.' },
+  { icon: '🏆', title: '업적과 칭호', text: '📜 퀘스트 창의 <b>🏆 업적</b>에서 수집·교배·전투·왕국·함께·특별 업적을 모아요. 단계마다 💎 보석!<br>받은 업적만큼 <b>🏅 업적 점수</b>가 쌓이고, 점수에 따라 <b>칭호</b>가 올라가요: 🌱 새싹 → 🐣 견습 → 🌿 숙련 → ⚔️ 베테랑 → 💎 엘리트 → 👑 마스터 → 🏆 전설 → 🌌 신화 조련사<br>칭호는 <b>랭킹에서 이름 옆</b>에 보여요!' },
   { icon: '📜', title: '퀘스트', text: '섬 왼쪽 <b>📜 버튼</b>에서 🧙‍♀️ 마법사 루나가 퀘스트를 줘요.<br><b>📜 스토리</b>: 6장 30개의 이야기를 하나씩 깨면 보상! (섬 위쪽 🎯에도 보여요)<br><b>📆 주간</b>: 월요일마다 새 퀘스트 4개, 모두 깨면 💎60 + 🥚 펫 알' },
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
@@ -7455,7 +7589,11 @@ const ACTIONS = {
   resInfo: (d) => openResInfo(d.r),
   resGo: (d) => { closeModal(); tab = d.to; render(); },
   shopGo: (d) => goShop(d.id),
-  goalGo: () => { tutFlag('goal', true); const g = nextGoal(); if (g && g.quest) openQuests('story'); else openMissions(); },
+  achOpen: () => openAch(),
+  achTab: (d) => openAch(d.t),
+  achClaim2: (d) => achClaim2(d.id),
+  achAll: () => achAll(),
+  goalGo: () => { tutFlag('goal', true); const g = nextGoal(); if (g && g.quest) openQuests('story'); else if (ACH.some(achReady)) openAch(); else openMissions(); },
   quests: () => openQuests(),
   questTab: (d) => openQuests(d.t),
   qClaim: () => qClaim(),
