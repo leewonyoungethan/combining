@@ -565,11 +565,11 @@ const habMons = (i) => S.monsters.filter(m => m.hab === i);
 // 서식지에 들어갈 수 있는 몬스터 수 = 레벨 (최소 2마리, Lv.10이면 10마리). 쌓이는 골드는 무제한
 const habCap = (i) => Math.max(2, S.plots[i].lv);
 const habLvBonus = (i) => (S.plots[i].lv - 1) * HAB_LV_BONUS;
-const habIncome = (i) => habMons(i).reduce((s, m) => s + monIncome(m), 0) * (1 + (habLvBonus(i) + decoPercent(islandOf(i)) + guildPct()) / 100);
+const habIncome = (i) => habMons(i).reduce((s, m) => s + monIncome(m), 0) * (1 + (habLvBonus(i) + decoPercent(islandOf(i)) + guildPct() + petPct('gold')) / 100);
 const habGoldCap = () => Infinity;
 const feedCost = (m) => m.lv * 20;
 const sellPrice = (m) => Math.round(RAR[CAT[m.type].rarity].cost * 0.5 * (1 + m.lv * 0.2));
-const breedCost = (a, b) => RAR[RAR_ORDER[Math.max(rIdx(a.type), rIdx(b.type))]].cost;
+const breedCost = (a, b) => Math.round(RAR[RAR_ORDER[Math.max(rIdx(a.type), rIdx(b.type))]].cost * (1 - petPct('discount') / 100));
 const gemCost = (secLeft, per) => Math.max(1, Math.ceil(secLeft / per));
 
 function habsFor(type) {
@@ -902,6 +902,126 @@ function toggleMusic() {
   openAccountMenu();
 }
 
+// ===================== 🐾 펫 =====================
+// 펫 한 마리를 데리고 다니면 보너스! 간식으로 Lv.10까지 키운다. 같은 펫이 또 나오면 레벨 +1
+const PET_RAR = {
+  common:    { name: '일반', color: '#b4bccb', mult: 1 },
+  rare:      { name: '희귀', color: '#5cb6ff', mult: 2 },
+  epic:      { name: '서사', color: '#e45cff', mult: 4 },
+  legendary: { name: '전설', color: '#ffb020', mult: 8 },
+};
+const PET_BONUS = { gold: '💰 골드', food: '🍖 수확 먹이', atk: '⚔️ 전투 공격', hp: '❤️ 전투 체력', discount: '🏷️ 교배 비용 할인' };
+const PETS = [
+  { id: 'dog',     name: '강아지 멍멍',   e: '🐶', r: 'common',    b: { gold: 2 } },
+  { id: 'cat',     name: '고양이 야옹',   e: '🐱', r: 'common',    b: { food: 3 } },
+  { id: 'bunny',   name: '토끼 깡총',     e: '🐰', r: 'common',    b: { atk: 2 } },
+  { id: 'hamster', name: '햄스터 쪼꼬',   e: '🐹', r: 'common',    b: { hp: 2 } },
+  { id: 'fox',     name: '여우 불꼬리',   e: '🦊', r: 'rare',      b: { gold: 3, atk: 1 } },
+  { id: 'penguin', name: '펭귄 뒤뚱',     e: '🐧', r: 'rare',      b: { food: 4, hp: 1 } },
+  { id: 'panda',   name: '판다 대나무',   e: '🐼', r: 'rare',      b: { discount: 2, hp: 2 } },
+  { id: 'owl',     name: '부엉이 지혜',   e: '🦉', r: 'epic',      b: { gold: 3, food: 3, discount: 1 } },
+  { id: 'unicorn', name: '유니콘 무지개', e: '🦄', r: 'epic',      b: { atk: 3, hp: 3 } },
+  { id: 'bdragon', name: '아기용 크앙',   e: '🐲', r: 'epic',      b: { atk: 4, gold: 2 } },
+  { id: 'peacock', name: '황금 공작',     e: '🦚', r: 'legendary', b: { gold: 5, food: 5, discount: 2 } },
+  { id: 'skydrg',  name: '하늘 용',       e: '🐉', r: 'legendary', b: { atk: 5, hp: 5, gold: 2 } },
+];
+const PET_MAX = 10;
+const PET_EGGS = [
+  { id: 'normal',  name: '펫 알',      e: '🥚', cost: 20000, cur: 'gold', w: { common: 0.72, rare: 0.23, epic: 0.05, legendary: 0 } },
+  { id: 'premium', name: '고급 펫 알', e: '🌟', cost: 100,   cur: 'gems', w: { common: 0, rare: 0.55, epic: 0.35, legendary: 0.10 } },
+];
+const petById = (id) => PETS.find(p => p.id === id);
+const petLv = (id) => (S.pets && S.pets[id]) || 0;
+// 지금 데리고 다니는 펫의 보너스 (%)
+function petPct(kind) {
+  const p = S.petOn && petById(S.petOn);
+  return p && p.b[kind] ? p.b[kind] * petLv(p.id) : 0;
+}
+const petBonusText = (p, lv) => Object.entries(p.b).map(([k, v]) => `${PET_BONUS[k]} +${v * Math.max(1, lv)}%`).join(' · ');
+const petTreatCost = (p) => Math.round(800 * Math.pow(petLv(p.id), 2) * PET_RAR[p.r].mult);
+function openPets() {
+  tutFlag('pet', true);
+  S.pets = S.pets || {};
+  // 처음 열면 🐶 강아지를 선물
+  if (!Object.keys(S.pets).length) {
+    S.pets.dog = 1; S.petOn = 'dog'; save(); sfx('yay');
+    petReveal(petById('dog'), true, '🎁 첫 펫 선물! 섬을 같이 돌아다녀요');
+    return;
+  }
+  const on = S.petOn && petById(S.petOn);
+  const owned = PETS.filter(p => petLv(p.id)).length;
+  showModal(`<h3>🐾 펫</h3>
+    ${on ? `<div class="pet-main" style="--pc:${PET_RAR[on.r].color}">
+      <div class="pm-face">${on.e}</div>
+      <div class="pm-info"><b>${on.name}</b> <span class="pet-rar">${PET_RAR[on.r].name}</span><div class="pm-lv">Lv.${petLv(on.id)} / ${PET_MAX}</div>
+        <div class="pm-bonus">${petBonusText(on, petLv(on.id))}</div></div>
+      ${petLv(on.id) < PET_MAX ? `<button class="btn green" data-act="petTreat">🍪 간식 주기<br><small>💰 ${fmt(petTreatCost(on))} → Lv.${petLv(on.id) + 1}</small></button>` : '<div class="pm-max">⭐ 최고 레벨!</div>'}
+    </div>` : '<p class="muted">데리고 다닐 펫을 골라요!</p>'}
+    <h3 class="sub">📚 펫 도감 <small class="muted">${owned} / ${PETS.length}</small></h3>
+    <div class="pet-grid">${PETS.map(p => { const lv = petLv(p.id); return lv ? `<button class="pet-card ${S.petOn === p.id ? 'on' : ''}" data-act="petEquip" data-id="${p.id}" style="--pc:${PET_RAR[p.r].color}">
+        <span class="pc-face">${p.e}</span><b>${p.name}</b><small>Lv.${lv} · ${PET_RAR[p.r].name}</small><small class="pc-b">${petBonusText(p, lv)}</small><span class="pc-tag">${S.petOn === p.id ? '✅ 함께하는 중' : '데리고 다니기'}</span></button>`
+      : `<div class="pet-card locked" style="--pc:${PET_RAR[p.r].color}"><span class="pc-face">❔</span><b>???</b><small>${PET_RAR[p.r].name}</small></div>`; }).join('')}</div>
+    <h3 class="sub">🥚 펫 알 <small class="muted">같은 펫이 또 나오면 레벨 +1</small></h3>
+    <div class="pet-eggs">${PET_EGGS.map(eg => `<button class="btn ${eg.cur === 'gems' ? '' : 'green'}" data-act="petEgg" data-id="${eg.id}">${eg.e} ${eg.name}<br><small>${eg.cur === 'gems' ? '💎' : '💰'} ${fmt(eg.cost)} · ${Object.entries(eg.w).filter(([, v]) => v).map(([r, v]) => PET_RAR[r].name + ' ' + Math.round(v * 100) + '%').join(' ')}</small></button>`).join('')}</div>
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+}
+function petReveal(p, isNew, title) {
+  const lv = petLv(p.id);
+  showModal(`<div class="pet-reveal" style="--pc:${PET_RAR[p.r].color}">
+    ${title ? `<div class="new-badge">${title}</div>` : isNew ? '<div class="new-badge">NEW! 새 펫</div>' : ''}
+    <div class="pr-face">${p.e}</div>
+    <h3>${p.name}</h3>
+    <div class="pet-rar big">${PET_RAR[p.r].name}</div>
+    <p>${isNew ? '' : `이미 있는 펫이라 <b>Lv.${lv}</b>(으)로 올랐어요! `}${petBonusText(p, lv)}</p>
+    <div class="row">${S.petOn === p.id ? '' : `<button class="btn green" data-act="petEquip" data-id="${p.id}">데리고 다니기</button>`}<button class="btn" data-act="pets">🐾 펫 목록</button></div>
+  </div>`);
+}
+function petEgg(id) {
+  const eg = PET_EGGS.find(x => x.id === id);
+  if (!eg || !spend(eg.cost, eg.cur)) return;
+  // 등급 뽑기 → 그 등급의 펫 중 하나
+  let r = Math.random(), rar = 'common';
+  for (const [k, v] of Object.entries(eg.w)) { if (r < v) { rar = k; break; } r -= v; }
+  const pool = PETS.filter(p => p.r === rar);
+  const p = pool[Math.floor(Math.random() * pool.length)];
+  S.pets = S.pets || {};
+  const isNew = !S.pets[p.id];
+  if (isNew) S.pets[p.id] = 1;
+  else if (S.pets[p.id] < PET_MAX) S.pets[p.id]++;
+  else { earn(eg.cur === 'gems' ? 30 : 8000, eg.cur); toast(`최고 레벨이라 ${eg.cur === 'gems' ? '💎 30' : '💰 8,000'}으로 돌려받았어요`); }
+  if (!S.petOn) S.petOn = p.id;
+  save(); updateHud(); sfx(isNew ? 'yay' : 'hatch');
+  petReveal(p, isNew);
+}
+function petTreat() {
+  const p = S.petOn && petById(S.petOn);
+  if (!p || petLv(p.id) >= PET_MAX) return;
+  if (!spend(petTreatCost(p))) return;
+  S.pets[p.id]++;
+  save(); updateHud(); sfx('level');
+  toast(`🍪 ${p.name} Lv.${S.pets[p.id]}! ${petBonusText(p, S.pets[p.id])}`);
+  openPets();
+}
+function petEquip(id) {
+  if (!petLv(id)) return;
+  S.petOn = id;
+  save(); render();
+  toast(`${petById(id).e} ${petById(id).name}와(과) 함께해요!`);
+  openPets();
+}
+function updatePetBtn() {
+  const b = $('#petBtn');
+  if (!b) return;
+  const p = S.petOn && petById(S.petOn);
+  b.classList.toggle('hidden', tab !== 'island' || !!VISIT);
+  b.innerHTML = p ? `${p.e}<small>Lv.${petLv(p.id)}</small>` : '🐾<small>펫</small>';
+}
+// 섬 위를 돌아다니는 펫 (섬 가장자리를 천천히 한 바퀴)
+function petWalkPos(t) {
+  const a = t * 0.12;
+  return { x: ISLAND.x + Math.cos(a) * 640, y: ISLAND.y + 20 + Math.sin(a) * 385, dir: -Math.sin(a) >= 0 ? -1 : 1 };
+}
+
 // ----- 💰💎🍖 재화 안내: 위쪽 숫자를 누르면 어디서 얻고 어디에 쓰는지 -----
 const RES_INFO = {
   gold: { icon: '💰', name: '골드', get: ['🏠 서식지의 몬스터가 계속 벌어요 → 섬의 💰 말풍선을 누르거나 <b>모두 걷기</b>', '⚔️ 모험·길드전에서 이기기', '🎁 일일 보상, 📦 겹치는 몬스터 팔기'],
@@ -939,7 +1059,7 @@ function updateGoal() {
   const c = $('#goalChip');
   if (!c) return;
   const g = $('#guide');
-  const show = tab === 'island' && !B && !VISIT && !S.hideUI && S.tutCoreDone && (!g || g.classList.contains('hidden') || tutFocus === TUT.length - 1);
+  const show = tab === 'island' && !B && !VISIT && !S.hideUI && S.tutCoreDone && (!g || g.classList.contains('hidden') || (tutFocus != null && TUT[tutFocus] && TUT[tutFocus].text.startsWith('🎯')));
   const goal = show ? nextGoal() : null;
   c.classList.toggle('hidden', !goal);
   if (!goal) return;
@@ -1537,6 +1657,11 @@ function drawWorld(now) {
       const p = S.plots[i], { x, y } = plotPos(i);
       items.push({ y, fn: () => drawPlot(p, i, x, y, t, dt) });
     });
+    const pet = S.petOn && petById(S.petOn);
+    if (pet && !VISIT) {
+      const pp = petWalkPos(t);
+      items.push({ y: pp.y, fn: () => { shadow(pp.x, pp.y + 22, 26); emoji(pet.e, pp.x, pp.y + Math.abs(Math.sin(t * 6)) * -8, 58, 0, pp.dir); } });
+    }
     items.sort((a, b) => a.y - b.y).forEach(it => it.fn());
     bubbles = [];
     // 👁️ 숨기기: 이름표·타이머·💰 말풍선을 그리지 않는다
@@ -1711,6 +1836,7 @@ function renderIslandBar() {
   $('#zoomBtns').classList.toggle('hidden', tab !== 'island');
   const hb = $('#hideBtn');
   hb.classList.toggle('hidden', tab !== 'island');
+  updatePetBtn();
   hb.classList.toggle('on', !!S.hideUI);
   hb.innerHTML = S.hideUI ? '👁️<span> 보이기</span>' : '🙈<span> 숨기기</span>';
   document.body.classList.toggle('ui-hidden', !!S.hideUI && tab === 'island');
@@ -2040,7 +2166,7 @@ function harvestReady() {
   farmIdx().forEach(k => {
     const p = S.plots[k];
     if (!farmReady(p)) return;
-    const got = CROPS[p.crop].food;
+    const got = Math.round(CROPS[p.crop].food * (1 + petPct('food') / 100));
     food += got;
     n++;
     p.lastCrop = p.crop;
@@ -2119,7 +2245,7 @@ function harvest(i) {
   const p = S.plots[i];
   if (p.crop == null) return;
   if (Date.now() < p.end) { toast('아직 자라는 중이에요 🌱'); return; }
-  const food = CROPS[p.crop].food;
+  const food = Math.round(CROPS[p.crop].food * (1 + petPct('food') / 100));
   S.food += food;
   p.crop = null;
   sfx('coin');
@@ -3483,6 +3609,8 @@ let B = null;
 
 function mkUnit(m, side, idx) {
   const c = CAT[m.type], st = stats(m);
+  // 내 몬스터는 함께하는 펫의 전투 보너스를 받는다
+  if (side === 'me') { st.atk = Math.round(st.atk * (1 + petPct('atk') / 100)); st.hp = Math.round(st.hp * (1 + petPct('hp') / 100)); }
   return {
     id: side + idx, side, c, lv: m.lv,
     maxHp: st.hp, hp: st.hp, dispHp: st.hp, shownDead: false,
@@ -3945,7 +4073,7 @@ function drawBattle() {
     $('#battle').innerHTML = `
       <div class="b-inner">
         <div class="b-top">
-          <b>${B.gwar ? `⚔️ 길드전 · ${esc(B.gwar.opp.emblem)} ${esc(B.gwar.def.n)}` : B.pvp ? `👥 친구 대전 · vs ${B.pvp.oppName}` : B.bossIdx != null ? `👹 보스전 · ${BOSSES[B.bossIdx].name}` : `스테이지 ${B.stage}`}</b><span class="muted" id="bRound"></span>
+          <b>${B.gwar ? `⚔️ 길드전 · ${esc(B.gwar.opp.emblem)} ${esc(B.gwar.def.n)}` : B.pvp ? `👥 친구 대전 · vs ${B.pvp.oppName}` : B.bossIdx != null ? `👹 보스전 · ${BOSSES[B.bossIdx].name}` : `스테이지 ${B.stage}`}</b><span class="muted" id="bRound"></span>${S.petOn && petById(S.petOn) && !(B.pvp && B.pvp.role === 'guest') ? `<span class="b-pet" title="${petBonusText(petById(S.petOn), petLv(S.petOn))}">${petById(S.petOn).e}</span>` : ''}
           <span class="spacer"></span>
           <button class="btn ghost small" data-act="typeChart">📘 상성표</button>
           ${B.pvp ? '' : '<button class="btn ghost small" data-act="bAuto" id="bAuto"></button>'}
@@ -5496,6 +5624,7 @@ const ACH = [
   ...[5, 10, 25, 50, 100, 200, 400, 700, 1000, 1500, 2000].map((n, k) => ({ id: 'dex' + n, text: `📖 도감 ${fmt(n)}마리 모으기`, now: () => Object.keys(S.dex).length, need: n, gems: [5, 10, 15, 25, 40, 60, 80, 100, 150, 200, 500][k] })),
   ...[3, 5, 10, 15, 20, 30, 40, 50].map((n, k) => ({ id: 'stage' + n, text: `⚔️ 모험 스테이지 ${n} 도착`, now: () => S.stage, need: n, gems: [5, 10, 20, 30, 40, 60, 80, 100][k] })),
   ...['rare', 'epic', 'legendary', 'mythic', 'divine', 'holy', 'absolute', 'origin'].map((r, k) => ({ id: 'rank' + r, text: `✨ ${RAR[r].name} 등급 몬스터 얻기`, now: () => (S.monsters.some(m => RANK[CAT[m.type].rarity] >= RANK[r]) ? 1 : 0), need: 1, gems: [5, 10, 30, 60, 100, 150, 200, 300][k] })),
+  ...[1, 4, 8, 12].map((n, k) => ({ id: 'pets' + n, text: `🐾 펫 ${n}마리 모으기`, now: () => PETS.filter(p => petLv(p.id)).length, need: n, gems: [5, 20, 50, 150][k] })),
   { id: 'guild1', text: '🛡️ 길드에 들어가거나 만들기', now: () => (S.guild ? 1 : 0), need: 1, gems: 20 },
   ...[200, 500, 900, 1400].map((n, k) => ({ id: 'troph' + n, text: `🏆 트로피 ${fmt(n)} 모으기`, now: () => S.trophies || 0, need: n, gems: [10, 20, 40, 60][k] })),
   ...[3, 6, 10, 20].map((n, k) => ({ id: 'habs' + n, text: `🏠 서식지 ${n}개 짓기`, now: () => S.plots.filter(p => p && p.kind === 'hab').length, need: n, gems: [5, 10, 20, 30][k] })),
@@ -5905,6 +6034,9 @@ TUT.push(
     go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
 );
 TUT.push(
+  { text: '🐾 섬 왼쪽 위 🐾 펫 버튼을 눌러 첫 펫을 받아요 (선물!)', done: () => tutFlag('pet'), go: () => { closeModal(); tab = 'island'; render(); } },
+);
+TUT.push(
   { text: '💰 위쪽 💰💎🍖 숫자를 눌러 재화를 얻고 쓰는 법을 봐요', done: () => tutFlag('res'), go: () => { closeModal(); openResInfo('gold'); } },
   { text: '🎯 섬 위쪽 🎯 다음 목표를 눌러 보상을 받아요', done: () => tutFlag('goal'), go: () => { closeModal(); tab = 'island'; render(); updateHud(); } },
 );
@@ -5997,10 +6129,14 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=rankCat]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=ranking]'];
-    case 19: // 재화 안내
+    case 19: // 펫
+      if (inModal) return ['#modalBox [data-act=petEquip]', '#modalBox [data-act=close]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#petBtn'];
+    case 20: // 재화 안내
       if (inModal) return ['#modalBox [data-act=close]'];
       return ['.hud [data-act=resInfo][data-r=gold]'];
-    case 20: // 다음 목표
+    case 21: // 다음 목표
       if (inModal) return ['#modalBox [data-act=misClaim]:not([disabled])', '#modalBox [data-act=achClaim]:not([disabled])', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#goalChip:not(.hidden)'];
@@ -6174,6 +6310,7 @@ const WELCOME = [
   { icon: '🌾', title: '농장과 먹이', text: '농장에 작물을 심으면 먹이 🍖가 생겨요. 오래 걸리는 작물일수록 효율이 좋아요.<br>작물을 고를 때 <b>🌾 모든 농장에</b>를 누르면 한 번에 심어요.<br>몬스터에게 먹이를 주면 <b>레벨이 올라요</b>.' },
   { icon: '🏔️', title: '교배', text: '<b>Lv.4</b> 몬스터 두 마리를 교배산에 넣으면 <b>새 몬스터</b>가 태어나요!<br>등급은 <b>일반 → … → 서사 → 전설 → 신화</b>까지 15단계. 타이머가 길수록 좋은 등급이에요.<br>📖 도감에서 몬스터를 누르면 <b>추천 교배 조합</b>을 알려 줘요.' },
   { icon: '💰', title: '재화 3가지', text: '💰 <b>골드</b>: 서식지 몬스터가 벌어요 → 건물·알·교배·업그레이드<br>🍖 <b>먹이</b>: 농장에서 키워요 → 몬스터 레벨 업 (Lv.4면 교배!)<br>💎 <b>보석</b>: 미션·일일 보상·도전 과제 → 시간 단축·고급 룬<br>위쪽 <b>💰💎🍖 숫자를 누르면</b> 언제든 자세히 볼 수 있어요. 섬 위쪽 <b>🎯 다음 목표</b>도 따라가 봐요!' },
+  { icon: '🐾', title: '펫', text: '섬 왼쪽 위 <b>🐾 펫 버튼</b>을 누르면 첫 펫 🐶을 선물로 받아요!<br>펫은 섬을 같이 돌아다니고, 💰골드·🍖먹이·⚔️공격·❤️체력·🏷️교배 할인 <b>보너스</b>를 줘요.<br>🍪 간식으로 Lv.10까지 키우고, 🥚 펫 알로 12마리를 모아 봐요.' },
   { icon: '🏝️', title: '섬 18개', text: '위쪽 <b>◀ ▶</b>로 섬을 옮겨 다녀요. 건물을 <b>꾹 눌러 끌면</b> 빈 땅으로 옮겨져요.<br>🎨 장식을 놓으면 그 섬 골드가 올라요.<br>두 손가락으로 <b>확대</b>, 🙈 숨기기로 이름표를 감출 수 있어요.' },
   { icon: '⚔️', title: '모험과 보스', text: '몬스터 3마리로 팀을 짜서 싸워요. 📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!<br>👹 보스전에서는 에너지가 엄청 많은 보스와 싸워요.' },
   { icon: '👥', title: '대전과 친구', text: '모험 탭 <b>👥 대전 · 친구</b> 칸에서<br>🌍 <b>랜덤 대전</b>으로 모르는 사람과 바로 싸우고, ⚔️ 방 코드로 <b>친구 대전</b>, 🎁 <b>선물</b>, 👀 <b>친구 섬 구경</b>도 해요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요.' },
@@ -6400,6 +6537,10 @@ const ACTIONS = {
   misBonus: () => misBonus(),
   achClaim: (d) => achClaim(d.id),
   sound: () => toggleSound(),
+  pets: () => openPets(),
+  petEgg: (d) => petEgg(d.id),
+  petTreat: () => petTreat(),
+  petEquip: (d) => petEquip(d.id),
   resInfo: (d) => openResInfo(d.r),
   resGo: (d) => { closeModal(); tab = d.to; render(); },
   goalGo: () => { tutFlag('goal', true); openMissions(); },
