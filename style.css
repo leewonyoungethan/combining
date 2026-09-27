@@ -1127,3 +1127,28 @@ body.ui-hidden .pet-btn { opacity: .55; }
 .altar-slot.on { border-style: solid; border-color: #c28cff; background: rgba(194, 140, 255, .15); animation: pop .25s ease-out; }
 .altar-grid { max-height: 38vh; overflow-y: auto; }
 .card.sel { outline: 3px solid #7dff8f; outline-offset: -3px; }
+
+/* 📜 퀘스트 */
+.quest-btn { top: 236px; background: radial-gradient(circle at 35% 30%, #c99a5b, #5a3a1a 85%); }
+@media (max-width: 560px) { .quest-btn { top: 200px; } }
+.quest-btn .dot { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; border-radius: 50%; background: #ff4d6d; border: 2px solid #fff; display: none; }
+.quest-btn.ready .dot { display: block; }
+.quest-btn.ready { animation: ready 1.2s ease-in-out infinite; }
+.q-ch { font-weight: 900; color: #ffe066; margin: 6px 0; }
+.q-ch small { color: var(--muted); }
+.q-npc { display: flex; gap: 10px; align-items: flex-start; text-align: left; margin: 8px 0; }
+.q-face { font-size: 46px; flex: none; animation: ldBob 1.4s ease-in-out infinite alternate; }
+.q-say { position: relative; background: #fff8e6; color: #3a2a00; border-radius: 14px; padding: 10px 12px; font-weight: 700; line-height: 1.45; }
+.q-say::before { content: ""; position: absolute; left: -8px; top: 16px; border: 8px solid transparent; border-right-color: #fff8e6; border-left: 0; }
+.q-say b { display: block; font-size: 12px; color: #8a5a00; }
+.q-goal { padding: 10px; border-radius: 14px; border: 2px solid var(--line); background: rgba(255, 255, 255, .05); display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.q-goal.ok { border-color: #7dff8f; background: rgba(125, 255, 143, .1); }
+.q-goal small { color: var(--muted); font-weight: 700; }
+.q-goal .bar { height: 8px; background: rgba(255, 255, 255, .1); border-radius: 99px; overflow: hidden; }
+.q-goal .bar i { display: block; height: 100%; background: linear-gradient(90deg, #7dff8f, #ffe066); }
+.q-rew { font-size: 13px; color: #ffe066; font-weight: 800; }
+.q-dots { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; margin: 8px 0 2px; }
+.q-dots i { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, .15); }
+.q-dots i.done { background: #7dff8f; }
+.q-dots i.now { background: #ffe066; box-shadow: 0 0 6px #ffe066; }
+.q-goal .btn[disabled], .mis-row .btn[disabled] { opacity: .45; filter: grayscale(1); }

@@ -1247,7 +1247,7 @@ function evtToken(kind, n = 1) {
   // 새 보상이 열리면 알려 준다
   const opened = EVT_PASS.find(x => before < x.need && st.tokens >= x.need);
   if (opened) setTimeout(() => toast(`🎉 이벤트 보상이 열렸어요! (${opened.text}) 왼쪽 🎉 버튼에서 받기`), 700);
-  updateEvtBtn();
+  updateEvtBtn(); updateQuestBtn();
 }
 function evtLeftText(ms) {
   const h = Math.max(0, Math.floor(ms / 3600000));
@@ -1257,6 +1257,7 @@ function evtClaimable() {
   const st = evtState();
   return EVT_PASS.some((x, k) => st.tokens >= x.need && !st.got.includes(k));
 }
+function updateEvtBtnAll() { updateEvtBtn(); updateQuestBtn(); }
 function updateEvtBtn() {
   const b = $('#evtBtn');
   if (!b) return;
@@ -1287,7 +1288,7 @@ function openEvent() {
     <h3 class="sub">🎟️ 토큰 모으는 법 <small class="muted">🔥 표시는 이번 이벤트에서 2배!</small></h3>
     <div class="evt-how">${Object.entries(EVT_TOKEN).map(([k, v]) => `<span class="${ev.hot.includes(k) ? 'hot' : ''}">${EVT_NAME[k]} +${v * (ev.hot.includes(k) ? 2 : 1)}${ev.hot.includes(k) ? ' 🔥' : ''}</span>`).join('')}</div>
     <div class="row"><button class="btn ghost small" data-act="evtTrade" ${st.tokens >= 20 ? '' : 'disabled'}>🔄 토큰 20개 → 💎 5</button><button class="btn ghost small" data-act="close">닫기</button></div>`);
-  updateEvtBtn();
+  updateEvtBtn(); updateQuestBtn();
 }
 function evtClaim(k) {
   k = Number(k);
@@ -1461,7 +1462,183 @@ function openResInfo(r) {
     <div class="row">${x.btns}<button class="btn ghost" data-act="close">닫기</button></div></div>`);
 }
 // ----- 🎯 다음 목표: 튜토리얼이 끝나면 섬 위쪽에 가장 가까운 목표를 보여 준다 -----
+// ===================== 📜 퀘스트 =====================
+// 스토리: 마법사 루나가 한 번에 하나씩 퀘스트를 준다 (6장 30개). 주간: 월요일마다 4개
+const QNPC = { face: '🧙‍♀️', name: '마법사 루나' };
+const stat = (k) => (S.stat && S.stat[k]) || 0;
+const maxRank = () => Math.max(-1, ...S.monsters.map(m => RANK[CAT[m.type].rarity]));
+const habCount = () => S.plots.filter(p => p && p.kind === 'hab').length;
+// 보상 주기
+function qReward(r) {
+  const out = [];
+  if (r.gold) { earn(r.gold); out.push('💰 ' + fmt(r.gold)); }
+  if (r.gems) { earn(r.gems, 'gems'); out.push('💎 ' + r.gems); }
+  if (r.food) { S.food += r.food; out.push('🍖 ' + fmt(r.food)); }
+  if (r.rune) out.push('💠 ' + runeText(giveRune(r.rune === 2 ? [0, 0.6, 0.4] : [0.6, 0.35, 0.05])));
+  if (r.petEgg) { setTimeout(() => petEgg('normal', true), 500); out.push('🥚 펫 알'); }
+  if (r.legend) {
+    const pool = CAT_LIST.filter(c => c.rarity === 'legendary' && !c.shop), c = pool[Math.floor(Math.random() * pool.length)];
+    if (S.hatch.length < hatchCap()) { S.hatch.push(c.id); out.push('👑 ' + c.face + ' ' + c.name + ' 알'); } else { earn(250, 'gems'); out.push('💎 250 (부화장이 가득)'); }
+  }
+  return out.join(' · ');
+}
+const rText = (r) => [r.gold && '💰' + shortNum(r.gold), r.gems && '💎' + r.gems, r.food && '🍖' + shortNum(r.food), r.rune && (r.rune === 2 ? '🎁 고급 룬' : '📦 룬'), r.petEgg && '🥚 펫 알', r.legend && '👑 전설 알'].filter(Boolean).join(' ');
+// 목표: now() = 지금 값 (count는 퀘스트를 받은 뒤부터 센다)
+const QUESTS = [
+  { ch: '1장 · 새로운 섬' },
+  { text: '서식지를 2개 지어요', say: '이 섬은 너무 조용하네요… 몬스터들이 살 집부터 지어 볼까요?', now: habCount, need: 2, r: { gold: 1000 } },
+  { text: '몬스터 5마리를 모아요', say: '집이 생겼으니 친구들을 불러 와요! 상점의 알을 깨 봐요.', now: () => S.monsters.length, need: 5, r: { gems: 5 } },
+  { text: '교배를 3번 해요', count: 'breed', need: 3, say: '두 몬스터를 교배산에 넣으면 새로운 몬스터가 태어나요. 신기하죠?', r: { food: 500 } },
+  { text: '도감을 10마리 채워요', say: '세상에는 2,000마리나 되는 몬스터가 있대요. 하나씩 기록해 봐요!', now: () => Object.keys(S.dex).length, need: 10, r: { gems: 10 } },
+  { text: '모험 스테이지 3에 가요', say: '섬 밖에는 야생 몬스터가 있어요. 우리 팀의 힘을 보여 줘요!', now: () => S.stage, need: 3, r: { gold: 3000, rune: 1 } },
+  { ch: '2장 · 커져 가는 왕국' },
+  { text: '서식지 하나를 Lv.3으로 올려요', say: '몬스터가 많아지면 집이 좁아져요. 서식지를 넓혀 줘요!', now: () => Math.max(0, ...S.plots.filter(p => p && p.kind === 'hab').map(p => p.lv)), need: 3, r: { gold: 5000 } },
+  { text: '농장을 3개 가져요', say: '배고픈 몬스터가 많아요! 농장을 늘려서 먹이를 넉넉히 키워요.', now: () => S.plots.filter(p => p && p.kind === 'farm').length, need: 3, r: { food: 2000 } },
+  { text: '희귀 등급 몬스터를 얻어요', say: '교배를 계속하면 더 좋은 등급이 나와요. 희귀 몬스터를 만나 봐요!', now: () => (maxRank() >= RANK.rare ? 1 : 0), need: 1, r: { gems: 15 } },
+  { text: '골드를 5번 걷어요', count: 'collect', need: 5, say: '몬스터들이 열심히 번 골드예요. 잊지 말고 걷어 줘요!', r: { gold: 5000 } },
+  { text: '도감을 25마리 채워요', say: '벌써 이렇게 많이 모았어요? 조금만 더 힘내요!', now: () => Object.keys(S.dex).length, need: 25, r: { gems: 20 } },
+  { ch: '3장 · 모험가의 길' },
+  { text: '모험 스테이지 8에 가요', say: '더 먼 곳에 강한 적이 있다는 소문이 있어요.', now: () => S.stage, need: 8, r: { gems: 20 } },
+  { text: '보스를 1명 이겨요', say: '👹 보스가 나타났어요! 모험 탭의 보스전에서 물리쳐 줘요!', now: () => Object.keys(S.bossCleared || {}).length, need: 1, r: { gold: 20000 } },
+  { text: '몬스터에게 룬을 끼워요', say: '룬을 끼우면 몬스터가 훨씬 강해져요. 몬스터를 눌러 룬을 장착해 봐요.', now: () => (S.monsters.some(m => (m.runes || []).some(x => x != null)) ? 1 : 0), need: 1, r: { rune: 2 } },
+  { text: '교배를 15번 해요', count: 'breed', need: 15, say: '교배를 많이 할수록 좋은 몬스터를 만날 확률이 올라가요!', r: { gems: 20 } },
+  { text: '서사 등급 몬스터를 얻어요', say: '서사 몬스터는 정말 강해요. 도감의 추천 교배를 써 봐요!', now: () => (maxRank() >= RANK.epic ? 1 : 0), need: 1, r: { gems: 30 } },
+  { ch: '4장 · 전설을 찾아서' },
+  { text: '도감을 60마리 채워요', say: '옛날 책에 전설의 몬스터 이야기가 있었어요… 더 많이 모아 봐요.', now: () => Object.keys(S.dex).length, need: 60, r: { gems: 30 } },
+  { text: '전설 몬스터를 얻어요', say: '드디어 전설을 만날 시간! 족보대로 세 속성을 섞어 봐요.', now: () => (maxRank() >= RANK.legendary ? 1 : 0), need: 1, r: { gems: 50 } },
+  { text: '펫을 3마리 모아요', say: '혼자 다니면 심심하죠? 🐾 펫 친구를 모아 봐요!', now: () => PETS.filter(p => petLv(p.id)).length, need: 3, r: { petEgg: 1 } },
+  { text: '⭐ 별 합성을 1번 해요', say: '같은 몬스터 3마리를 합치면 별이 생겨요. 더 반짝이게!', now: () => S.fuseCount || 0, need: 1, r: { gold: 50000 } },
+  { text: '🔮 합성 제단을 3번 써요', say: '남는 몬스터 5마리를 바치면 더 높은 등급이 나와요!', now: () => S.altarCount || 0, need: 3, r: { gems: 40 } },
+  { ch: '5장 · 함께하는 세상' },
+  { text: '길드에 들어가거나 만들어요', say: '다른 조련사들과 힘을 합치면 더 강해져요!', now: () => (S.guild ? 1 : 0), need: 1, r: { gems: 30 } },
+  { text: '길드전 공격을 1번 해요', count: 'gwar', need: 1, say: '길드전이 시작됐어요! 상대 길드의 방어 팀을 공격해요!', r: { gold: 100000 } },
+  { text: '모험 스테이지 15에 가요', say: '우리 팀이 이렇게 강해지다니! 더 멀리 가 봐요.', now: () => S.stage, need: 15, r: { gems: 40 } },
+  { text: '🏛️ 왕국 발전 합계 Lv.5', say: '섬이 왕국이 되었어요! 왕국을 발전시켜 봐요.', now: () => KINGDOM.reduce((s, k) => s + kdLv(k.id), 0), need: 5, r: { gems: 50 } },
+  { text: '🗽 랜드마크를 1개 세워요', say: '모두가 보러 올 멋진 건물을 세워 봐요!', now: () => DECOS.filter(d => d.wonder && S.plots.some(p => p && p.kind === 'deco' && p.id === d.id)).length, need: 1, r: { legend: 1 } },
+  { ch: '6장 · 신화의 섬' },
+  { text: '신화 몬스터를 얻어요', say: '전설보다 더 높은 존재, 신화… 전설끼리 교배해 봐요!', now: () => (maxRank() >= RANK.mythic ? 1 : 0), need: 1, r: { gems: 100 } },
+  { text: '도감을 200마리 채워요', say: '당신은 이제 최고의 몬스터 박사예요!', now: () => Object.keys(S.dex).length, need: 200, r: { gems: 100 } },
+  { text: '모험 스테이지 30에 가요', say: '세상 끝까지 모험을 떠나요!', now: () => S.stage, need: 30, r: { gems: 100 } },
+  { text: '★3 몬스터를 만들어요', say: '별 세 개의 몬스터라니, 눈이 부셔요!', now: () => Math.max(0, ...S.monsters.map(m => m.star || 0)), need: 3, r: { gems: 100 } },
+  { text: '초월 몬스터를 얻어요', say: '마지막 시험이에요. 신들의 세계, 초월 등급에 닿아 봐요!', now: () => (maxRank() >= RANK.divine ? 1 : 0), need: 1, r: { gems: 300, legend: 1 } },
+];
+const QLIST = QUESTS.filter(q => !q.ch);
+const qChapter = (k) => { let ch = '', idx = -1; for (const q of QUESTS) { if (q.ch) ch = q.ch; else { idx++; if (idx === k) return ch; } } return ch; };
+function qState() {
+  S.quest = S.quest || { k: 0, base: {} };
+  const q = QLIST[S.quest.k];
+  // 횟수 퀘스트는 받았을 때부터 센다
+  if (q && q.count && S.quest.base[S.quest.k] == null) S.quest.base[S.quest.k] = stat(q.count);
+  return S.quest;
+}
+function qProg(k) {
+  const q = QLIST[k], st = qState();
+  if (!q) return 0;
+  const v = q.count ? stat(q.count) - (st.base[k] || 0) : q.now();
+  return Math.max(0, Math.min(q.need, v));
+}
+const qReady = () => { const st = qState(), q = QLIST[st.k]; return !!q && qProg(st.k) >= q.need; };
+function qClaim() {
+  const st = qState(), q = QLIST[st.k];
+  if (!q || qProg(st.k) < q.need) return;
+  const got = qReward(q.r);
+  st.k++;
+  qState();
+  save(); updateHud(); sfx('yay');
+  toast(`📜 퀘스트 완료! ${got}`);
+  if (!QLIST[st.k]) toast('🎉 루나: 모든 이야기를 끝냈어요! 당신은 최고의 조련사예요!');
+  else if (qChapter(st.k) !== qChapter(st.k - 1)) setTimeout(() => toast(`📖 새 이야기: ${qChapter(st.k)}`), 1200);
+  openQuests('story');
+}
+// ----- 📆 주간 퀘스트 (월요일마다 새로) -----
+const WEEKLY = [
+  { id: 'breed',   text: '🏔️ 교배', need: 40 },
+  { id: 'win',     text: '⚔️ 전투 이기기', need: 20 },
+  { id: 'collect', text: '💰 골드 걷기', need: 50 },
+  { id: 'hatch',   text: '🐣 몬스터 태어나게 하기', need: 25 },
+  { id: 'harvest', text: '🌾 작물 수확', need: 20 },
+  { id: 'feed',    text: '🍖 레벨 올리기', need: 60 },
+];
+const WEEK_REWARD = { gems: 25 }, WEEK_BONUS = { gems: 60, petEgg: 1 };
+function weekKey() { const d = new Date(), wd = (d.getDay() + 6) % 7, m = new Date(d.getFullYear(), d.getMonth(), d.getDate() - wd); return `${m.getFullYear()}-${m.getMonth() + 1}-${m.getDate()}`; }
+function weekState() {
+  const k = weekKey();
+  if (!S.week || S.week.key !== k) {
+    const rnd = seeded('week' + k);
+    const ids = WEEKLY.map(w => w.id).sort(() => rnd() - 0.5).slice(0, 4);
+    S.week = { key: k, ids, base: Object.fromEntries(ids.map(id => [id, stat(id)])), got: [], bonus: false };
+  }
+  return S.week;
+}
+const wProg = (id) => { const w = weekState(), def = WEEKLY.find(x => x.id === id); return Math.min(def.need, stat(id) - (w.base[id] || 0)); };
+function weekClaim(id) {
+  const w = weekState(), def = WEEKLY.find(x => x.id === id);
+  if (!def || w.got.includes(id) || wProg(id) < def.need) return;
+  w.got.push(id);
+  const got = qReward(WEEK_REWARD);
+  save(); updateHud(); sfx('coin'); toast('📆 주간 퀘스트 완료! ' + got);
+  openQuests('week');
+}
+function weekBonus() {
+  const w = weekState();
+  if (w.bonus || w.got.length < w.ids.length) return;
+  w.bonus = true;
+  const got = qReward(WEEK_BONUS);
+  save(); updateHud(); sfx('yay'); toast('🎉 이번 주 퀘스트 모두 완료! ' + got);
+  openQuests('week');
+}
+const weekReady = () => { const w = weekState(); return w.ids.some(id => !w.got.includes(id) && wProg(id) >= WEEKLY.find(x => x.id === id).need) || (!w.bonus && w.got.length >= w.ids.length); };
+function updateQuestBtn() {
+  const b = $('#questBtn');
+  if (!b) return;
+  b.classList.toggle('hidden', tab !== 'island' || !!VISIT);
+  b.classList.toggle('ready', qReady() || weekReady());
+}
+let questTab = 'story';
+function openQuests(t) {
+  tutFlag('quest', true);
+  if (t) questTab = t;
+  const st = qState(), q = QLIST[st.k];
+  let body = '';
+  if (questTab === 'story') {
+    if (!q) body = `<div class="q-npc"><span class="q-face">${QNPC.face}</span><div class="q-say"><b>${QNPC.name}</b>모든 이야기를 끝냈어요! 당신은 이 세상 최고의 몬스터 조련사예요. 고마워요! 💖</div></div>`;
+    else {
+      const p = qProg(st.k), ok = p >= q.need;
+      const chIdx = QUESTS.filter(x => x.ch).findIndex(x => x.ch === qChapter(st.k));
+      const inCh = (() => { let n = -1, c = 0; for (const x of QUESTS) { if (x.ch) { n++; continue; } if (n === chIdx) c++; } return c; })();
+      const before = (() => { let n = -1, idx = -1, c = 0; for (const x of QUESTS) { if (x.ch) { n++; continue; } idx++; if (n === chIdx && idx < st.k) c++; } return c; })();
+      body = `<div class="q-ch">📖 ${qChapter(st.k)} <small>${before + 1} / ${inCh}</small></div>
+        <div class="q-npc"><span class="q-face">${QNPC.face}</span><div class="q-say"><b>${QNPC.name}</b>${q.say}</div></div>
+        <div class="q-goal ${ok ? 'ok' : ''}">
+          <div><b>🎯 ${q.text}</b> <small>${fmt(p)} / ${fmt(q.need)}</small></div>
+          <div class="bar"><i style="width:${p / q.need * 100}%"></i></div>
+          <div class="q-rew">보상: ${rText(q.r)}</div>
+          <button class="btn big ${ok ? 'green' : ''}" data-act="qClaim" ${ok ? '' : 'disabled'}>${ok ? '🎁 보상 받고 다음 이야기' : '진행 중…'}</button>
+        </div>
+        <div class="q-dots">${QLIST.map((_, k) => `<i class="${k < st.k ? 'done' : k === st.k ? 'now' : ''}"></i>`).join('')}</div>
+        <p class="muted">스토리 퀘스트 ${st.k} / ${QLIST.length} 완료</p>`;
+    }
+  } else if (questTab === 'week') {
+    const w = weekState();
+    const end = new Date(); end.setDate(end.getDate() + (7 - ((end.getDay() + 6) % 7))); end.setHours(0, 0, 0, 0);
+    const days = Math.max(0, Math.floor((end - Date.now()) / 86400000)), hours = Math.max(0, Math.floor((end - Date.now()) % 86400000 / 3600000));
+    body = `<p class="muted">월요일마다 새 퀘스트 · ${days}일 ${hours}시간 남음 · 하나에 ${rText(WEEK_REWARD)}, 모두 깨면 ${rText(WEEK_BONUS)}</p>
+      <div class="mis-list">${w.ids.map(id => { const def = WEEKLY.find(x => x.id === id), p = wProg(id), done = p >= def.need, taken = w.got.includes(id);
+        return `<div class="mis-row ${taken ? 'taken' : done ? 'done' : ''}"><div class="mis-info"><b>${def.text} ${fmt(def.need)}번</b> <small>${fmt(p)}/${fmt(def.need)}</small><div class="bar"><i style="width:${p / def.need * 100}%"></i></div></div>
+          ${taken ? '<span class="mis-ok">✅</span>' : `<button class="btn small ${done ? 'green' : ''}" data-act="weekClaim" data-id="${id}" ${done ? '' : 'disabled'}>${rText(WEEK_REWARD)}</button>`}</div>`; }).join('')}
+      <div class="mis-row bonus ${w.bonus ? 'taken' : ''}"><div class="mis-info"><b>🎉 이번 주 모두 깨기</b> <small>${w.got.length}/${w.ids.length}</small></div>
+        ${w.bonus ? '<span class="mis-ok">✅</span>' : `<button class="btn small ${w.got.length >= w.ids.length ? 'green' : ''}" data-act="weekBonus" ${w.got.length >= w.ids.length ? '' : 'disabled'}>${rText(WEEK_BONUS)}</button>`}</div></div>`;
+  }
+  showModal(`<h3>📜 퀘스트</h3>
+    <div class="chips"><button class="chip ${questTab === 'story' ? 'on' : ''}" data-act="questTab" data-t="story">📜 스토리${qReady() ? ' 🔴' : ''}</button><button class="chip ${questTab === 'week' ? 'on' : ''}" data-act="questTab" data-t="week">📆 주간${weekReady() ? ' 🔴' : ''}</button><button class="chip" data-act="missions">📋 일일 미션 · 🏆 도전 과제</button></div>
+    ${body}
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+}
+
 function nextGoal() {
+  // 스토리 퀘스트가 있으면 그게 먼저
+  const qs = qState(), qq = QLIST[qs.k];
+  if (qq) return qProg(qs.k) >= qq.need ? { text: '📜 퀘스트 보상을 받을 수 있어요! 눌러서 받기', ready: true, quest: true } : { text: `📜 ${qq.text} <b>${fmt(qProg(qs.k))}/${fmt(qq.need)}</b> → ${rText(qq.r)}`, quest: true };
   const m = misToday();
   const misReady = m.ids.some(id => (m.prog[id] || 0) >= MISSIONS.find(x => x.id === id).need && !m.got.includes(id)) || (!m.bonus && m.got.length >= 3);
   const ach = ACH.filter(a => !(S.achGot || []).includes(a.id));
@@ -2262,7 +2439,7 @@ function renderIslandBar() {
   const hb = $('#hideBtn');
   hb.classList.toggle('hidden', tab !== 'island');
   updatePetBtn();
-  updateEvtBtn();
+  updateEvtBtn(); updateQuestBtn();
   hb.classList.toggle('on', !!S.hideUI);
   hb.innerHTML = S.hideUI ? '👁️<span> 보이기</span>' : '🙈<span> 숨기기</span>';
   document.body.classList.toggle('ui-hidden', !!S.hideUI && tab === 'island');
@@ -6222,6 +6399,9 @@ function misToday() {
 }
 function mission(id, n = 1) {
   evtToken(id, n);
+  S.stat = S.stat || {};
+  S.stat[id] = (S.stat[id] || 0) + n;
+  updateQuestBtn();
   const m = misToday();
   if (!m.ids.includes(id)) return;
   const def = MISSIONS.find(x => x.id === id);
@@ -6674,6 +6854,9 @@ TUT.push(
   { text: '🔮 몬스터 탭의 🔮 합성 제단을 봐요 (같은 등급 5마리 → 한 등급 위!)', done: () => tutFlag('altar') || (S.altarCount || 0) > 0, go: () => { closeModal(); tab = 'mons'; render(); } },
   { text: '⭐ 몬스터 탭의 ⭐ 별 합성을 봐요 (같은 몬스터 3마리 → ★+1)', done: () => tutFlag('star') || (S.fuseCount || 0) > 0, go: () => { closeModal(); tab = 'mons'; render(); } },
 );
+TUT.push(
+  { text: '📜 섬 왼쪽 📜 퀘스트 버튼에서 루나의 이야기를 봐요 (스토리·주간 퀘스트)', done: () => tutFlag('quest'), go: () => { closeModal(); tab = 'island'; render(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 function tutFlag(k, set) {
@@ -6802,6 +6985,10 @@ function tutPoint(k) {
     case 29: // 별 합성
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('mons') || ['#view [data-act=starList]'];
+    case 30: // 퀘스트
+      if (inModal) return ['#modalBox [data-act=qClaim]:not([disabled])', '#modalBox [data-act=close]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#questBtn'];
   }
   return null;
 }
@@ -6976,6 +7163,7 @@ const WELCOME = [
   { icon: '🏝️', title: '섬 18개', text: '위쪽 <b>◀ ▶</b>로 섬을 옮겨 다녀요. 건물을 <b>꾹 눌러 끌면</b> 빈 땅으로 옮겨져요.<br>🎨 장식을 놓으면 그 섬 골드가 올라요.<br>두 손가락으로 <b>확대</b>, 🙈 숨기기로 이름표를 감출 수 있어요.' },
   { icon: '⚔️', title: '모험과 보스', text: '몬스터 3마리로 팀을 짜서 싸워요 (<b>⚡ 자동 편성</b>이면 가장 센 3마리!). 📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!<br><b>🔁 연속 전투</b>를 누르면 이길 때마다 다음 스테이지로 자동으로 계속 싸워요.<br>👹 보스전에서는 에너지가 엄청 많은 보스와 싸워요.' },
   { icon: '🎉', title: '이벤트', text: '<b>3일마다</b> 새 이벤트가 열려요: 💰골드 러시, 🌾풍년 축제, ⚔️전투 대회, 🐣부화 페스티벌, 🧬교배 러시, 🌈속성 축제<br>평소처럼 놀면 <b>🎟️ 이벤트 토큰</b>이 모이고 (이벤트 주제 활동은 2배!), 패스 보상을 받아요.<br>마지막 보상은 <b>이벤트 한정 펫</b>! 섬 왼쪽 <b>🎉 버튼</b>에서 확인해요.' },
+  { icon: '📜', title: '퀘스트', text: '섬 왼쪽 <b>📜 버튼</b>에서 🧙‍♀️ 마법사 루나가 퀘스트를 줘요.<br><b>📜 스토리</b>: 6장 30개의 이야기를 하나씩 깨면 보상! (섬 위쪽 🎯에도 보여요)<br><b>📆 주간</b>: 월요일마다 새 퀘스트 4개, 모두 깨면 💎60 + 🥚 펫 알' },
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🏛️', title: '골드·보석 크게 쓰기', text: '상점의 <b>🏛️ 왕국 발전</b>: 골드로 끝없이 레벨 업 (골드·먹이·전투·교배 비용·매일 보석)<br><b>🗽 랜드마크</b>: 섬에 세우는 거대 건물, 모든 섬 골드 UP (최대 +170%)<br><b>💎 보석 상점</b>: 🤖 자동 수집 로봇, ⚡ 골드 2배 부스터, 👑 전설 알 상자' },
@@ -7235,7 +7423,12 @@ const ACTIONS = {
   resInfo: (d) => openResInfo(d.r),
   resGo: (d) => { closeModal(); tab = d.to; render(); },
   shopGo: (d) => goShop(d.id),
-  goalGo: () => { tutFlag('goal', true); openMissions(); },
+  goalGo: () => { tutFlag('goal', true); const g = nextGoal(); if (g && g.quest) openQuests('story'); else openMissions(); },
+  quests: () => openQuests(),
+  questTab: (d) => openQuests(d.t),
+  qClaim: () => qClaim(),
+  weekClaim: (d) => weekClaim(d.id),
+  weekBonus: () => weekBonus(),
   music: () => toggleMusic(),
   fullscreen: () => toggleFullscreen(),
   wbCollect: () => { collectAll(); closeModal(); if (dailyReady() && tutStep() >= 8) setTimeout(openDaily, 300); },
