@@ -1166,3 +1166,45 @@ body.ui-hidden .pet-btn { opacity: .55; }
 .ach-medals i.got { background: #ffd24a; box-shadow: 0 0 5px #ffd24a; }
 .rk-title { color: #ffe066; font-size: 10px; }
 .ach-head .bar { width: 100%; align-self: stretch; flex: none; }
+
+/* ===== 📱 폰 화면 정리 ===== */
+.menu-btn { display: none; position: relative; font-size: 18px; font-weight: 900; }
+.menu-btn .dot { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: #ff4d6d; border: 2px solid #fff; display: none; }
+.menu-btn .dot.on { display: block; }
+.menu-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+.menu-item { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 4px; border-radius: 16px; border: 2px solid var(--line);
+  background: rgba(255, 255, 255, .06); color: var(--text); font: inherit; cursor: pointer; min-height: 84px; }
+.menu-item span { font-size: 28px; }
+.menu-item b { font-size: 13px; }
+.menu-item small { font-size: 10px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-item:active { transform: scale(.95); }
+/* 전투 화면: 몬스터를 가운데로, 위쪽 줄은 한 줄씩 */
+.b-side { display: flex; justify-content: center; gap: 10px; }
+.b-side > .unit { flex: 0 1 calc((100% - 20px) / 3); min-width: 0; }
+.b-side:has(.unit.boss) > .unit { flex-basis: 100%; }
+.b-top { flex-wrap: wrap; row-gap: 6px; }
+.b-top > b, #bRound, .b-top .btn { white-space: nowrap; }
+@media (max-width: 560px) {
+  /* 위쪽: 💰 💎 🍖 🎁 ☰ 만 */
+  .hud .res > [data-act=missions], .hud .res > [data-act=account], .hud .res > [data-act=help], .hud .res > #fullBtn { display: none !important; }
+  .menu-btn { display: inline-flex; align-items: center; justify-content: center; }
+  .res { justify-content: space-between; width: 100%; }
+  .pill { font-size: 14px; padding: 5px 10px; }
+  .pill b { font-size: 14px; }
+  /* 확대 버튼은 두 손가락으로 대신 */
+  #zoomBtns { display: none !important; }
+  /* 전투 */
+  .b-inner { padding: 10px 10px 24px; gap: 10px; }
+  .b-top > b { font-size: 15px; }
+  .b-top .spacer { flex-basis: 100%; height: 0; }
+  .b-top .btn.small { padding: 6px 10px; font-size: 12px; }
+  /* 카드는 한 줄에 3개 */
+  .grid { grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .grid .card { padding: 6px 4px; border-radius: 12px; }
+  .grid .card .nm { font-size: 12px; line-height: 1.25; }
+  .grid .card .meta { font-size: 10px; }
+  .grid .card .face { font-size: 30px; height: 50px; }
+  .fuse-btn { padding: 8px 4px; }
+}
+body.ui-hidden .evt-btn, body.ui-hidden .quest-btn { opacity: .55; }
+@media (max-width: 560px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .grid .card { min-width: 0; } .grid .card .nm { overflow-wrap: anywhere; } }

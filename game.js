@@ -2172,6 +2172,8 @@ function drawLabel(p, i, x, y, t) {
     }
     return;
   }
+  // 폰처럼 작게 보일 때는 진행 중 표시는 빼고 "수확!·교배 완료" 같은 준비된 것만 (글자가 겹치지 않게)
+  if (!ready && cam.z < 0.62) return;
   const text = liveText(`plot:${i}`);
   const bounce = ready ? Math.abs(Math.sin(t * 4)) * -6 : 0;
   pill(text, x, ly + 26 + bounce, ready ? '#ffe066' : 'rgba(0,0,0,.55)', ready ? '#3a2a00' : '#fff', 14);
@@ -6587,7 +6589,33 @@ function misClaimable() {
   return m.ids.some(id => (m.prog[id] || 0) >= MISSIONS.find(x => x.id === id).need && !m.got.includes(id)) ||
     (!m.bonus && m.got.length >= 3) || ACH.some(achReady);
 }
-function updateMisDot() { const d = $('#misDot'); if (d) d.classList.toggle('on', misClaimable()); }
+function updateMisDot() {
+  const d = $('#misDot'); if (d) d.classList.toggle('on', misClaimable());
+  const m = $('#menuDot');
+  if (m) { let on = false; try { on = misClaimable() || qReady() || weekReady() || ACH.some(achReady); } catch (e) { /* 아직 준비 전 */ } m.classList.toggle('on', on); }
+}
+// ☰ 메뉴 (폰): 작은 버튼 대신 큰 글자 버튼으로
+function openMenu() {
+  const it = (act, ico, name, sub, extra = '') => `<button class="menu-item" data-act="${act}" ${extra}><span>${ico}</span><b>${name}</b>${sub ? `<small>${sub}</small>` : ''}</button>`;
+  let dots = {};
+  try { dots = { q: qReady() || weekReady(), m: misClaimable(), a: ACH.some(achReady) }; } catch (e) { /* 준비 전 */ }
+  showModal(`<div class="menu-sheet"><h3>☰ 메뉴</h3>
+    <div class="menu-grid">
+      ${it('quests', '📜', '퀘스트' + (dots.q ? ' 🔴' : ''), '스토리 · 주간')}
+      ${it('missions', '📋', '미션' + (dots.m ? ' 🔴' : ''), '매일 3개')}
+      ${it('achOpen', '🏆', '업적' + (dots.a ? ' 🔴' : ''), titleName(titleIdx()))}
+      ${it('ranking', '🥇', '랭킹', '전 세계 순위')}
+      ${it('guildOpen', '🛡️', '길드', S.guild ? esc(S.guild.name) : '들어가기')}
+      ${it('pets', '🐾', '펫', '')}
+      ${it('event', '🎉', '이벤트', evtNow().name)}
+      ${it('account', '👤', '계정', esc(ACC ? ACC.name : ''))}
+      ${it('help', '🎓', '튜토리얼', '')}
+      ${isPhone() && !isStandalone() ? it('fullscreen', '⛶', '전체화면', isFull() ? '끄기' : '켜기') : ''}
+      ${it('music', musicOn() ? '🎵' : '🔈', '음악', musicOn() ? '켜짐' : '꺼짐')}
+      ${it('sound', soundOn() ? '🔊' : '🔇', '효과음', soundOn() ? '켜짐' : '꺼짐')}
+    </div>
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
 function openMissions() {
   tutFlag('missions', true);
   const m = misToday();
@@ -7027,7 +7055,7 @@ function tutFlag(k, set) {
   return !!S.tutFlags[k];
 }
 // ----- 튜토리얼 손가락: 단계마다 지금 화면에서 눌러야 할 곳을 가리킨다 -----
-const modalOpen = () => !$('#modal').classList.contains('hidden');
+const modalOpen = () => !$('#modal').classList.contains('hidden') && !document.querySelector('#modalBox .menu-sheet');
 const bottomBtn = (t) => `.bottom-bar [data-tab="${t}"]`;
 const firstHabEl = () => (S.plots.find(p => p && p.kind === 'hab' && EGG_SHOP.includes('p:' + p.el)) || {}).el;
 // 돌려주는 값: CSS 선택자 배열(앞에서부터 보이는 것) 또는 { plot: 칸 번호 }
@@ -7206,7 +7234,10 @@ function updateFinger() {
       y -= 30 * cam.z;
     }
   } else if (Array.isArray(target)) {
-    for (const sel of target) {
+    // 폰에서 위쪽 버튼(.hud …)이 ☰ 메뉴로 들어갔으면: 메뉴 안의 같은 버튼 → 없으면 ☰ 버튼
+    const expanded = [];
+    target.forEach(sel => { expanded.push(sel); if (sel.startsWith('.hud ')) expanded.push('#modalBox .menu-sheet ' + sel.slice(5), '#menuBtn'); });
+    for (const sel of expanded) {
       const el = [...document.querySelectorAll(sel)].find(e => e.getClientRects().length > 0);   // 화면에 보이는 것 (고정 위치 요소도 포함)
       if (!el) continue;
       let b = el.getBoundingClientRect();
@@ -7571,6 +7602,7 @@ const ACTIONS = {
   achClaim: (d) => achClaim(d.id),
   sound: () => toggleSound(),
   pets: () => openPets(),
+  menu: () => openMenu(),
   event: () => openEvent(),
   evtClaim: (d) => evtClaim(d.k),
   evtTrade: () => evtTrade(),
