@@ -695,101 +695,107 @@ document.addEventListener('pointerup', function autoFull() {
 
 // ----- 🎵 배경음악: 파일 없이 직접 연주한다 (섬 / 전투 두 곡) -----
 const musicOn = () => lsGet('combining-music') !== 'off';
-const CH = { C: [48, 60, 64, 67], G: [43, 59, 62, 67], Am: [45, 60, 64, 69], F: [41, 60, 65, 69], Em: [40, 59, 64, 67], E: [40, 56, 59, 64],
-  Dm: [38, 62, 65, 69], Bb: [46, 62, 65, 70], Gm: [43, 62, 67, 70], A: [45, 61, 64, 69] };
-// 멜로디는 [음 높이(MIDI), 8분음표 몇 개]  (0 = 쉼표)
+// 화음: [베이스, 위에 쌓는 음들]  (MIDI 번호. 60 = 가운데 도)
+const CH = {
+  Am: [33, 57, 60, 64], F: [29, 57, 60, 65], C: [36, 55, 60, 64], G: [31, 55, 59, 62], E: [28, 56, 59, 64],
+  Dm: [26, 57, 62, 65], Bb: [34, 58, 62, 65], A: [33, 57, 61, 64], Gm: [31, 55, 58, 62],
+  Fmaj7: [29, 57, 60, 64], Em7: [28, 55, 59, 62], Dm7: [26, 57, 60, 65], G7: [31, 53, 59, 62],
+  Cmaj7: [36, 55, 59, 64], Am7: [33, 55, 60, 64], Em9: [28, 54, 59, 62], Bsus: [35, 54, 59, 64], B7: [35, 54, 59, 63],
+};
+// 곡마다: 빠르기, 화음 8마디, 멜로디 [음, 8분음표 길이] (0 = 쉼표), 쓰는 악기
 const SONGS = {
+  // 🏝️ 섬: 잔잔한 판타지 (현악 패드 + 피아노 아르페지오 + 종소리 멜로디)
   island: {
-    bpm: 100, drums: 'soft', vol: 1,
-    chords: ['C', 'G', 'Am', 'F', 'C', 'G', 'F', 'G'],
-    melody: [
-      [76, 2], [79, 2], [81, 1], [79, 1], [76, 2],
-      [74, 2], [79, 2], [83, 2], [81, 2],
-      [84, 3], [83, 1], [81, 2], [76, 2],
-      [77, 2], [81, 2], [79, 4],
-      [76, 1], [79, 1], [84, 2], [83, 1], [81, 1], [79, 2],
-      [74, 2], [71, 2], [74, 2], [79, 2],
-      [81, 2], [79, 1], [77, 1], [76, 2], [74, 2],
-      [74, 2], [76, 2], [72, 4],
-    ],
+    bpm: 78, vol: 1, echo: 0.28, lead: 'bell', pad: true, bass: 'long', arp: 'piano', drums: 'none',
+    chords: ['Am', 'F', 'C', 'G', 'Am', 'F', 'G', 'Am'],
+    melody: [[76, 3], [74, 1], [72, 4], [69, 4], [72, 2], [74, 2], [76, 6], [79, 2], [74, 8],
+      [76, 3], [77, 1], [79, 4], [81, 4], [79, 2], [77, 2], [76, 3], [74, 1], [71, 4], [69, 8]],
   },
-  // 상점: 오르골처럼 톡톡 튀는 귀여운 곡 (F장조)
+  // 🛒 상점: 느긋한 재즈 라운지 (일렉 피아노 + 걸어 다니는 베이스 + 브러시 드럼, 스윙)
   shop: {
-    bpm: 118, drums: 'shop', vol: 1, lead: 'sine', pluck: true,
-    chords: ['F', 'Dm', 'Bb', 'C', 'F', 'Dm', 'Gm', 'C'],
-    melody: [
-      [81, 1], [84, 1], [81, 1], [77, 1], [79, 2], [81, 2],
-      [77, 1], [74, 1], [77, 1], [81, 1], [86, 2], [84, 2],
-      [86, 1], [84, 1], [82, 1], [81, 1], [82, 2], [77, 2],
-      [79, 2], [76, 1], [79, 1], [84, 4],
-      [84, 1], [81, 1], [77, 1], [81, 1], [84, 2], [89, 2],
-      [88, 1], [86, 1], [84, 1], [81, 1], [86, 4],
-      [82, 1], [81, 1], [79, 1], [77, 1], [79, 2], [82, 2],
-      [81, 2], [79, 2], [77, 4],
-    ],
+    bpm: 96, vol: 1.3, echo: 0.15, lead: 'keys', comp: true, bass: 'walk', arp: 'none', drums: 'brush', swing: 0.3,
+    chords: ['Fmaj7', 'Em7', 'Dm7', 'G7', 'Cmaj7', 'Am7', 'Dm7', 'G7'],
+    melody: [[69, 2], [72, 2], [76, 3], [0, 1], [74, 2], [71, 1], [74, 1], [79, 4], [77, 2], [76, 2], [74, 2], [72, 2], [71, 6], [0, 2],
+      [72, 2], [76, 2], [79, 3], [0, 1], [81, 2], [79, 1], [76, 1], [72, 4], [74, 2], [77, 2], [76, 2], [74, 2], [71, 4], [74, 2], [0, 2]],
   },
-  // 📖 도감: 신비롭게 탐험하는 느낌 (D단조, 드럼 없이 부드러운 화음 + 방울 소리 멜로디)
+  // 📖 도감: 신비로운 앰비언트 (긴 패드 + 드문드문 종소리, 메아리 많이)
   dex: {
-    bpm: 90, drums: 'calm', vol: 1, lead: 'sine', pluck: true, pad: true,
-    chords: ['Dm', 'Bb', 'F', 'C', 'Dm', 'Bb', 'C', 'A'],
-    melody: [
-      [81, 2], [86, 2], [84, 1], [81, 1], [77, 2],
-      [77, 2], [82, 2], [81, 2], [77, 2],
-      [84, 3], [81, 1], [77, 2], [81, 2],
-      [79, 2], [76, 2], [79, 4],
-      [86, 2], [89, 2], [88, 1], [86, 1], [81, 2],
-      [82, 2], [86, 2], [84, 2], [82, 2],
-      [81, 1], [79, 1], [76, 2], [79, 2], [84, 2],
-      [85, 2], [88, 2], [81, 4],
-    ],
+    bpm: 66, vol: 1, echo: 0.38, lead: 'bell', pad: true, bass: 'long', arp: 'sparse', drums: 'none',
+    chords: ['Em9', 'Cmaj7', 'Am7', 'Bsus', 'Em9', 'Cmaj7', 'Am7', 'B7'],
+    melody: [[71, 4], [0, 4], [67, 2], [71, 2], [74, 4], [72, 6], [0, 2], [71, 8],
+      [78, 4], [76, 2], [74, 2], [71, 4], [0, 4], [72, 2], [76, 2], [79, 4], [78, 8]],
   },
+  // ⚔️ 전투: 웅장한 오케스트라 (낮은 현악 반복 + 금관 멜로디 + 둥둥 큰북)
   battle: {
-    bpm: 140, drums: 'hard', vol: 0.9,
-    chords: ['Am', 'F', 'C', 'G', 'Am', 'F', 'G', 'E'],
-    melody: [
-      [69, 1], [72, 1], [76, 1], [81, 1], [79, 2], [76, 2],
-      [77, 1], [76, 1], [74, 1], [72, 1], [69, 2], [72, 2],
-      [76, 1], [79, 1], [84, 2], [83, 1], [79, 1], [76, 2],
-      [74, 2], [79, 2], [83, 2], [86, 2],
-      [81, 2], [79, 1], [76, 1], [81, 2], [84, 2],
-      [81, 1], [79, 1], [77, 2], [76, 2], [72, 2],
-      [74, 1], [76, 1], [79, 1], [83, 1], [86, 2], [83, 2],
-      [80, 2], [83, 2], [88, 4],
-    ],
+    bpm: 116, vol: 1.25, echo: 0.18, lead: 'brass', pad: true, bass: 'drive', arp: 'none', drums: 'taiko',
+    chords: ['Dm', 'Bb', 'C', 'A', 'Dm', 'Bb', 'Gm', 'A'],
+    melody: [[62, 2], [65, 2], [69, 4], [70, 3], [69, 1], [65, 4], [67, 2], [69, 2], [72, 4], [69, 6], [0, 2],
+      [74, 3], [72, 1], [69, 2], [65, 2], [70, 4], [74, 4], [72, 2], [70, 2], [67, 2], [70, 2], [69, 4], [61, 4]],
   },
 };
-const MUS = { cur: null, gain: null, timer: null, next: 0, step: 0, started: false, noise: null };
+const MUS = { cur: null, gain: null, timer: null, next: 0, step: 0, started: false, noise: null, bus: null, wet: null };
 const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 function audioCtx() {
   try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
   return AC;
 }
-function mTone(dest, t, midi, dur, type, vol, attack = 0.01) {
-  const o = AC.createOscillator(), g = AC.createGain();
-  o.type = type; o.frequency.value = hz(midi);
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.linearRampToValueAtTime(vol, t + attack);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g); g.connect(dest);
-  o.start(t); o.stop(t + dur + 0.05);
+// 음악이 모이는 곳 + 메아리(에코)
+function musicBus() {
+  if (MUS.bus) return MUS.bus;
+  const bus = AC.createGain(), delay = AC.createDelay(1), fb = AC.createGain(), damp = AC.createBiquadFilter(), wet = AC.createGain();
+  delay.delayTime.value = 0.34; fb.gain.value = 0.32; damp.type = 'lowpass'; damp.frequency.value = 2600; wet.gain.value = 0.25;
+  bus.connect(AC.destination);
+  bus.connect(delay); delay.connect(damp); damp.connect(fb); fb.connect(delay); damp.connect(wet); wet.connect(AC.destination);
+  MUS.bus = bus; MUS.wet = wet;
+  return bus;
 }
-function mNoise(dest, t, dur, vol, freq) {
+// 악기 하나: 발진기 여러 개 → 저역 필터 → 음량 곡선
+function voice(dest, t, freq, dur, o) {
+  const f = AC.createBiquadFilter(), g = AC.createGain();
+  f.type = 'lowpass'; f.frequency.value = o.cutoff || 20000; f.Q.value = o.q || 0.7;
+  const a = o.attack || 0.01, rel = o.release || 0.2, peak = o.vol;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(peak, t + a);
+  if (o.decay) g.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak * 0.02), t + a + o.decay);
+  else { g.gain.setValueAtTime(peak, t + Math.max(a, dur - rel)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + rel); }
+  f.connect(g); g.connect(dest);
+  const stopAt = t + (o.decay ? a + o.decay : dur + rel) + 0.05;
+  (o.oscs || [{ type: 'sine' }]).forEach(s => {
+    const osc = AC.createOscillator();
+    osc.type = s.type; osc.frequency.value = freq * (s.mul || 1); osc.detune.value = s.detune || 0;
+    if (s.gain != null && s.gain !== 1) { const sg = AC.createGain(); sg.gain.value = s.gain; osc.connect(sg); sg.connect(f); } else osc.connect(f);
+    osc.start(t); osc.stop(stopAt);
+  });
+}
+const INST = {
+  pad:    (d, t, m, dur, v) => voice(d, t, hz(m), dur, { vol: 0.02 * v, attack: 0.9, release: 1.2, cutoff: 1100, oscs: [{ type: 'sawtooth', detune: -8 }, { type: 'sawtooth', detune: 8 }] }),
+  bell:   (d, t, m, dur, v) => voice(d, t, hz(m), dur, { vol: 0.075 * v, attack: 0.005, decay: Math.max(1.2, dur * 1.2), cutoff: 5000, oscs: [{ type: 'sine' }, { type: 'sine', mul: 2, gain: 0.25 }, { type: 'triangle', mul: 3, gain: 0.06 }] }),
+  keys:   (d, t, m, dur, v) => voice(d, t, hz(m), dur, { vol: 0.07 * v, attack: 0.01, decay: 1.4, cutoff: 3200, oscs: [{ type: 'sine' }, { type: 'triangle', mul: 2, gain: 0.18 }] }),
+  brass:  (d, t, m, dur, v) => voice(d, t, hz(m), dur, { vol: 0.05 * v, attack: 0.07, release: 0.18, cutoff: 1700, q: 1.2, oscs: [{ type: 'sawtooth', detune: -5 }, { type: 'sawtooth', detune: 5 }] }),
+  piano:  (d, t, m, dur, v) => voice(d, t, hz(m), dur, { vol: 0.03 * v, attack: 0.004, decay: 0.9, cutoff: 2600, oscs: [{ type: 'triangle' }, { type: 'sine', mul: 2, gain: 0.2 }] }),
+  comp:   (d, t, m, dur, v) => voice(d, t, hz(m), dur, { vol: 0.022 * v, attack: 0.01, decay: 0.5, cutoff: 2200, oscs: [{ type: 'sine' }, { type: 'triangle', mul: 2, gain: 0.15 }] }),
+  bassL:  (d, t, m, dur, v) => voice(d, t, hz(m), dur, { vol: 0.12 * v, attack: 0.05, release: 0.4, cutoff: 420, oscs: [{ type: 'sine' }, { type: 'triangle', mul: 2, gain: 0.3 }] }),
+  bassW:  (d, t, m, dur, v) => voice(d, t, hz(m), dur, { vol: 0.12 * v, attack: 0.01, decay: 0.55, cutoff: 700, oscs: [{ type: 'triangle' }, { type: 'sine', gain: 0.6 }] }),
+  drive:  (d, t, m, dur, v) => voice(d, t, hz(m), dur, { vol: 0.045 * v, attack: 0.008, decay: 0.22, cutoff: 800, q: 2, oscs: [{ type: 'sawtooth' }, { type: 'sawtooth', mul: 0.5, gain: 0.6 }] }),
+};
+function mNoise(dest, t, dur, vol, freq, type = 'highpass') {
   if (!MUS.noise) {
-    MUS.noise = AC.createBuffer(1, AC.sampleRate * 0.5, AC.sampleRate);
+    MUS.noise = AC.createBuffer(1, AC.sampleRate * 1.5, AC.sampleRate);
     const d = MUS.noise.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   }
   const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
-  s.buffer = MUS.noise; f.type = 'highpass'; f.frequency.value = freq;
+  s.buffer = MUS.noise; f.type = type; f.frequency.value = freq;
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   s.connect(f); f.connect(g); g.connect(dest);
   s.start(t); s.stop(t + dur + 0.02);
 }
-function mKick(dest, t, vol) {
+// 큰북(타이코)·부드러운 킥: 음 높이가 뚝 떨어지는 사인파
+function mDrum(dest, t, vol, from, to, len) {
   const o = AC.createOscillator(), g = AC.createGain();
-  o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.12);
-  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
-  o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.2);
+  o.frequency.setValueAtTime(from, t); o.frequency.exponentialRampToValueAtTime(to, t + len * 0.6);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+  o.connect(g); g.connect(dest); o.start(t); o.stop(t + len + 0.02);
 }
 // 곡을 8분음표 단위 사건 목록으로 풀어 둔다
 function songEvents(song) {
@@ -798,19 +804,26 @@ function songEvents(song) {
   let pos = 0;
   song.melody.forEach(([m, len]) => { if (m) ev.push({ at: pos, k: 'mel', m, len }); pos += len; });
   song.chords.forEach((c, bar) => {
-    const ch = CH[c], b0 = bar * 8;
-    for (let s = 0; s < 8; s++) {
-      ev.push({ at: b0 + s, k: 'arp', m: ch[1 + [0, 1, 2, 1][s % 4]] + (s >= 4 ? 12 : 0) });
-      if (song.pad && s === 0) ch.slice(1).forEach(m => ev.push({ at: b0, k: 'pad', m, len: 8 }));
-      if (song.drums === 'calm') {
-        if (s === 0) ev.push({ at: b0, k: 'bass', m: ch[0], len: 8 });
-      } else if (song.drums === 'shop') {
-        // 걸어 다니는 베이스: 근음과 5도를 번갈아
-        if (s % 2 === 0) ev.push({ at: b0 + s, k: 'bass', m: ch[0] + (s % 4 === 2 ? 7 : 0), len: 2 });
-      } else if (song.drums === 'hard' ? true : s % 4 === 0) ev.push({ at: b0 + s, k: 'bass', m: ch[0] + (song.drums === 'hard' && s % 2 ? 12 : 0), len: song.drums === 'hard' ? 1 : 3 });
-      if (song.drums !== 'calm' && (s % 4 === 0 || (song.drums === 'hard' && s % 2 === 0))) ev.push({ at: b0 + s, k: 'kick' });
-      if ((song.drums === 'hard' || song.drums === 'shop') && s % 4 === 2) ev.push({ at: b0 + s, k: 'snare' });
-      if (s % 2 === 1 || song.drums === 'hard') ev.push({ at: b0 + s, k: 'hat' });
+    const ch = CH[c], b0 = bar * 8, up = ch.slice(1);
+    if (song.pad) up.forEach(m => ev.push({ at: b0, k: 'pad', m, len: 8 }));
+    if (song.comp) [2, 6].forEach(s => up.forEach(m => ev.push({ at: b0 + s, k: 'comp', m })));
+    // 베이스
+    if (song.bass === 'long') ev.push({ at: b0, k: 'bassL', m: ch[0] + 12, len: 8 });
+    if (song.bass === 'walk') [0, 2, 4, 6].forEach((s, n) => ev.push({ at: b0 + s, k: 'bassW', m: ch[0] + 12 + [0, 7, 12, 7][n] }));
+    if (song.bass === 'drive') for (let s = 0; s < 8; s++) ev.push({ at: b0 + s, k: 'drive', m: ch[0] + 12 + (s % 4 === 3 ? 12 : 0) });
+    // 아르페지오 (화음을 한 음씩)
+    if (song.arp === 'piano') for (let s = 0; s < 8; s++) ev.push({ at: b0 + s, k: 'piano', m: up[[0, 1, 2, 1][s % 4]] + (s >= 4 ? 12 : 0) });
+    if (song.arp === 'sparse') [0, 3, 5].forEach((s, n) => ev.push({ at: b0 + s, k: 'piano', m: up[n] + 12 }));
+    // 드럼
+    if (song.drums === 'brush') {
+      [0, 4].forEach(s => ev.push({ at: b0 + s, k: 'kickSoft' }));
+      [2, 6].forEach(s => ev.push({ at: b0 + s, k: 'brush' }));
+      for (let s = 0; s < 8; s++) ev.push({ at: b0 + s, k: 'ride' });
+    }
+    if (song.drums === 'taiko') {
+      [0, 3, 4, 6].forEach(s => ev.push({ at: b0 + s, k: 'taiko' }));
+      ev.push({ at: b0 + 7, k: 'tom' });
+      if (bar % 2 === 0) ev.push({ at: b0, k: 'cymbal' });
     }
   });
   song.len = song.chords.length * 8;
@@ -822,21 +835,20 @@ function musicTick() {
   const song = SONGS[MUS.cur], ev = songEvents(song), e8 = 60 / song.bpm / 2;
   // 멈춰 있다가 다시 켜지면 밀린 음을 한꺼번에 치지 않게
   if (MUS.next < AC.currentTime - 0.05) MUS.next = AC.currentTime + 0.05;
-  while (MUS.next < AC.currentTime + 0.35) {
-    const at = MUS.step % song.len, t = MUS.next, dest = MUS.gain, v = song.vol;
+  while (MUS.next < AC.currentTime + 0.4) {
+    const at = MUS.step % song.len, dest = MUS.gain, v = song.vol;
+    // 스윙: 뒤쪽 8분음표를 조금 늦게
+    const t = MUS.next + (song.swing && at % 2 === 1 ? e8 * song.swing : 0);
     ev.forEach(x => {
       if (x.at !== at) return;
-      if (x.k === 'mel' && song.pluck) {
-        // 오르골 소리: 짧게 울리고 한 옥타브 위 방울 소리를 살짝
-        mTone(dest, t, x.m, Math.min(x.len * e8, 0.5), song.lead, 0.11 * v, 0.005);
-        mTone(dest, t, x.m + 12, 0.25, 'sine', 0.03 * v, 0.005);
-      } else if (x.k === 'mel') mTone(dest, t, x.m, x.len * e8 * 0.95, song.lead || 'triangle', 0.09 * v, 0.02);
-      else if (x.k === 'arp') mTone(dest, t, x.m, e8 * (song.drums === 'calm' ? 1.6 : 0.9), 'sine', (song.drums === 'calm' ? 0.022 : 0.035) * v);
-      else if (x.k === 'pad') mTone(dest, t, x.m, x.len * e8, 'triangle', 0.022 * v, 0.6);
-      else if (x.k === 'bass') mTone(dest, t, x.m, x.len * e8 * 0.9, 'triangle', 0.1 * v, 0.01);
-      else if (x.k === 'kick') mKick(dest, t, (song.drums === 'hard' ? 0.22 : 0.14) * v);
-      else if (x.k === 'snare') mNoise(dest, t, song.drums === 'shop' ? 0.06 : 0.14, (song.drums === 'shop' ? 0.05 : 0.09) * v, song.drums === 'shop' ? 3000 : 1500);
-      else if (x.k === 'hat') mNoise(dest, t, 0.04, (song.drums === 'calm' ? 0.012 : 0.025) * v, 7000);
+      if (x.k === 'mel') INST[song.lead](dest, t, x.m, x.len * e8, v);
+      else if (INST[x.k]) INST[x.k](dest, t, x.m, (x.len || 1) * e8, v);
+      else if (x.k === 'kickSoft') mDrum(dest, t, 0.13 * v, 90, 42, 0.3);
+      else if (x.k === 'brush') mNoise(dest, t, 0.16, 0.03 * v, 2600, 'bandpass');
+      else if (x.k === 'ride') mNoise(dest, t, 0.08, 0.009 * v, 8000);
+      else if (x.k === 'taiko') { mDrum(dest, t, 0.3 * v, 110, 48, 0.55); mNoise(dest, t, 0.12, 0.05 * v, 280, 'lowpass'); }
+      else if (x.k === 'tom') mDrum(dest, t, 0.16 * v, 190, 90, 0.3);
+      else if (x.k === 'cymbal') mNoise(dest, t, 1.4, 0.018 * v, 6000);
     });
     MUS.step++;
     MUS.next += e8;
@@ -863,7 +875,8 @@ function setMusic(name) {
   MUS.gain = AC.createGain();
   MUS.gain.gain.setValueAtTime(0.0001, AC.currentTime);
   MUS.gain.gain.linearRampToValueAtTime(MUSIC_VOL, AC.currentTime + 1.2);
-  MUS.gain.connect(AC.destination);
+  MUS.gain.connect(musicBus());
+  MUS.wet.gain.setTargetAtTime(SONGS[name].echo || 0.2, AC.currentTime, 0.3);
   MUS.step = 0;
   MUS.next = AC.currentTime + 0.1;
   if (!MUS.timer) MUS.timer = setInterval(musicTick, 60);
