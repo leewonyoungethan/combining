@@ -5156,7 +5156,7 @@ function pvpTrophy(win) {
 // 내 컴퓨터에서 시험할 때(localhost)는 진짜 랭킹을 건드리지 않게 따로 쓴다
 const RANK_TOPIC = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) ? 'monhap-rank-dev-q7x2k9' : 'monhap-rank-v1-q7x2k9';
 // 랭킹에서 숨길 기록 (시험하다가 잘못 올라간 것)
-const RANK_HIDE = new Set(['7d7sb06fon1l', 'ut7q8bq5onn3']);
+const RANK_HIDE = new Set(['7d7sb06fon1l', 'ut7q8bq5onn3', 'i8pxkadifqn4']);
 const RANK_URL = 'https://ntfy.sh/' + RANK_TOPIC;
 const RANK_CATS = [
   { id: 'tr',  name: '🏆 트로피',  unit: '', desc: '🌍 랜덤 대전에서 이기면 올라가요' },
@@ -5200,6 +5200,13 @@ async function rankSubmit(force) {
   } catch (e) { /* 인터넷 없음 */ }
   rankBusy = false;
 }
+// 지운 계정: 같은 id로 "지웠어요" 기록을 올리면 읽는 쪽에서 뺀다
+function rankDelete(id) {
+  if (!id) return;
+  if (rankCache) rankCache.list = rankCache.list.filter(p => p.id !== id);
+  guildCache = null;
+  try { fetch(RANK_URL, { method: 'POST', body: JSON.stringify({ v: 1, id, del: 1, n: '' }) }).catch(() => {}); } catch (e) { /* 인터넷 없음 */ }
+}
 async function rankFetch() {
   const r = await fetch(RANK_URL + '/json?poll=1&since=12h');
   if (!r.ok) throw new Error('http ' + r.status);
@@ -5217,10 +5224,11 @@ async function rankFetch() {
         tr: num(d.tr, 99999), dex: num(d.dex, CAT_LIST.length), st: num(d.st, 9999), pw: num(d.pw, 1e8), t: ev.time, tt: num(d.tt, TITLES.length - 1),
         g: typeof d.g === 'string' ? d.g.slice(0, 12) : '', gn: d.gn ? safeName(String(d.gn).slice(0, 12), '길드') : '', ge: String(d.ge || '🛡️').slice(0, 4), gl: d.gl ? 1 : 0,
         dt: Array.isArray(d.dt) ? d.dt.slice(0, 3).filter(x => x && CAT[x.type]) : [] };
+      p.del = d.del ? 1 : 0;
       if (!best[p.id] || best[p.id].t <= p.t) best[p.id] = p;   // 한 사람은 가장 최근 기록만
     } catch (e) { /* 잘못된 줄은 건너뛴다 */ }
   });
-  return Object.values(best);
+  return Object.values(best).filter(p => !p.del);   // 지운 계정은 빼기
 }
 let rankCat = 'tr', rankCache = null;
 async function openRanking(cat) {
@@ -6526,6 +6534,8 @@ function accDel(id) {
   if (list.length <= 1) { toast('계정이 하나뿐이라 지울 수 없어요'); return; }
   if (!confirm(`${a.name} 계정을 지울까요? 이 계정의 섬과 몬스터가 모두 사라져요.`)) return;
   if (!confirm('정말 지울까요? 되돌릴 수 없어요.')) return;
+  // 온라인 기록(랭킹·길드)에서도 바로 빠지게
+  try { const old = JSON.parse(lsGet(accKey(id)) || 'null'); if (old && old.rankId) rankDelete(old.rankId); } catch (e) { /* 저장이 없음 */ }
   lsDel(accKey(id));
   const rest = list.filter(x => x.id !== id);
   saveAccounts(rest);
