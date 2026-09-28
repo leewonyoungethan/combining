@@ -4388,7 +4388,7 @@ function stopLoop(reason) {
   if (B) drawBattle();
 }
 function loopNext() {
-  if (!LOOP || !B || !B.over || B.pvp || B.gwar || B.bossIdx != null) return;
+  if (!LOOP || !B || !B.over || B.pvp || B.gwar || B.raid || B.bossIdx != null) return;
   if (!B.result.win) { stopLoop('패배'); return; }
   LOOP.wins++;
   clearTimeout(B.timer);
@@ -4531,6 +4531,8 @@ async function nextTurn() {
   while (b.order.length && b.order[0].hp <= 0) b.order.shift();
   if (!b.order.length) {
     b.round++;
+    // 🔥 레이드는 10라운드까지만
+    if (b.raid && b.round > RAID_ROUNDS) { logB(`⏰ ${RAID_ROUNDS}라운드가 끝났어요!`); endBattle(false); return; }
     b.order = b.units.filter(u => u.hp > 0).sort((x, y) => y.spd - x.spd || Math.random() - 0.5);
     // 보스는 한 라운드에 여러 번 움직인다: 순서 중간중간에 끼워 넣기
     b.order.filter(u => u.turns > 1).forEach(u => {
@@ -4541,6 +4543,13 @@ async function nextTurn() {
   const u = b.order.shift();
   b.cur = u;
   u.sta = Math.min(MAX_STA, u.sta + 2);
+  // 😡 보스 분노: 체력이 절반 아래가 되면 공격 +40%
+  if (u.boss && u.c.enrage && !u.enraged && u.hp < u.maxHp / 2) {
+    u.enraged = true;
+    u.atk = Math.round(u.atk * 1.4);
+    logB(`😡 ${u.c.name}이(가) 분노했어요! 공격력이 올라가요!`);
+    if (typeof floatText === 'function') floatText(u, '😡 분노!', 'status');
+  }
   drawBattle();
 
   // 화상 / 중독: 자기 차례가 올 때마다 에너지가 깎인다
@@ -4767,6 +4776,7 @@ function endBattle(win) {
         if (B.pvp.random) rewards.push(...pvpTrophy(win));
     if (B.pvp.role === 'host') netSend({ t: 'end', hostWin: win });
   } else if (B.gwar) rewards.push(...gwarResult(win));
+  else if (B.raid) rewards.push(...raidResult(win));
   else if (B.bossIdx != null) rewards.push(...bossRewards(win));
   else if (win) {
     const gold = Math.round(120 * Math.pow(1.25, B.stage - 1) * (evtOn('tourney') ? 2 : 1));
@@ -4785,7 +4795,7 @@ function endBattle(win) {
   sfx(win ? 'win' : 'lose');
   if (win) mission('win');
   save();
-  if (LOOP && !B.pvp && !B.gwar && B.bossIdx == null) {
+  if (LOOP && !B.pvp && !B.gwar && !B.raid && B.bossIdx == null) {
     if (win) { const b = B; setTimeout(() => { if (B === b && LOOP) loopNext(); }, 1600); }
     else { LOOP.wins = LOOP.wins; setTimeout(() => stopLoop('패배'), 300); }
   }
@@ -4857,7 +4867,7 @@ function drawBattle() {
     $('#battle').innerHTML = `
       <div class="b-inner">
         <div class="b-top">
-          <b>${B.gwar ? `⚔️ 길드전 · ${esc(B.gwar.opp.emblem)} ${esc(B.gwar.def.n)}` : B.pvp ? `👥 친구 대전 · vs ${B.pvp.oppName}` : B.bossIdx != null ? `👹 보스전 · ${BOSSES[B.bossIdx].name}` : `스테이지 ${B.stage}`}</b><span class="muted" id="bRound"></span>${S.petOn && petById(S.petOn) && !(B.pvp && B.pvp.role === 'guest') ? `<span class="b-pet" title="${petBonusText(petById(S.petOn), petLv(S.petOn))}">${petById(S.petOn).e}</span>` : ''}
+          <b>${B.raid ? `🔥 레이드 · ${raidDef().name}` : B.gwar ? `⚔️ 길드전 · ${esc(B.gwar.opp.emblem)} ${esc(B.gwar.def.n)}` : B.pvp ? `👥 친구 대전 · vs ${B.pvp.oppName}` : B.bossIdx != null ? `👹 보스전 · ${BOSSES[B.bossIdx].name}` : `스테이지 ${B.stage}`}</b><span class="muted" id="bRound"></span>${S.petOn && petById(S.petOn) && !(B.pvp && B.pvp.role === 'guest') ? `<span class="b-pet" title="${petBonusText(petById(S.petOn), petLv(S.petOn))}">${petById(S.petOn).e}</span>` : ''}
           <span class="spacer"></span>
           <button class="btn ghost small" data-act="typeChart">📘 상성표</button>
           ${B.pvp ? '' : '<button class="btn ghost small" data-act="bAuto" id="bAuto"></button>'}
@@ -4887,10 +4897,10 @@ function drawBattle() {
     const r = B.result;
     bottom = `<div class="b-result">
       <div class="result ${r.win ? 'win' : 'lose'}">${r.win ? '🏆 승리!' : '💥 패배…'}</div>
-      <p>${r.win || B.gwar ? `보상: ${r.rewards.join(' · ')}` : '속성 상성을 생각하거나 몬스터를 키우고 룬을 끼워 보세요!'}</p>
-      ${LOOP && r.win && !B.pvp && !B.gwar && B.bossIdx == null
+      <p>${r.win || B.gwar || B.raid ? `${B.raid ? '' : '보상: '}${r.rewards.join(' · ')}` : '속성 상성을 생각하거나 몬스터를 키우고 룬을 끼워 보세요!'}</p>
+      ${LOOP && r.win && !B.pvp && !B.gwar && !B.raid && B.bossIdx == null
         ? `<p class="loop-note">🔁 연속 전투 ${LOOP.wins + 1}연승! 곧 다음 스테이지…</p><button class="btn big" data-act="loopStop">⏹ 멈추기</button>`
-        : `<div class="row"><button class="btn big" data-act="bQuit">확인</button>${!B.pvp && !B.gwar && B.bossIdx == null ? `<button class="btn big green" data-act="${r.win ? 'nextStage' : 'fightLoop'}">${r.win ? '⏩ 다음 스테이지' : '🔁 다시 연속 전투'}</button>` : ''}</div>`}
+        : `<div class="row"><button class="btn big" data-act="bQuit">확인</button>${!B.pvp && !B.gwar && !B.raid && B.bossIdx == null ? `<button class="btn big green" data-act="${r.win ? 'nextStage' : 'fightLoop'}">${r.win ? '⏩ 다음 스테이지' : '🔁 다시 연속 전투'}</button>` : ''}</div>`}
     </div>`;
   } else if (B.waiting) {
     const u = B.cur, t = unitById(B.target);
@@ -6327,6 +6337,17 @@ const BOSSES = [
   { name: '독안개 여왕',   face: '🕷️', els: ['poison', 'magic'],        lv: 17, hp: 10000, atk: 145, spd: 120, turns: 2, ult: '죽음의 거미줄',  gold: 20000,  gems: 60,  rune: [0, 0.5, 0.5] },
   { name: '얼음 용왕',     face: '🐉', els: ['ice', 'water', 'metal'],   lv: 20, hp: 16000, atk: 185, spd: 126, turns: 2, ult: '빙하기',         gold: 40000,  gems: 80,  rune: [0, 0.3, 0.7] },
   { name: '혼돈의 군주',   face: '👿', els: ['dark', 'magic', 'fire'],   lv: 25, hp: 30000, atk: 250, spd: 140, turns: 3, ult: '혼돈의 종말',    gold: 100000, gems: 150, rune: [0, 0, 1] },
+  // --- 새 보스: 체력이 절반 아래가 되면 분노해서 공격이 세진다 ---
+  { name: '심해 크라켄',       face: '🐙', els: ['water', 'dark'],            lv: 28, hp: 40000,  atk: 300,  spd: 132, turns: 3, ult: '심연의 소용돌이', gold: 250000,    gems: 180, rune: [0, 0, 1], enrage: 1 },
+  { name: '용암 거인',         face: '🌋', els: ['fire', 'earth'],            lv: 30, hp: 55000,  atk: 360,  spd: 120, turns: 3, ult: '화산 폭발',       gold: 500000,    gems: 200, rune: [0, 0, 1], enrage: 1 },
+  { name: '폭풍의 신',         face: '⛈️', els: ['thunder', 'light'],        lv: 32, hp: 75000,  atk: 430,  spd: 150, turns: 3, ult: '천벌의 번개',     gold: 1000000,   gems: 250, rune: [0, 0, 1], enrage: 1 },
+  { name: '흡혈 백작',         face: '🧛', els: ['dark', 'poison'],           lv: 34, hp: 100000, atk: 500,  spd: 145, turns: 3, ult: '피의 만찬',       gold: 2000000,   gems: 300, rune: [0, 0, 1], enrage: 1 },
+  { name: '황금 전갈 황제',    face: '🦂', els: ['poison', 'metal'],          lv: 36, hp: 130000, atk: 580,  spd: 138, turns: 3, ult: '황금 독침',       gold: 4000000,   gems: 350, rune: [0, 0, 1], enrage: 1 },
+  { name: '영원의 빙하 거신',  face: '🧊', els: ['ice', 'earth'],             lv: 38, hp: 170000, atk: 680,  spd: 125, turns: 4, ult: '절대 영도',       gold: 8000000,   gems: 400, rune: [0, 0, 1], enrage: 1 },
+  { name: '기계신 오메가',     face: '🤖', els: ['metal', 'thunder', 'magic'], lv: 40, hp: 220000, atk: 800,  spd: 150, turns: 4, ult: '오메가 캐논',     gold: 16000000,  gems: 500, rune: [0, 0, 1], enrage: 1 },
+  { name: '일식의 늑대 펜리르', face: '🐺', els: ['dark', 'ice', 'light'],    lv: 45, hp: 280000, atk: 950,  spd: 165, turns: 4, ult: '태양 삼키기',     gold: 32000000,  gems: 600, rune: [0, 0, 1], enrage: 1 },
+  { name: '태양신 라',         face: '🌞', els: ['light', 'fire', 'magic'],   lv: 50, hp: 340000, atk: 1150, spd: 160, turns: 4, ult: '태양의 심판',     gold: 64000000,  gems: 800, rune: [0, 0, 1], enrage: 1 },
+  { name: '창세의 용 오리진',   face: '🐲', els: ['magic', 'light', 'dark'],   lv: 60, hp: 420000, atk: 1400, spd: 175, turns: 5, ult: '창세의 숨결',     gold: 128000000, gems: 1000, rune: [0, 0, 1], enrage: 1 },
 ];
 BOSSES.forEach((b, i) => {
   const e = b.els;
@@ -6337,8 +6358,103 @@ BOSSES.forEach((b, i) => {
 });
 const bossUnlocked = (i) => i === 0 || !!S.bossCleared[i - 1];
 
+// ----- 🔥 오늘의 레이드: 매일 바뀌는 거대 보스. 하루 3번, 한 번에 10라운드. 준 피해가 쌓여서 보상 -----
+const RAID_TRIES = 3, RAID_ROUNDS = 10;
+const RAID_BOSSES = [
+  { name: '화염 거신 이프리트',   face: '👹', els: ['fire', 'earth'], ult: '대지의 불꽃' },
+  { name: '심연의 리바이어던',    face: '🐋', els: ['water', 'dark'], ult: '해일' },
+  { name: '뇌신 토르',            face: '🌩️', els: ['thunder', 'metal'], ult: '묠니르 강타' },
+  { name: '세계수의 수호자',      face: '🌳', els: ['nature', 'light'], ult: '생명의 폭풍' },
+  { name: '그림자 군주',          face: '👤', els: ['dark', 'magic'], ult: '어둠의 장막' },
+  { name: '서리 여왕',            face: '👸', els: ['ice', 'water'], ult: '영원한 겨울' },
+  { name: '역병의 왕',            face: '☠️', els: ['poison', 'dark'], ult: '죽음의 역병' },
+];
+const RAID_TIERS = [
+  { pct: 10,  r: { gems: 10 } },
+  { pct: 30,  r: { gems: 20, rune: 1 } },
+  { pct: 60,  r: { gems: 40, rune: 2 } },
+  { pct: 100, r: { gems: 80, legend: 1 } },
+];
+// 오늘의 레이드 보스 (처음 볼 때 내 팀 힘에 맞춰 정하고, 그날은 그대로)
+function raidToday() {
+  const day = dayKey();
+  if (S.raid && S.raid.day === day) return S.raid;
+  let team = S.team.map(byUid).filter(Boolean);
+  if (!team.length) team = S.monsters.slice().sort((a, b) => monPower(b) - monPower(a)).slice(0, 3);
+  const units = team.map((m, k) => mkUnit(m, 'me', k));
+  const sumAtk = units.reduce((s, u) => s + u.atk, 0) || 150, avgHp = units.length ? units.reduce((s, u) => s + u.maxHp, 0) / units.length : 400;
+  const d = new Date(), idx = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000) % RAID_BOSSES.length;
+  // 3번 모두 잘 싸우면 쓰러뜨릴 수 있게 (내 팀 공격력 × 20)
+  const hp = Math.max(3500, Math.round(sumAtk * 20));
+  S.raid = { day, idx, maxHp: hp, hp, atk: Math.max(25, Math.round(avgHp * 0.06)), spd: 130, lv: Math.max(5, ...team.map(m => m.lv)), tries: RAID_TRIES, got: [], best: 0 };
+  return S.raid;
+}
+function raidDef() {
+  const r = raidToday(), base = RAID_BOSSES[r.idx], e = base.els;
+  return { ...base, id: 'raid', rarity: 'mythic', enrage: 1,
+    skills: [basicSkill(e[0]), atkSkill(e[0]), effSkill(e[1]), atkSkill(e[1]), { name: base.ult, el: e[0], type: 'dmg', mult: 1.3, aoe: true, cost: 6 }] };
+}
+const raidPct = () => { const r = raidToday(); return Math.floor((1 - r.hp / r.maxHp) * 100); };
+function raidCardHTML() {
+  const r = raidToday(), d = raidDef(), pct = raidPct();
+  const weak = EL.filter(e => BEATS[e.id].some(x => d.els.includes(x)));
+  return `<div class="raid-card ${r.hp <= 0 ? 'cleared' : ''}">
+    <div class="raid-top"><span class="raid-face">${d.face}</span>
+      <div><div class="raid-nm">🔥 오늘의 레이드 · ${d.name}</div>
+      <div class="muted">${elBadges(d.els)} · 약점 ${weak.map(e => e.emoji).join('')} · 하루 ${RAID_TRIES}번, 한 번에 ${RAID_ROUNDS}라운드 · 내일 새 보스</div></div></div>
+    <div class="raid-hp"><i style="width:${Math.max(0, r.hp / r.maxHp * 100)}%"></i><b>❤️ ${shortNum(Math.max(0, r.hp))} / ${shortNum(r.maxHp)} · 준 피해 ${pct}%</b></div>
+    <div class="raid-tiers">${RAID_TIERS.map((t, k) => { const ok = pct >= t.pct, got = r.got.includes(k);
+      return `<button class="raid-tier ${got ? 'got' : ok ? 'ok' : ''}" data-act="raidClaim" data-k="${k}" ${ok && !got ? '' : 'disabled'}><b>${t.pct}%</b><small>${got ? '✅' : rText(t.r)}</small></button>`; }).join('')}</div>
+    <button class="btn big ${r.hp > 0 && r.tries > 0 ? 'green' : ''}" data-act="raidFight" ${r.hp > 0 && r.tries > 0 && S.team.length ? '' : 'disabled'}>${r.hp <= 0 ? '🏆 오늘 레이드 성공!' : r.tries > 0 ? `⚔️ 레이드 도전 (남은 기회 ${r.tries}/${RAID_TRIES})` : '내일 다시 도전해요'}</button>
+  </div>`;
+}
+function startRaid() {
+  tutFlag('raid', true);
+  const r = raidToday();
+  const team = S.team.map(byUid).filter(Boolean);
+  if (!team.length) { toast('먼저 팀을 짜 주세요 (⚡ 자동 편성)'); return; }
+  if (B || r.hp <= 0 || r.tries <= 0) return;
+  r.tries--;
+  save();
+  potBattleStart();
+  const d = raidDef();
+  const boss = { id: 'foe0', side: 'foe', c: d, lv: r.lv, boss: true, turns: 2, maxHp: r.maxHp, hp: r.hp, dispHp: r.hp, shownDead: false,
+    atk: r.atk, spd: r.spd, sta: 4, fx: { burn: 0, burnDmg: 0, poison: 0, poisonDmg: 0, stun: 0, shield: 0, buff: 0, curse: 0 } };
+  B = {
+    stage: S.stage, raid: { startHp: r.hp },
+    units: [...team.map((m, k) => mkUnit(m, 'me', k)), boss],
+    order: [], cur: null, target: 'foe0', log: [], round: 0,
+    waiting: false, over: false, fast: !!S.fastBattle, auto: !!S.autoBattle, timer: null, result: null, built: false,
+  };
+  $('#battle').classList.remove('hidden');
+  updateGuide();
+  logB(`🔥 레이드 보스 ${d.name} 등장! ${RAID_ROUNDS}라운드 동안 최대한 피해를 줘요!`);
+  drawBattle();
+  later(nextTurn, 700);
+}
+// 레이드가 끝나면: 준 피해만큼 보스 체력이 줄어든 채로 저장
+function raidResult(win) {
+  const r = raidToday(), boss = B.units.find(u => u.side === 'foe');
+  const dmg = Math.max(0, B.raid.startHp - Math.max(0, boss.hp));
+  r.hp = Math.max(0, boss.hp);
+  r.best = Math.max(r.best || 0, dmg);
+  statAdd('raidDmg', dmg);
+  if (r.hp <= 0) statAdd('raidClear', 1);
+  save();
+  return [`🔥 준 피해 ${fmt(dmg)} (보스 ${raidPct()}%)`, r.hp <= 0 ? '🏆 레이드 보스 쓰러뜨림!' : `남은 기회 ${r.tries}번`];
+}
+function raidClaim(k) {
+  k = Number(k);
+  const r = raidToday(), t = RAID_TIERS[k];
+  if (!t || r.got.includes(k) || raidPct() < t.pct) return;
+  r.got.push(k);
+  const got = qReward(t.r);
+  save(); updateHud(); sfx('yay'); toast(`🔥 레이드 보상! ${got}`);
+  render();
+}
+
 function renderBossList() {
-  return `<div class="boss-list">${BOSSES.map((b, i) => {
+  return `${raidCardHTML()}<div class="boss-list">${BOSSES.map((b, i) => {
     const open = bossUnlocked(i), cleared = !!S.bossCleared[i];
     const weak = EL.filter(e => BEATS[e.id].some(x => b.els.includes(x)));
     return `<div class="boss-card ${open ? '' : 'locked'} ${cleared ? 'cleared' : ''}">
@@ -6346,7 +6462,7 @@ function renderBossList() {
       <div class="boss-info">
         <div class="boss-nm">${open ? b.name : '???'} ${cleared ? '✅' : ''}</div>
         <div class="muted">Lv.${b.lv} · ${elBadges(b.els)} · ❤️ ${fmt(b.hp)} · ${'⚡'.repeat(b.turns)} ${b.turns > 1 ? `한 턴에 ${b.turns}번 행동` : ''}</div>
-        <div class="muted">약점: ${weak.map(e => e.emoji).join('')}</div>
+        <div class="muted">약점: ${weak.map(e => e.emoji).join('')}${b.enrage ? ' · 😡 체력 절반에서 분노' : ''}</div>
         <div class="boss-reward">${cleared ? '다시 이기면' : '첫 승리'}: 💰 ${fmt(cleared ? b.gold * 0.3 : b.gold)} · 💎 ${cleared ? 5 : b.gems}${!cleared && b.rune ? ' · 💠 룬' : ''}</div>
       </div>
       <button class="btn ${open ? '' : 'ghost'}" data-act="bossFight" data-i="${i}" ${open && S.team.length ? '' : 'disabled'}>${open ? '⚔️ 도전' : '🔒 잠김'}</button>
@@ -6481,7 +6597,8 @@ const ACH_MORE = [
   ['gwarStars', '🛡️ 길드전 별 모으기', 'stat', [10, 50, 200], [10, 40, 120]],
   ['quest',    '📜 스토리 퀘스트 깨기', () => (S.quest ? S.quest.k : 0), [5, 10, 20, 30], [10, 20, 50, 200]],
   ['login',    '📅 접속한 날', () => S.loginDays || 0, [3, 7, 30, 100, 365], [5, 15, 50, 150, 500]],
-  ['boss',     '👹 보스 물리치기', () => Object.keys(S.bossCleared || {}).length, [1, 3, 6], [10, 30, 80]],
+  ['boss',     '👹 보스 물리치기', () => Object.keys(S.bossCleared || {}).length, [1, 3, 6, 10, 16], [10, 30, 80, 200, 600]],
+  ['raidClear', '🔥 레이드 보스 쓰러뜨리기', 'stat', [1, 5, 20, 50], [20, 60, 150, 400]],
   ['lv20',     '⬆️ Lv.20 몬스터', () => S.monsters.filter(m => m.lv >= MAX_LV).length, [1, 10, 50], [10, 40, 120]],
   ['myth',     '🌌 신화 이상 몬스터', () => S.monsters.filter(m => RANK[CAT[m.type].rarity] >= RANK.mythic).length, [1, 10, 50], [20, 80, 250]],
 ];
@@ -7043,6 +7160,9 @@ TUT.push(
 TUT.push(
   { text: '🏆 📜 퀘스트 창의 🏆 업적에서 첫 보상을 받아요 (칭호!)', done: () => tutFlag('ach'), go: () => { closeModal(); openQuests('story'); } },
 );
+TUT.push(
+  { text: '🔥 모험 탭의 🔥 오늘의 레이드에 도전해요 (매일 바뀌는 거대 보스!)', done: () => tutFlag('raid'), go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.raid-card'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -7183,6 +7303,10 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=achAll]', '#modalBox [data-act=achClaim2]:not([disabled])', '#modalBox .chips [data-act=achOpen]', '#modalBox [data-act=achOpen]', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#questBtn'];
+    case 32: // 레이드
+      if (inModal) return ['#modalBox [data-act=close]'];
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return S.team.length ? ['#view [data-act=raidFight]:not([disabled])', '#view .raid-card'] : ['#view [data-act=teamAuto]'];
   }
   return null;
 }
@@ -7358,6 +7482,7 @@ const WELCOME = [
   { icon: '💰', title: '재화 3가지', text: '💰 <b>골드</b>: 서식지 몬스터가 벌어요 → 건물·알·교배·업그레이드<br>🍖 <b>먹이</b>: 농장에서 키워요 → 몬스터 레벨 업 (Lv.4면 교배!)<br>💎 <b>보석</b>: 미션·일일 보상·도전 과제 → 시간 단축·고급 룬<br>위쪽 <b>💰💎🍖 숫자를 누르면</b> 언제든 자세히 볼 수 있어요. 섬 위쪽 <b>🎯 다음 목표</b>도 따라가 봐요!' },
   { icon: '🐾', title: '펫', text: '섬 왼쪽 위 <b>🐾 펫 버튼</b>을 누르면 첫 펫 🐶을 선물로 받아요!<br>펫은 섬을 같이 돌아다니고, 💰골드·🍖먹이·⚔️공격·❤️체력·🏷️교배 할인 <b>보너스</b>를 줘요.<br>🍪 간식으로 Lv.10까지 키우고, 🥚 펫 알로 12마리를 모아 봐요.' },
   { icon: '🏝️', title: '섬 18개', text: '위쪽 <b>◀ ▶</b>로 섬을 옮겨 다녀요. 건물을 <b>꾹 눌러 끌면</b> 빈 땅으로 옮겨져요.<br>🎨 장식을 놓으면 그 섬 골드가 올라요.<br>두 손가락으로 <b>확대</b>, 🙈 숨기기로 이름표를 감출 수 있어요.' },
+  { icon: '🔥', title: '보스전과 레이드', text: '모험 탭 아래쪽 <b>👹 보스전</b>: 16명의 보스를 차례로! 뒤쪽 보스는 체력이 절반 아래가 되면 <b>😡 분노</b>해서 더 세져요.<br><b>🔥 오늘의 레이드</b>: 매일 바뀌는 거대 보스 (내 팀 힘에 맞춰 나와요). 하루 3번, 한 번에 10라운드! 준 피해가 쌓여서 10%·30%·60%·100%마다 보상, 끝까지 쓰러뜨리면 👑 전설 알!' },
   { icon: '⚔️', title: '모험과 보스', text: '몬스터 3마리로 팀을 짜서 싸워요 (<b>⚡ 자동 편성</b>이면 가장 센 3마리!). 📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!<br><b>🔁 연속 전투</b>를 누르면 이길 때마다 다음 스테이지로 자동으로 계속 싸워요.<br>👹 보스전에서는 에너지가 엄청 많은 보스와 싸워요.' },
   { icon: '🎉', title: '이벤트', text: '<b>3일마다</b> 새 이벤트가 열려요: 💰골드 러시, 🌾풍년 축제, ⚔️전투 대회, 🐣부화 페스티벌, 🧬교배 러시, 🌈속성 축제<br>평소처럼 놀면 <b>🎟️ 이벤트 토큰</b>이 모이고 (이벤트 주제 활동은 2배!), 패스 보상을 받아요.<br>마지막 보상은 <b>이벤트 한정 펫</b>! 섬 왼쪽 <b>🎉 버튼</b>에서 확인해요.' },
   { icon: '🏆', title: '업적과 칭호', text: '📜 퀘스트 창의 <b>🏆 업적</b>에서 수집·교배·전투·왕국·함께·특별 업적을 모아요. 단계마다 💎 보석!<br>받은 업적만큼 <b>🏅 업적 점수</b>가 쌓이고, 점수에 따라 <b>칭호</b>가 올라가요: 🌱 새싹 → 🐣 견습 → 🌿 숙련 → ⚔️ 베테랑 → 💎 엘리트 → 👑 마스터 → 🏆 전설 → 🌌 신화 조련사<br>칭호는 <b>랭킹에서 이름 옆</b>에 보여요!' },
@@ -7602,6 +7727,8 @@ const ACTIONS = {
   achClaim: (d) => achClaim(d.id),
   sound: () => toggleSound(),
   pets: () => openPets(),
+  raidFight: () => startRaid(),
+  raidClaim: (d) => raidClaim(d.k),
   menu: () => openMenu(),
   event: () => openEvent(),
   evtClaim: (d) => evtClaim(d.k),
