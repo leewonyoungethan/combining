@@ -1247,3 +1247,18 @@ body.ui-hidden .evt-btn, body.ui-hidden .quest-btn { opacity: .55; }
 .unit { position: relative; }
 .b-side.me:has(.unit:nth-child(4)) { flex-wrap: wrap; }
 .b-side.me:has(.unit:nth-child(4)) > .unit { flex-basis: calc((100% - 20px) / 3); }
+
+/* 🧪 펫 합성 · ⭐ 각성 */
+.pet-stars { color: #ffd24a; font-size: 12px; margin-left: 4px; text-shadow: 0 0 6px rgba(255, 210, 74, .8); }
+.awaken-btn { background: linear-gradient(135deg, #ffd24a, #ff9a3d); color: #3a2200; }
+.fuse-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.fuse-row { display: grid; grid-template-columns: auto auto auto auto 1fr auto; gap: 6px; align-items: center; padding: 8px; border-radius: 14px; border: 2px solid var(--line); background: rgba(255, 255, 255, .04); }
+.fuse-row.have { border-color: #ff5ce1; background: rgba(255, 92, 225, .1); }
+.fuse-row > b { color: var(--muted); }
+.fz-par, .fz-res { display: flex; flex-direction: column; align-items: center; font-size: 24px; line-height: 1.1; }
+.fz-par small, .fz-res small { font-size: 9px; color: var(--muted); }
+.fz-par.ok small { color: #7dff8f; font-weight: 900; }
+.fz-res { font-size: 30px; filter: drop-shadow(0 0 8px var(--pc)); }
+.fz-res small { color: #ffb3f0; white-space: nowrap; }
+.fuse-row .btn small { font-size: 9px; }
+@media (max-width: 560px) { .fuse-row { grid-template-columns: auto auto auto auto 1fr; } .fuse-row .btn { grid-column: 1 / -1; } }

@@ -1366,6 +1366,7 @@ const PET_RAR = {
   rare:      { name: '희귀', color: '#5cb6ff', mult: 2 },
   epic:      { name: '서사', color: '#e45cff', mult: 4 },
   legendary: { name: '전설', color: '#ffb020', mult: 8 },
+  fusion:    { name: '합성', color: '#ff5ce1', mult: 6 },
 };
 const PET_BONUS = { gold: '💰 골드', food: '🍖 수확 먹이', atk: '⚔️ 전투 공격', hp: '❤️ 전투 체력', discount: '🏷️ 교배 비용 할인' };
 const PETS = [
@@ -1388,6 +1389,15 @@ const PETS = [
   { id: 'ev_chick',  name: '병아리 삐약',   e: '🐣', r: 'legendary', b: { discount: 4, gold: 2 }, event: true },
   { id: 'ev_flamgo', name: '플라밍고 댄서', e: '🦩', r: 'legendary', b: { gold: 3, food: 4 }, event: true },
   { id: 'ev_bfly',   name: '무지개 나비',   e: '🦋', r: 'legendary', b: { gold: 4, atk: 2 }, event: true },
+  // 🧪 합성으로만 얻는 펫 (부모 두 마리를 합성)
+  { id: 'fu_tiger',  name: '호랑이 대장', e: '🐯', r: 'fusion', b: { gold: 4, food: 4, atk: 2 }, fusion: ['dog', 'cat'] },
+  { id: 'fu_roo',    name: '캥거루 복서', e: '🦘', r: 'fusion', b: { atk: 4, hp: 4 }, fusion: ['bunny', 'hamster'] },
+  { id: 'fu_wolf',   name: '달빛 늑대',   e: '🐺', r: 'fusion', b: { gold: 5, atk: 3, discount: 1 }, fusion: ['fox', 'owl'] },
+  { id: 'fu_koala',  name: '코알라 수호자', e: '🐨', r: 'fusion', b: { food: 6, hp: 4, discount: 2 }, fusion: ['penguin', 'panda'] },
+  { id: 'fu_phoenix', name: '불사조',     e: '🦅', r: 'fusion', b: { atk: 6, hp: 5, gold: 2 }, fusion: ['unicorn', 'bdragon'] },
+  { id: 'fu_seal',   name: '물범 요리사', e: '🦭', r: 'fusion', b: { food: 9, gold: 2 }, fusion: ['cat', 'penguin'] },
+  { id: 'fu_otter',  name: '수달 장인',   e: '🦦', r: 'fusion', b: { discount: 5, gold: 3 }, fusion: ['hamster', 'panda'] },
+  { id: 'fu_star',   name: '별의 신수',   e: '🌠', r: 'fusion', b: { gold: 8, atk: 6, hp: 6, food: 6 }, fusion: ['peacock', 'skydrg'] },
 ];
 const PET_MAX = 10;
 const PET_EGGS = [
@@ -1397,11 +1407,56 @@ const PET_EGGS = [
 const petById = (id) => PETS.find(p => p.id === id);
 const petLv = (id) => (S.pets && S.pets[id]) || 0;
 // 지금 데리고 다니는 펫의 보너스 (%)
+const petStar = (id) => (S.petStar && S.petStar[id]) || 0;
+const petStarMul = (id) => 1 + 0.5 * petStar(id);
 function petPct(kind) {
   const p = S.petOn && petById(S.petOn);
-  return p && p.b[kind] ? p.b[kind] * petLv(p.id) : 0;
+  return p && p.b[kind] ? p.b[kind] * petLv(p.id) * petStarMul(p.id) : 0;
 }
-const petBonusText = (p, lv) => Object.entries(p.b).map(([k, v]) => `${PET_BONUS[k]} +${v * Math.max(1, lv)}%`).join(' · ');
+const petBonusText = (p, lv) => Object.entries(p.b).map(([k, v]) => `${PET_BONUS[k]} +${Math.round(v * Math.max(1, lv) * petStarMul(p.id) * 10) / 10}%`).join(' · ');
+const petStars = (id) => (petStar(id) ? '<span class="pet-stars">' + '★'.repeat(petStar(id)) + '</span>' : '');
+// ⭐ 펫 각성 (Lv.10 펫만): 보석으로 ★1~★3, 별마다 보너스 +50%
+const PET_STAR_MAX = 3, PET_STAR_COST = [50, 100, 200];
+function petAwaken() {
+  const p = S.petOn && petById(S.petOn);
+  if (!p || petLv(p.id) < PET_MAX || petStar(p.id) >= PET_STAR_MAX) return;
+  if (!spend(PET_STAR_COST[petStar(p.id)], 'gems')) return;
+  S.petStar = S.petStar || {};
+  S.petStar[p.id] = petStar(p.id) + 1;
+  save(); updateHud(); sfx('yay');
+  toast(`⭐ ${p.name} 각성 ★${S.petStar[p.id]}! ${petBonusText(p, petLv(p.id))}`);
+  openPets();
+}
+// 🧪 펫 합성: 부모 두 마리가 Lv.5 이상이면 합성 펫이 태어난다 (부모는 그대로). 이미 있으면 레벨 +1
+const PET_FUSE_LV = 5, PET_FUSE_GEMS = 30;
+const petFuseGold = (p) => 20000 * p.fusion.reduce((s, id) => s + PET_RAR[petById(id).r].mult, 0);
+function petFuse(id) {
+  const p = petById(id);
+  if (!p || !p.fusion) return;
+  if (p.fusion.some(x => petLv(x) < PET_FUSE_LV)) { toast(`부모 펫 두 마리가 모두 Lv.${PET_FUSE_LV} 이상이어야 해요`); return; }
+  if (petLv(id) >= PET_MAX) { toast('이미 최고 레벨이에요!'); return; }
+  const gold = petFuseGold(p);
+  if (!S.infinite && (S.gold < gold || S.gems < PET_FUSE_GEMS)) { sfx('err'); toast(S.gold < gold ? '💰 골드가 부족해요' : '💎 보석이 부족해요'); return; }
+  spend(gold); spend(PET_FUSE_GEMS, 'gems');
+  S.pets = S.pets || {};
+  const isNew = !S.pets[id];
+  S.pets[id] = Math.min(PET_MAX, (S.pets[id] || 0) + 1);
+  statAdd('petFuse', 1);
+  save(); updateHud(); sfx(isNew ? 'yay' : 'hatch');
+  petReveal(p, isNew, isNew ? '🧪 합성 성공! 새 펫' : '');
+}
+function petFuseHTML() {
+  return `<h3 class="sub" id="petFuse" data-act="petFuseSeen">🧪 펫 합성 <small class="muted">부모 두 마리가 Lv.${PET_FUSE_LV} 이상이면 합성 펫이 태어나요 (부모는 그대로!)</small></h3>
+    <div class="fuse-list">${PETS.filter(p => p.fusion).map(p => {
+      const [a, b] = p.fusion.map(petById), ok = p.fusion.every(x => petLv(x) >= PET_FUSE_LV), have = petLv(p.id);
+      const par = (x) => `<span class="fz-par ${petLv(x.id) >= PET_FUSE_LV ? 'ok' : ''}">${petLv(x.id) ? x.e : '❔'}<small>${petLv(x.id) ? 'Lv.' + petLv(x.id) : '없음'}</small></span>`;
+      return `<div class="fuse-row ${have ? 'have' : ''}">
+        ${par(a)}<b>+</b>${par(b)}<b>→</b>
+        <span class="fz-res" style="--pc:${PET_RAR.fusion.color}">${p.e}<small>${p.name}${have ? ' Lv.' + have : ''}</small></span>
+        <button class="btn small ${ok ? 'green' : ''}" data-act="petFuse" data-id="${p.id}" ${ok && have < PET_MAX ? '' : 'disabled'}>${have >= PET_MAX ? '최고!' : `🧪 ${have ? '레벨 +1' : '합성'}<br><small>💰${shortNum(petFuseGold(p))} 💎${PET_FUSE_GEMS}</small>`}</button>
+      </div>`;
+    }).join('')}</div>`;
+}
 const petTreatCost = (p) => Math.round(800 * Math.pow(petLv(p.id), 2) * PET_RAR[p.r].mult);
 function openPets() {
   tutFlag('pet', true);
@@ -1417,14 +1472,16 @@ function openPets() {
   showModal(`<h3>🐾 펫</h3>
     ${on ? `<div class="pet-main" style="--pc:${PET_RAR[on.r].color}">
       <div class="pm-face">${on.e}</div>
-      <div class="pm-info"><b>${on.name}</b> <span class="pet-rar">${PET_RAR[on.r].name}</span><div class="pm-lv">Lv.${petLv(on.id)} / ${PET_MAX}</div>
+      <div class="pm-info"><b>${on.name}</b> <span class="pet-rar">${PET_RAR[on.r].name}</span>${petStars(on.id)}<div class="pm-lv">Lv.${petLv(on.id)} / ${PET_MAX}</div>
         <div class="pm-bonus">${petBonusText(on, petLv(on.id))}</div></div>
-      ${petLv(on.id) < PET_MAX ? `<button class="btn green" data-act="petTreat">🍪 간식 주기<br><small>💰 ${fmt(petTreatCost(on))} → Lv.${petLv(on.id) + 1}</small></button>` : '<div class="pm-max">⭐ 최고 레벨!</div>'}
+      ${petLv(on.id) < PET_MAX ? `<button class="btn green" data-act="petTreat">🍪 간식 주기<br><small>💰 ${fmt(petTreatCost(on))} → Lv.${petLv(on.id) + 1}</small></button>`
+        : petStar(on.id) < PET_STAR_MAX ? `<button class="btn awaken-btn" data-act="petAwaken">⭐ 각성 ★${petStar(on.id) + 1}<br><small>💎 ${PET_STAR_COST[petStar(on.id)]} · 보너스 +50%</small></button>` : '<div class="pm-max">🌟 최고 각성 ★3!</div>'}
     </div>` : '<p class="muted">데리고 다닐 펫을 골라요!</p>'}
     <h3 class="sub">📚 펫 도감 <small class="muted">${owned} / ${PETS.length}</small></h3>
     <div class="pet-grid">${PETS.map(p => { const lv = petLv(p.id); return lv ? `<button class="pet-card ${S.petOn === p.id ? 'on' : ''}" data-act="petEquip" data-id="${p.id}" style="--pc:${PET_RAR[p.r].color}">
-        <span class="pc-face">${p.e}</span><b>${p.name}</b><small>Lv.${lv} · ${p.event ? '🎉 한정' : PET_RAR[p.r].name}</small><small class="pc-b">${petBonusText(p, lv)}</small><span class="pc-tag">${S.petOn === p.id ? '✅ 함께하는 중' : '데리고 다니기'}</span></button>`
-      : `<div class="pet-card locked" style="--pc:${PET_RAR[p.r].color}"><span class="pc-face">${p.event ? p.e : '❔'}</span><b>${p.event ? p.name : '???'}</b><small>${p.event ? '🎉 이벤트 한정' : PET_RAR[p.r].name}</small></div>`; }).join('')}</div>
+        <span class="pc-face">${p.e}</span><b>${p.name}</b>${petStars(p.id)}<small>Lv.${lv} · ${p.event ? '🎉 한정' : PET_RAR[p.r].name}</small><small class="pc-b">${petBonusText(p, lv)}</small><span class="pc-tag">${S.petOn === p.id ? '✅ 함께하는 중' : '데리고 다니기'}</span></button>`
+      : `<div class="pet-card locked" style="--pc:${PET_RAR[p.r].color}"><span class="pc-face">${p.event || p.fusion ? p.e : '❔'}</span><b>${p.event || p.fusion ? p.name : '???'}</b><small>${p.event ? '🎉 이벤트 한정' : p.fusion ? '🧪 합성으로' : PET_RAR[p.r].name}</small></div>`; }).join('')}</div>
+    ${petFuseHTML()}
     <h3 class="sub">🥚 펫 알 <small class="muted">같은 펫이 또 나오면 레벨 +1</small></h3>
     <div class="pet-eggs">${PET_EGGS.map(eg => `<button class="btn ${eg.cur === 'gems' ? '' : 'green'}" data-act="petEgg" data-id="${eg.id}">${eg.e} ${eg.name}<br><small>${eg.cur === 'gems' ? '💎' : '💰'} ${fmt(eg.cost)} · ${Object.entries(eg.w).filter(([, v]) => v).map(([r, v]) => PET_RAR[r].name + ' ' + Math.round(v * 100) + '%').join(' ')}</small></button>`).join('')}</div>
     <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
@@ -6797,6 +6854,8 @@ const ACH_MORE = [
   ['raidClear', '🔥 레이드 보스 쓰러뜨리기', 'stat', [1, 5, 20, 50], [20, 60, 150, 400]],
   ['clone',    '🧬 몬스터 복제', 'stat', [1, 10, 100], [50, 150, 500]],
   ['coopWin',  '🤝 협동 레이드 승리', 'stat', [1, 5, 20], [30, 80, 200]],
+  ['fusepet',  '🧪 합성 펫 모으기', () => PETS.filter(p => p.fusion && petLv(p.id)).length, [1, 4, 8], [20, 80, 250]],
+  ['petstar',  '⭐ 펫 각성 ★', () => Math.max(0, ...PETS.map(p => petStar(p.id))), [1, 3], [30, 150]],
   ['lv20',     '⬆️ Lv.20 몬스터', () => S.monsters.filter(m => m.lv >= MAX_LV).length, [1, 10, 50], [10, 40, 120]],
   ['myth',     '🌌 신화 이상 몬스터', () => S.monsters.filter(m => RANK[CAT[m.type].rarity] >= RANK.mythic).length, [1, 10, 50], [20, 80, 250]],
 ];
@@ -7367,6 +7426,9 @@ TUT.push(
 TUT.push(
   { text: '🤝 친구 대전 창에서 친구와 함께 보스 레이드를 해 봐요 (둘 다 큰 보상!)', done: () => tutFlag('coop') || stat('coopWin') > 0, go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
 );
+TUT.push(
+  { text: '🧪 펫 창의 🧪 펫 합성을 봐요 (두 펫을 합쳐 새 펫!)', done: () => tutFlag('petfuse') || PETS.some(p => p.fusion && petLv(p.id)), go: () => { closeModal(); openPets(); setTimeout(() => { const el = document.getElementById('petFuse'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 120); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -7518,6 +7580,10 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox .coop-box h4', '#modalBox [data-act=pvpCancel]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=pvp]'];
+    case 35: // 펫 합성
+      if (inModal) return ['#modalBox [data-act=petFuse]:not([disabled])', '#modalBox #petFuse', '#modalBox [data-act=close]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#petBtn'];
   }
   return null;
 }
@@ -7691,6 +7757,7 @@ const WELCOME = [
   { icon: '🌾', title: '농장과 먹이', text: '농장에 작물을 심으면 먹이 🍖가 생겨요. 오래 걸리는 작물일수록 효율이 좋아요.<br>작물을 고를 때 <b>🌾 모든 농장에</b>를 누르면 한 번에 심어요.<br>몬스터에게 먹이를 주면 <b>레벨이 올라요</b>.' },
   { icon: '🏔️', title: '교배', text: '<b>Lv.4</b> 몬스터 두 마리를 교배산에 넣으면 <b>새 몬스터</b>가 태어나요!<br>등급은 <b>일반 → … → 서사 → 전설 → 신화</b>까지 15단계. 타이머가 길수록 좋은 등급이에요.<br>📖 도감에서 몬스터를 누르면 <b>추천 교배 조합</b>을 알려 줘요.' },
   { icon: '💰', title: '재화 3가지', text: '💰 <b>골드</b>: 서식지 몬스터가 벌어요 → 건물·알·교배·업그레이드<br>🍖 <b>먹이</b>: 농장에서 키워요 → 몬스터 레벨 업 (Lv.4면 교배!)<br>💎 <b>보석</b>: 미션·일일 보상·도전 과제 → 시간 단축·고급 룬<br>위쪽 <b>💰💎🍖 숫자를 누르면</b> 언제든 자세히 볼 수 있어요. 섬 위쪽 <b>🎯 다음 목표</b>도 따라가 봐요!' },
+  { icon: '🧪', title: '펫 합성과 각성', text: '🐾 펫 창 아래쪽 <b>🧪 펫 합성</b>: 부모 펫 두 마리가 <b>Lv.5 이상</b>이면 새로운 <b>합성 펫</b>이 태어나요 (부모는 그대로!). 예) 🐶+🐱 → 🐯 호랑이 대장, 🦚+🐉 → 🌠 별의 신수<br><b>⭐ 각성</b>: Lv.10 펫을 💎로 ★3까지! 별마다 보너스 +50%' },
   { icon: '🐾', title: '펫', text: '섬 왼쪽 위 <b>🐾 펫 버튼</b>을 누르면 첫 펫 🐶을 선물로 받아요!<br>펫은 섬을 같이 돌아다니고, 💰골드·🍖먹이·⚔️공격·❤️체력·🏷️교배 할인 <b>보너스</b>를 줘요.<br>🍪 간식으로 Lv.10까지 키우고, 🥚 펫 알로 12마리를 모아 봐요.' },
   { icon: '🏝️', title: '섬 18개', text: '위쪽 <b>◀ ▶</b>로 섬을 옮겨 다녀요. 건물을 <b>꾹 눌러 끌면</b> 빈 땅으로 옮겨져요.<br>🎨 장식을 놓으면 그 섬 골드가 올라요.<br>두 손가락으로 <b>확대</b>, 🙈 숨기기로 이름표를 감출 수 있어요.' },
   { icon: '🤝', title: '협동 레이드', text: '모험 탭 → 👥 <b>친구 대전</b> 창 아래 <b>🤝 친구와 함께 보스 레이드</b>!<br>한 명이 <b>레이드 방</b>을 만들고, 친구가 코드로 들어오면 두 팀(최대 6마리)이 힘을 합쳐 <b>엄청 센 보스</b>와 싸워요.<br>각자 자기 몬스터 차례에 스킬을 골라요 (🤖 자동도 돼요). 이기면 <b>둘 다</b> 💎60 · 골드 · ★★★ 룬 · 👑 전설 알!' },
@@ -7966,6 +8033,9 @@ const ACTIONS = {
   petEgg: (d) => petEgg(d.id),
   petTreat: () => petTreat(),
   petEquip: (d) => petEquip(d.id),
+  petFuse: (d) => { tutFlag('petfuse', true); petFuse(d.id); },
+  petFuseSeen: () => { if (!tutFlag('petfuse')) { tutFlag('petfuse', true); toast('🧪 부모 펫 두 마리를 Lv.5까지 키우면 합성할 수 있어요!'); updateGuide(); } },
+  petAwaken: () => petAwaken(),
   resInfo: (d) => openResInfo(d.r),
   resGo: (d) => { closeModal(); tab = d.to; render(); },
   shopGo: (d) => goShop(d.id),
