@@ -1271,3 +1271,7 @@ body.ui-hidden .evt-btn, body.ui-hidden .quest-btn { opacity: .55; }
 .rank-box b { font-size: 13px; color: var(--rc); }
 .rank-box small { font-size: 10px; color: var(--muted); }
 .rb-cost { font-weight: 900; color: #ffe066; font-size: 13px; }
+
+/* 🌌 우주 발전 */
+.cosmos-list .cos-row { border: 1px solid #a78bfa; background: radial-gradient(circle at 10% 50%, rgba(167, 139, 250, .28), rgba(10, 10, 40, .5) 70%); }
+#shopCosmos { color: #c4b5fd; }
