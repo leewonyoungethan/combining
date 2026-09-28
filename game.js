@@ -5535,7 +5535,7 @@ function openPvp() {
       <button class="btn green" data-act="pvpJoin" ${n ? '' : 'disabled'}>🔑 들어가기</button>
     </div>
     <div class="coop-box">
-      <h4>🤝 친구와 함께 보스 레이드</h4>
+      <h4 data-act="coopSeen">🤝 친구와 함께 보스 레이드</h4>
       <p class="muted">친구와 팀을 합쳐 (최대 6마리) <b>엄청 센 보스</b>와 싸워요! 이기면 <b>둘 다</b> 💎60 · 골드 · ★★★ 룬 · 👑 전설 알</p>
       <div class="row"><button class="btn big coop-btn" data-act="coopHost" ${n ? '' : 'disabled'}>🏠 레이드 방 만들기</button></div>
       <input id="coopCode" maxlength="6" placeholder="친구의 레이드 방 코드" style="text-transform:uppercase">
@@ -7364,6 +7364,9 @@ TUT.push(
 TUT.push(
   { text: '🧬 상점의 🧬 복제기를 봐요 (💰10Qi · 복제 한 번 💰10M)', done: () => tutFlag('cloner') || clonerIdx() >= 0, go: () => goShop('shopCloner') },
 );
+TUT.push(
+  { text: '🤝 친구 대전 창에서 친구와 함께 보스 레이드를 해 봐요 (둘 다 큰 보상!)', done: () => tutFlag('coop') || stat('coopWin') > 0, go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -7511,6 +7514,10 @@ function tutPoint(k) {
     case 33: // 복제기
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopCloner]', '#shopCloner'];
+    case 34: // 협동 레이드
+      if (inModal) return ['#modalBox .coop-box h4', '#modalBox [data-act=pvpCancel]', '#modalBox [data-act=close]'];
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return ['.pvp-box [data-act=pvp]'];
   }
   return null;
 }
@@ -7868,8 +7875,9 @@ const ACTIONS = {
   giftUndo: () => { if (!SHARE || !SHARE.undo || SHARE.done) return; const u = SHARE.undo; SHARE.undo = null; stopShare(); u(); closeModal(); toast('↩️ 선물을 취소하고 돌려받았어요'); },
   copyCode: () => { const ta = $('#modalBox .code-box'); if (!ta) return; ta.select(); try { navigator.clipboard.writeText(ta.value).then(() => toast('📋 코드를 복사했어요! 친구에게 붙여 넣어 보내 주세요'), () => { document.execCommand('copy'); toast('📋 복사했어요'); }); } catch (e) { document.execCommand('copy'); toast('📋 복사했어요'); } },
   pvp: () => openPvp(),
-  coopHost: () => pvpHost(0, true),
-  coopJoin: () => pvpJoin(true),
+  coopHost: () => { tutFlag('coop', true); pvpHost(0, true); },
+  coopJoin: () => { tutFlag('coop', true); pvpJoin(true); },
+  coopSeen: () => { if (!tutFlag('coop')) { tutFlag('coop', true); toast('🤝 한 명이 레이드 방을 만들고, 친구가 코드로 들어오면 시작해요!'); updateGuide(); } },
   ranking: () => openRanking(),
   guildOpen: () => openGuild(),
   guildTab: (d) => openGuild(d.t),
