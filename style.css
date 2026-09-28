@@ -1275,3 +1275,28 @@ body.ui-hidden .evt-btn, body.ui-hidden .quest-btn { opacity: .55; }
 /* 🌌 우주 발전 */
 .cosmos-list .cos-row { border: 1px solid #a78bfa; background: radial-gradient(circle at 10% 50%, rgba(167, 139, 250, .28), rgba(10, 10, 40, .5) 70%); }
 #shopCosmos { color: #c4b5fd; }
+
+/* 👫 친구 */
+.fr-btn { position: relative; }
+.fr-dot { position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: #ff4d6d; color: #fff; font-size: 12px; font-weight: 900; line-height: 20px; }
+.fr-me { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; padding: 10px; border-radius: 14px; background: rgba(255, 255, 255, .07); }
+.fr-me small { flex-basis: 100%; }
+.fr-code { font-size: 22px; letter-spacing: 3px; color: #7dd3fc; font-family: monospace; }
+.fr-add { display: flex; gap: 6px; margin: 8px 0 2px; }
+.fr-add input { flex: 1; min-width: 0; }
+.fr-tip { margin: 2px 0 6px; font-size: 11px; }
+.fr-panel h4 { margin: 12px 0 6px; text-align: left; }
+.fr-list { max-height: 44vh; overflow-y: auto; }
+.fr-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px; margin: 5px 0; border-radius: 12px; background: rgba(255, 255, 255, .06); text-align: left; }
+.fr-row.req { border: 1px solid #7dff8f; }
+.fr-face { font-size: 30px; text-align: center; }
+.fr-name { font-size: 13px; overflow: hidden; }
+.fr-btns { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; max-width: 150px; }
+.fr-btns .btn { padding: 6px 8px; min-width: 0; }
+.fr-on { color: #7dff8f; font-weight: 900; }
+.fr-inv, .fr-gifts { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; padding: 10px; margin: 8px 0; border-radius: 14px; }
+.fr-inv { background: linear-gradient(90deg, rgba(255, 107, 107, .3), rgba(255, 176, 32, .25)); border: 2px solid #ffb020; animation: ldBob 0.8s ease-in-out infinite alternate; }
+.fr-gifts { background: rgba(255, 105, 180, .18); border: 1px solid #ff69b4; }
+.rank-row.rk5 { grid-template-columns: 34px 34px minmax(0, 1fr) auto 28px; }
+.rk-fr { width: 28px; text-align: center; flex: none; }
+.rk-fr.add { border: 0; border-radius: 50%; height: 28px; background: #34d399; color: #fff; font-weight: 900; cursor: pointer; }

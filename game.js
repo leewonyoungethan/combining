@@ -4506,6 +4506,7 @@ function renderAdventure() {
         <button class="btn big-rnd" data-act="pvpRandom">🌍 랜덤 대전<small>모르는 사람과 바로 매칭! 이기면 🏆 +${TROPHY_WIN}</small></button>
         <button class="btn guild-btn" data-act="guildOpen">🛡️ 길드<small>${S.guild ? `${esc(S.guild.emblem)} ${esc(S.guild.name)} · 골드 +${guildPct()}%` : '길드원과 함께 골드 보너스!'}</small></button>
         <button class="btn rank-btn" data-act="ranking">🏆 랭킹<small>${tierOf(S.trophies).icon} ${tierOf(S.trophies).name} · 🏆 ${fmt(S.trophies || 0)}</small></button>
+        <button class="btn fr-btn" data-act="friends">👫 친구<small>${(S.friends || []).length}명 · 💌 하트 · ⚔️ 초대</small><span class="fr-dot" style="${frNewCount() ? '' : 'display:none'}">${frNewCount()}</span></button>
         <button class="btn" data-act="pvp">⚔️ 친구 대전<small>이기면 💰${fmt(PVP_REWARD.gold)} + 💎${PVP_REWARD.gems}</small></button>
         <button class="btn" data-act="giftSend">🎁 선물 보내기<small>몬스터·골드·룬</small></button>
         <button class="btn green" data-act="giftRecv">📥 선물 받기${(S.giftBox || []).length ? `<small>📦 보관함 ${S.giftBox.length}</small>` : '<small>코드 붙여넣기</small>'}</button>
@@ -5308,15 +5309,226 @@ async function openRanking(cat) {
   list.sort((a, b) => b[rankCat] - a[rankCat] || a.t - b.t);
   const myPos = list.findIndex(p => p.id === me.id) + 1;
   const medal = (k) => (k === 0 ? '🥇' : k === 1 ? '🥈' : k === 2 ? '🥉' : `<small>${k + 1}</small>`);
-  const row = (p, k) => `<div class="rank-row ${p.id === me.id ? 'me' : ''} ${k < 3 ? 'top' : ''}">
+  const row = (p, k) => `<div class="rank-row rk5 ${p.id === me.id ? 'me' : ''} ${k < 3 ? 'top' : ''}">
       <span class="rk-pos">${medal(k)}</span>
       <span class="rk-face">${esc(p.f)}</span>
       <span class="rk-name">${esc(p.n)}${p.id === me.id ? ' <small>(나)</small>' : ''}<br>${tierBadge(p.tr)} <small class="rk-title">${titleName(p.tt)}</small></span>
       <span class="rk-val">${fmt(p[rankCat])}<small>${c.unit}</small></span>
+      ${p.id !== me.id ? (frById(p.id) ? '<span class="rk-fr" title="친구">👫</span>' : `<button class="rk-fr add" data-act="frAddRank" data-id="${esc(p.id)}" title="친구 추가">➕</button>`) : '<span class="rk-fr"></span>'}
     </div>`;
   const shown = list.slice(0, 50);
   draw(`<p class="rank-mypos">내 순위: <b>${myPos}위</b> / ${list.length}명</p>${shown.map(row).join('')}${myPos > 50 ? '<div class="rank-gap">⋯</div>' + row(list[myPos - 1], myPos - 1) : ''}`);
 }
+// ===================== 👫 친구 =====================
+// 친구 코드 = 랭킹 id 앞 6글자. 랭킹 기록(최근 12시간)에서 찾아서 친구 목록(S.friends)에 넣는다.
+// 사람마다 ntfy "우편함" 주제가 하나씩 있어서 친구 요청 · 💌 하트 선물 · ⚔️ 대전 초대를 보낸다.
+const FR_MAX = 30, FR_GIFT_MAX = 10;
+const FR_BOX = (id) => 'https://ntfy.sh/monhap-fr-' + (RANK_TOPIC.includes('-dev-') ? 'dev-' : 'v1-') + id;
+const myFrCode = () => myRankData().id.slice(0, 6).toUpperCase();
+const frCodeOf = (id) => String(id).slice(0, 6).toUpperCase();
+const frById = (id) => (S.friends || []).find(f => f.id === id);
+let frInviteTo = null, frBusy = false;
+// 친구에게 보여 줄 내 정보 (짧게)
+function frMe() { const d = myRankData(); return { id: d.id, n: d.n, f: d.f, tr: d.tr, dex: d.dex, st: d.st, pw: d.pw, tt: d.tt }; }
+function frClean(p) {
+  const num = (x, hi) => Math.max(0, Math.min(hi, Math.floor(Number(x) || 0)));
+  return { id: String(p.id || '').slice(0, 20), n: safeName(String(p.n || '플레이어').slice(0, 10)), f: String(p.f || '🥚').slice(0, 4),
+    tr: num(p.tr, 99999), dex: num(p.dex, CAT_LIST.length), st: num(p.st, 9999), pw: num(p.pw, 1e8), tt: num(p.tt, TITLES.length - 1), t: Number(p.t) || 0 };
+}
+function frPost(id, msg) {
+  try { return fetch(FR_BOX(id), { method: 'POST', body: JSON.stringify({ v: 1, ...msg, from: frMe() }) }).catch(() => {}); } catch (e) { return Promise.resolve(); }
+}
+function frAdd(p, silent) {
+  S.friends = S.friends || [];
+  if (p.id === myRankData().id) { toast('자기 자신은 친구로 추가할 수 없어요 😅'); return false; }
+  const old = frById(p.id);
+  if (old) { Object.assign(old, frClean({ ...old, ...p })); return true; }
+  if (S.friends.length >= FR_MAX) { toast(`친구는 ${FR_MAX}명까지예요`); return false; }
+  S.friends.push({ ...frClean(p), mutual: 0, added: Date.now() });
+  S.frReq = (S.frReq || []).filter(r => r.id !== p.id);
+  frPost(p.id, { k: 'req' });
+  if (!silent) { sfx('yay'); toast(`👫 ${safeName(p.n)}님을 친구로 추가했어요! 상대에게 친구 요청을 보냈어요`); }
+  save();
+  return true;
+}
+async function frAddByCode() {
+  const el = $('#frCode');
+  const code = (el ? el.value : '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length < 6) { toast('친구 코드 6자리를 입력해 주세요'); return; }
+  if (code.slice(0, 6) === myFrCode()) { toast('그건 내 친구 코드예요 😅'); return; }
+  if (frBusy) return;
+  frBusy = true;
+  toast('🔍 친구를 찾는 중…');
+  try {
+    const list = await rankFetch();
+    rankCache = { t: Date.now(), list };
+    const p = list.find(x => frCodeOf(x.id) === code.slice(0, 6));
+    if (!p) toast('😢 그 코드의 친구를 찾지 못했어요. 친구가 최근 12시간 안에 게임을 했는지 확인해 주세요');
+    else if (frAdd(p)) openFriends();
+  } catch (e) { toast('인터넷 연결을 확인해 주세요'); }
+  frBusy = false;
+}
+// 우편함 읽기: 친구 요청 · 수락 · 하트 · 초대
+async function frPoll() {
+  if (VISIT || !ACC || !navigator.onLine || !S.rankId) return;
+  let txt;
+  try { const r = await fetch(FR_BOX(S.rankId) + '/json?poll=1&since=12h'); if (!r.ok) return; txt = await r.text(); } catch (e) { return; }
+  S.frSeen = S.frSeen || [];
+  const seen = new Set(S.frSeen);
+  let news = 0;
+  txt.split('\n').forEach(line => {
+    if (!line.trim()) return;
+    try {
+      const ev = JSON.parse(line);
+      if (ev.event !== 'message' || seen.has(ev.id)) return;
+      seen.add(ev.id); S.frSeen.push(ev.id);
+      const d = JSON.parse(ev.message);
+      if (!d || d.v !== 1 || !d.from || typeof d.from.id !== 'string') return;
+      const from = frClean({ ...d.from, t: ev.time });
+      if (from.id === S.rankId) return;
+      const fr = frById(from.id);
+      if (fr) Object.assign(fr, from);
+      if (d.k === 'req') {
+        if (fr) { if (!fr.mutual) { fr.mutual = 1; frPost(from.id, { k: 'ok' }); toast(`🤝 ${from.n}님과 서로 친구가 되었어요!`); } }
+        else if (!(S.frReq || []).some(r => r.id === from.id)) { S.frReq = (S.frReq || []).concat([from]).slice(-20); news++; toast(`👫 ${from.n}님이 친구 요청을 보냈어요!`); }
+      } else if (d.k === 'ok') {
+        if (fr && !fr.mutual) { fr.mutual = 1; toast(`🤝 ${from.n}님이 친구 요청을 받아 줬어요!`); }
+      } else if (d.k === 'gift') {
+        if (fr) { S.frGifts = (S.frGifts || []).concat([{ id: from.id, n: from.n, f: from.f, t: ev.time }]).slice(-50); news++; }
+      } else if (d.k === 'inv' && /^[A-Z0-9]{6}$/.test(String(d.code)) && Date.now() / 1000 - ev.time < 300) {
+        S.frInv = { id: from.id, n: from.n, f: from.f, code: d.code, coop: d.coop ? 1 : 0, t: ev.time };
+        news++;
+        sfx('yay');
+        toast(`${d.coop ? '🤝' : '⚔️'} ${from.n}님이 ${d.coop ? '보스 레이드' : '대전'}에 초대했어요! 👫 친구 창에서 들어가요`);
+      }
+    } catch (e) { /* 잘못된 편지는 건너뛴다 */ }
+  });
+  if (S.frSeen.length > 300) S.frSeen = S.frSeen.slice(-300);
+  save();
+  frDot();
+  if (news && $('#modalBox .fr-panel')) openFriends();
+}
+setInterval(() => { if (!document.hidden) frPoll(); }, 45000);
+setTimeout(frPoll, 8000);
+const frInvOn = () => S.frInv && Date.now() / 1000 - S.frInv.t < 300;
+const frNewCount = () => (S.frReq || []).length + (S.frGifts || []).length + (frInvOn() ? 1 : 0);
+function frDot() {
+  const b = document.querySelector('.pvp-box [data-act=friends] .fr-dot');
+  const n = frNewCount();
+  if (b) { b.textContent = n; b.style.display = n ? '' : 'none'; }
+}
+const frGiftToday = () => (S.frGiftDay && S.frGiftDay.day === dayKey() ? S.frGiftDay : (S.frGiftDay = { day: dayKey(), sent: [], got: 0 }));
+function frSendGift(id) {
+  const fr = frById(id);
+  if (!fr) return;
+  const g = frGiftToday();
+  if (g.sent.includes(id)) { toast('오늘은 이미 보냈어요. 내일 또 보내요!'); return; }
+  g.sent.push(id);
+  frPost(id, { k: 'gift' });
+  statAdd('friendGift', 1);
+  sfx('coin'); save();
+  toast(`💌 ${fr.n}님에게 하트를 보냈어요!`);
+  openFriends();
+}
+const frGiftGold = () => Math.max(1000, Math.round(totalIncome() * 300));
+function frClaimGifts() {
+  const g = frGiftToday();
+  const list = S.frGifts || [];
+  const n = Math.min(list.length, FR_GIFT_MAX - g.got);
+  if (!list.length) return;
+  if (n <= 0) { toast(`하트는 하루에 ${FR_GIFT_MAX}개까지 받을 수 있어요. 내일 받아요!`); return; }
+  S.frGifts = list.slice(n);
+  g.got += n;
+  const gold = frGiftGold() * n;
+  earn(gold); earn(n * 2, 'gems');
+  sfx('coin'); save(); updateHud();
+  toast(`💌 하트 ${n}개! 💰 ${shortNum(gold)} + 💎 ${n * 2}`);
+  openFriends();
+}
+function frAccept(id) {
+  const r = (S.frReq || []).find(x => x.id === id);
+  if (!r) return;
+  if (frAdd(r, true)) { const fr = frById(id); fr.mutual = 1; frPost(id, { k: 'ok' }); sfx('yay'); toast(`🤝 ${r.n}님과 친구가 되었어요!`); }
+  S.frReq = (S.frReq || []).filter(x => x.id !== id);
+  save(); openFriends();
+}
+function frReject(id) { S.frReq = (S.frReq || []).filter(x => x.id !== id); save(); openFriends(); }
+function frRemove(id) {
+  const fr = frById(id);
+  if (!fr) return;
+  if (!confirm(`${fr.n}님을 친구에서 삭제할까요?`)) return;
+  S.friends = S.friends.filter(f => f.id !== id);
+  save(); openFriends();
+}
+function frInvite(id, coop) {
+  const fr = frById(id);
+  if (!fr) return;
+  if (!window.Peer) { toast('대전 기능을 아직 불러오는 중이에요. 잠시 뒤에 다시 눌러 주세요'); return; }
+  if (!S.team.map(byUid).filter(Boolean).length) { toast('먼저 모험 탭에서 팀을 짜 주세요!'); return; }
+  frInviteTo = id;
+  pvpHost(0, !!coop);
+  toast(`${coop ? '🤝' : '⚔️'} ${fr.n}님에게 초대를 보내는 중… 친구가 들어오면 시작돼요`);
+}
+function frJoinInvite() {
+  if (!frInvOn()) { toast('초대가 끝났어요 (5분이 지났어요)'); S.frInv = null; openFriends(); return; }
+  if (!S.team.map(byUid).filter(Boolean).length) { toast('먼저 모험 탭에서 팀을 짜 주세요!'); return; }
+  const inv = S.frInv;
+  S.frInv = null; save();
+  pvpJoin(!!inv.coop, inv.code);
+}
+function frAgo(t) {
+  const s = Date.now() / 1000 - (t || 0);
+  if (!t) return '';
+  if (s < 600) return '<span class="fr-on">🟢 접속 중</span>';
+  if (s < 3600) return `${Math.floor(s / 60)}분 전`;
+  if (s < 86400) return `${Math.floor(s / 3600)}시간 전`;
+  return `${Math.floor(s / 86400)}일 전`;
+}
+async function openFriends(refresh) {
+  tutFlag('friendAdd', true);
+  const g = frGiftToday();
+  const fr = (S.friends || []).slice().sort((a, b) => (b.t || 0) - (a.t || 0));
+  const req = S.frReq || [], gifts = S.frGifts || [];
+  showModal(`<div class="fr-panel"><h3>👫 친구</h3>
+    <div class="fr-me">내 친구 코드 <b class="fr-code">${myFrCode()}</b> <button class="btn small" data-act="frCopy">📋 복사</button>
+      <small class="muted">친구에게 알려 주면 나를 추가할 수 있어요</small></div>
+    <div class="fr-add"><input id="frCode" maxlength="12" placeholder="친구 코드 6자리 (예: K7QM2P)" style="text-transform:uppercase"><button class="btn green" data-act="frAdd">➕ 추가</button></div>
+    <p class="muted fr-tip">🏆 랭킹에서 사람 옆의 ➕를 눌러도 친구가 돼요</p>
+    ${frInvOn() ? `<div class="fr-inv">${S.frInv.coop ? '🤝' : '⚔️'} <b>${esc(S.frInv.f)} ${esc(S.frInv.n)}</b>님이 ${S.frInv.coop ? '보스 레이드' : '대전'}에 초대했어요!
+      <button class="btn green" data-act="frJoin">🔑 들어가기</button></div>` : ''}
+    ${req.length ? `<h4>📨 친구 요청 ${req.length}</h4>${req.map(r => `<div class="fr-row req"><span class="fr-face">${esc(r.f)}</span>
+      <span class="fr-name"><b>${esc(r.n)}</b><br>${tierBadge(r.tr)} <small>📖 ${fmt(r.dex)} · ⚔️ ${fmt(r.st)}</small></span>
+      <span class="fr-btns"><button class="btn small green" data-act="frAccept" data-id="${esc(r.id)}">✅ 수락</button><button class="btn small ghost" data-act="frReject" data-id="${esc(r.id)}">✖</button></span></div>`).join('')}` : ''}
+    ${gifts.length ? `<div class="fr-gifts">💌 받은 하트 <b>${gifts.length}</b>개 <small class="muted">(하나에 💰 ${shortNum(frGiftGold())} + 💎 2 · 오늘 ${g.got}/${FR_GIFT_MAX})</small>
+      <button class="btn green small" data-act="frClaim">받기</button></div>` : ''}
+    <h4>👫 내 친구 ${fr.length}/${FR_MAX} <small class="muted">💌 하트는 친구마다 하루에 한 번</small></h4>
+    <div class="fr-list">${fr.length ? fr.map(f => `<div class="fr-row">
+        <span class="fr-face">${esc(f.f)}</span>
+        <span class="fr-name"><b>${esc(f.n)}</b> ${f.mutual ? '<small title="서로 친구">🤝</small>' : '<small class="muted">요청 보냄</small>'}<br>
+          ${tierBadge(f.tr)} <small>📖 ${fmt(f.dex)} · ⚔️ ${fmt(f.st)} · 💪 ${shortNum(f.pw)}</small><br><small class="muted">${frAgo(f.t)}</small></span>
+        <span class="fr-btns">
+          <button class="btn small ${g.sent.includes(f.id) ? 'ghost' : 'green'}" data-act="frGift" data-id="${esc(f.id)}" ${g.sent.includes(f.id) ? 'disabled' : ''}>💌${g.sent.includes(f.id) ? '✅' : ''}</button>
+          <button class="btn small" data-act="frInvite" data-id="${esc(f.id)}" title="대전 초대">⚔️</button>
+          <button class="btn small coop-btn" data-act="frInvite" data-id="${esc(f.id)}" data-coop="1" title="레이드 초대">🤝</button>
+          <button class="btn small ghost" data-act="frRemove" data-id="${esc(f.id)}" title="삭제">🗑️</button>
+        </span></div>`).join('') : '<p class="muted">아직 친구가 없어요. 친구 코드를 넣어 추가해 봐요!</p>'}</div>
+    <div class="row"><button class="btn ghost small" data-act="frRefresh">🔄 새로고침</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+  frDot();
+  // 친구 정보(트로피·접속 시간)를 랭킹에서 새로 받아 온다
+  if (refresh && fr.length && !frBusy) {
+    frBusy = true;
+    try {
+      const list = await rankFetch();
+      rankCache = { t: Date.now(), list };
+      list.forEach(p => { const f = frById(p.id); if (f) Object.assign(f, frClean({ ...f, ...p })); });
+      save();
+    } catch (e) { /* 인터넷 없음 */ }
+    frBusy = false;
+    await frPoll();
+    if ($('#modalBox .fr-panel')) openFriends();
+  }
+}
+
 // ===================== 🛡️ 길드 =====================
 // 서버가 없어서: 길드원 각자가 랭킹 기록에 "내 길드"를 같이 올리고, 모두의 기록을 모아서 길드를 만든다.
 // 채팅은 길드마다 ntfy 주제 하나. 모르는 사람과도 대화하니까 정해진 말과 이모지만 보낼 수 있다.
@@ -5747,6 +5959,7 @@ function pvpHost(retry = 0, coop = false) {
   NET = { peer, role: 'host', code, coop };
   pvpWaitModal(coop ? '🤝 레이드 방을 만드는 중…' : '🏠 방을 만드는 중…', '<p class="muted">잠깐만 기다려 주세요</p>');
   peer.on('open', () => {
+    if (frInviteTo) { frPost(frInviteTo, { k: 'inv', code, coop: coop ? 1 : 0 }); frInviteTo = null; }
     pvpWaitModal(coop ? '🤝 레이드 방을 만들었어요!' : '🏠 방을 만들었어요!', `<p class="muted">이 코드를 친구에게 알려 주세요${coop ? ' (친구는 <b>🔑 레이드 들어가기</b>에 넣어요)' : ''}</p>
       <div class="pvp-code">${code}</div>
       <div class="row"><button class="btn small" data-act="pvpCopy" data-code="${code}">📋 코드 복사</button></div>
@@ -5762,9 +5975,9 @@ function pvpHost(retry = 0, coop = false) {
     toast('연결 오류: ' + e.type);
   });
 }
-function pvpJoin(coop = false) {
+function pvpJoin(coop = false, codeIn) {
   if (!saveNick()) return;
-  const code = ($(coop ? '#coopCode' : '#pvpCode') ? $(coop ? '#coopCode' : '#pvpCode').value : '').trim().toUpperCase();
+  const code = (codeIn || ($(coop ? '#coopCode' : '#pvpCode') ? $(coop ? '#coopCode' : '#pvpCode').value : '')).trim().toUpperCase();
   if (!/^[A-Z0-9]{6}$/.test(code)) { toast('방 코드 6자리를 입력해 주세요'); return; }
   netClose();
   const peer = new Peer();
@@ -6980,6 +7193,7 @@ const ACH_MORE = [
   ['boss',     '👹 보스 물리치기', () => Object.keys(S.bossCleared || {}).length, [1, 3, 6, 10, 16], [10, 30, 80, 200, 600]],
   ['raidClear', '🔥 레이드 보스 쓰러뜨리기', 'stat', [1, 5, 20, 50], [20, 60, 150, 400]],
   ['clone',    '🧬 몬스터 복제', 'stat', [1, 10, 100], [50, 150, 500]],
+  ['friendGift', '💌 친구에게 하트 보내기', 'stat', [1, 10, 50, 200], [10, 30, 80, 200]],
   ['coopWin',  '🤝 협동 레이드 승리', 'stat', [1, 5, 20], [30, 80, 200]],
   ['fusepet',  '🧪 합성 펫 모으기', () => PETS.filter(p => p.fusion && petLv(p.id)).length, [1, 4, 8], [20, 80, 250]],
   ['petstar',  '⭐ 펫 각성 ★', () => Math.max(0, ...PETS.map(p => petStar(p.id))), [1, 3], [30, 150]],
@@ -7559,6 +7773,10 @@ TUT.push(
 TUT.push(
   { text: '🌌 상점의 🌌 우주 발전을 봐요 (엄청난 골드를 쓰는 곳!)', done: () => tutFlag('cosmos') || cosTotal() > 0, go: () => goShop('shopCosmos') },
 );
+TUT.push(
+  { text: '👫 모험 탭의 👫 친구에서 친구 코드로 친구를 추가해 봐요 (💌 하트 · ⚔️ 초대!)', done: () => tutFlag('friendAdd') || (S.friends || []).length > 0,
+    go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -7717,6 +7935,10 @@ function tutPoint(k) {
     case 36: // 우주 발전
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopCosmos]', '#shopCosmos'];
+    case 37: // 친구
+      if (inModal) return ['#modalBox #frCode', '#modalBox [data-act=close]'];
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return ['.pvp-box [data-act=friends]'];
   }
   return null;
 }
@@ -7902,6 +8124,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '👫', title: '친구', text: '모험 탭 <b>👫 친구</b>에서 내 <b>친구 코드</b>(6글자)를 친구에게 알려 주고, 친구 코드를 넣으면 친구가 돼요.<br>🏆 랭킹에서 ➕를 눌러도 추가돼요!<br>💌 <b>하트</b>를 매일 보내면 친구가 💰골드와 💎를 받아요. ⚔️ 누르면 바로 <b>대전 초대</b>, 🤝 누르면 <b>레이드 초대</b>!' },
   { icon: '🌌', title: '우주 발전', text: '골드가 <b>1Sx(1해의 1000배!)</b> 넘게 모였다면 상점의 <b>🌌 우주 발전</b>으로!<br>⚔️ 전투력 +25% · 🍀 교배 행운 · 💎 매일 보석 20개 · 🐾 펫 능력 +20% (레벨마다)<br>레벨마다 값이 <b>1000배</b>씩 오르고 끝이 없어요.<br>큰 숫자는 K·M·B·T·Qa·Qi·<b>Sx·Sp·Oc·No·Dc</b>… 순서로 커져요.' },
   { icon: '🏛️', title: '골드·보석 크게 쓰기', text: '상점의 <b>🏛️ 왕국 발전</b>: 골드로 끝없이 레벨 업 (골드·먹이·전투·교배 비용·매일 보석)<br><b>🗽 랜드마크</b>: 섬에 세우는 거대 건물, 모든 섬 골드 UP (최대 +170%)<br><b>💎 보석 상점</b>: 🤖 자동 수집 로봇, ⚡ 골드 2배 부스터, 👑 전설 알 상자' },
   { icon: '👥', title: '대전과 친구', text: '모험 탭 <b>👥 대전 · 친구</b> 칸에서<br>🌍 <b>랜덤 대전</b>으로 모르는 사람과 바로 싸우고, ⚔️ 방 코드로 <b>친구 대전</b>, 🎁 <b>선물</b>, 👀 <b>친구 섬 구경</b>도 해요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요.' },
@@ -8076,10 +8299,22 @@ const ACTIONS = {
   giftUndo: () => { if (!SHARE || !SHARE.undo || SHARE.done) return; const u = SHARE.undo; SHARE.undo = null; stopShare(); u(); closeModal(); toast('↩️ 선물을 취소하고 돌려받았어요'); },
   copyCode: () => { const ta = $('#modalBox .code-box'); if (!ta) return; ta.select(); try { navigator.clipboard.writeText(ta.value).then(() => toast('📋 코드를 복사했어요! 친구에게 붙여 넣어 보내 주세요'), () => { document.execCommand('copy'); toast('📋 복사했어요'); }); } catch (e) { document.execCommand('copy'); toast('📋 복사했어요'); } },
   pvp: () => openPvp(),
-  coopHost: () => { tutFlag('coop', true); pvpHost(0, true); },
+  coopHost: () => { tutFlag('coop', true); frInviteTo = null; pvpHost(0, true); },
   coopJoin: () => { tutFlag('coop', true); pvpJoin(true); },
   coopSeen: () => { if (!tutFlag('coop')) { tutFlag('coop', true); toast('🤝 한 명이 레이드 방을 만들고, 친구가 코드로 들어오면 시작해요!'); updateGuide(); } },
   ranking: () => openRanking(),
+  friends: () => openFriends(true),
+  frAdd: () => frAddByCode(),
+  frAddRank: (d) => { const p = rankCache && rankCache.list.find(x => x.id === d.id); if (p && frAdd(p)) openRanking(); },
+  frCopy: () => { const c = myFrCode(); try { navigator.clipboard.writeText(c); toast('📋 친구 코드 ' + c + ' 복사했어요!'); } catch (e) { toast('내 친구 코드: ' + c); } },
+  frAccept: (d) => frAccept(d.id),
+  frReject: (d) => frReject(d.id),
+  frRemove: (d) => frRemove(d.id),
+  frGift: (d) => frSendGift(d.id),
+  frClaim: () => frClaimGifts(),
+  frInvite: (d) => frInvite(d.id, d.coop === '1'),
+  frJoin: () => frJoinInvite(),
+  frRefresh: () => openFriends(true),
   guildOpen: () => openGuild(),
   guildTab: (d) => openGuild(d.t),
   guildRefresh: () => { guildCache = null; openGuild(); },
@@ -8100,7 +8335,7 @@ const ACTIONS = {
     S.nick = v; save(); toast('✏️ 이름을 바꿨어요'); rankSubmit(true).then(() => { rankCache = null; openRanking(); });
   },
   pvpRandom: () => { if ($('#pvpName') && !saveNick()) return; if (!S.nick) { openPvp(); toast('상대에게 보일 이름을 적고 🌍 랜덤 대전을 눌러요'); return; } tutFlag('friends', true); pvpRandom(); },
-  pvpHost: () => pvpHost(0, false),
+  pvpHost: () => { frInviteTo = null; pvpHost(0, false); },
   pvpJoin: () => pvpJoin(false),
   pvpCancel: () => { if (NET) clearInterval(NET.uiTimer); netClose(); closeModal(); toast('대전을 취소했어요'); },
   pvpCopy: (d) => { try { navigator.clipboard.writeText(d.code); toast('📋 코드를 복사했어요: ' + d.code); } catch (e) { toast('코드: ' + d.code); } },
