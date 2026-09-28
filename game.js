@@ -484,7 +484,7 @@ DECOS.push(
 );
 const DECO_CAP = 30;
 const decoById = (id) => DECOS.find(d => d.id === id);
-const decoCost = (d) => d.wonder ? d.cost : P(d.cost);
+const decoCost = (d) => d.wonder ? d.cost : P(d.cost, 'deco');
 const decoPrice = (d) => d.gems ? `💎 ${d.gems}` : `💰 ${shortNum(decoCost(d))}`;
 function decoPercent(k) {
   let sum = 0;
@@ -497,7 +497,7 @@ function decoPercent(k) {
 const habName = (el) => el === 'legend' ? '전설의 서식지' : `${EL[ELI[el]].name} 서식지`;
 const habEmoji = (el) => el === 'legend' ? '🏛️' : EL[ELI[el]].emoji;
 const habColor = (el) => el === 'legend' ? '#ffb020' : EL[ELI[el]].color;
-const habBuildCost = (el) => P(el === 'legend' ? 5000 : BASE.includes(el) ? 300 : 1000);
+const habBuildCost = (el) => P(el === 'legend' ? 5000 : BASE.includes(el) ? 300 : 1000, 'hab');
 const habUpCost = (lv) => P(400 * lv * lv);
 
 const RUNE = {
@@ -537,7 +537,7 @@ const SECRET_CODE = '방탄유리';
 
 function newState() {
   const s = {
-    gold: 25000, gems: 30, food: 300, infinite: false,
+    gold: 2500, gems: 30, food: 300, infinite: false,
     plots: Array(PLOTS).fill(null),
     monsters: [], nextUid: 1, hatch: [], breed: null, dex: {},
     runes: [], nextRune: 1,
@@ -651,9 +651,14 @@ function earn(n, cur = 'gold') {
   if (S.infinite) return;
   S[cur] = Math.min(MONEY_CAP, S[cur] + n);
 }
-// 💰 가격 배수: 상점 물건 값을 모두 10배로 (왕국·우주·랜드마크·복제기·보석 값은 그대로)
-const PRICE_MULT = 10;
-function P(n) { return Math.round(n * PRICE_MULT); }
+// 💰 오르는 가격: 처음 살 때는 원래 값, 같은 물건을 살 때마다 조금씩 비싸진다
+// (몇 번 샀는지는 S.buyN에 물건 종류별로 센다. 키가 없으면 원래 값 그대로)
+const PRICE_GROW = { hab: 1.15, farm: 1.25, mtn: 1.35, hatch: 1.35, egg: 1.1, hyb: 1.1, box: 1.12, rune: 1.08, food: 1.03, petegg: 1.1, deco: 1.1 };
+const buyN = (key) => (S.buyN && S.buyN[key]) || 0;
+function P(n, key) { return Math.round(key ? n * Math.pow(PRICE_GROW[key.split(':')[0]] || 1, buyN(key)) : n); }
+function bought(key) { S.buyN = S.buyN || {}; S.buyN[key] = buyN(key) + 1; }
+// 값을 내고, 샀다고 센다
+function buyP(n, key) { if (!spend(P(n, key))) return false; bought(key); return true; }
 // 모험 골드: 50스테이지까지는 1.25배씩, 그 뒤로는 1.03배씩만 (예전엔 끝없이 1.25배라 숫자가 폭발했음)
 const stageGold = (st) => st <= 50 ? 120 * Math.pow(1.25, st - 1) : 120 * Math.pow(1.25, 49) * Math.pow(1.03, st - 50);
 
@@ -1555,7 +1560,7 @@ function openPets() {
       : `<div class="pet-card locked" style="--pc:${PET_RAR[p.r].color}"><span class="pc-face">${p.event || p.fusion ? p.e : '❔'}</span><b>${p.event || p.fusion ? p.name : '???'}</b><small>${p.event ? '🎉 이벤트 한정' : p.fusion ? '🧪 합성으로' : PET_RAR[p.r].name}</small></div>`; }).join('')}</div>
     ${petFuseHTML()}
     <h3 class="sub">🥚 펫 알 <small class="muted">같은 펫이 또 나오면 레벨 +1</small></h3>
-    <div class="pet-eggs">${PET_EGGS.map(eg => `<button class="btn ${eg.cur === 'gems' ? '' : 'green'}" data-act="petEgg" data-id="${eg.id}">${eg.e} ${eg.name}<br><small>${eg.cur === 'gems' ? '💎 ' + fmt(eg.cost) : '💰 ' + shortNum(P(eg.cost))} · ${Object.entries(eg.w).filter(([, v]) => v).map(([r, v]) => PET_RAR[r].name + ' ' + Math.round(v * 100) + '%').join(' ')}</small></button>`).join('')}</div>
+    <div class="pet-eggs">${PET_EGGS.map(eg => `<button class="btn ${eg.cur === 'gems' ? '' : 'green'}" data-act="petEgg" data-id="${eg.id}">${eg.e} ${eg.name}<br><small>${eg.cur === 'gems' ? '💎 ' + fmt(eg.cost) : '💰 ' + shortNum(P(eg.cost, 'petegg'))} · ${Object.entries(eg.w).filter(([, v]) => v).map(([r, v]) => PET_RAR[r].name + ' ' + Math.round(v * 100) + '%').join(' ')}</small></button>`).join('')}</div>
     <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
 }
 function petReveal(p, isNew, title) {
@@ -1571,7 +1576,7 @@ function petReveal(p, isNew, title) {
 }
 function petEgg(id, free) {
   const eg = PET_EGGS.find(x => x.id === id);
-  if (!eg || (!free && !spend(eg.cur === 'gold' ? P(eg.cost) : eg.cost, eg.cur))) return;
+  if (!eg || (!free && !(eg.cur === 'gold' ? buyP(eg.cost, 'petegg') : spend(eg.cost, eg.cur)))) return;
   // 등급 뽑기 → 그 등급의 펫 중 하나
   let r = Math.random(), rar = 'common';
   for (const [k, v] of Object.entries(eg.w)) { if (r < v) { rar = k; break; } r -= v; }
@@ -2707,13 +2712,13 @@ function openBuild(i) {
         <span class="bo-ico">🎨</span><span class="bo-nm">섬 꾸미기 장식 <small>(골드 수입 보너스)</small></span><span class="bo-cost">▶</span>
       </button>
       <button class="build-opt" data-act="build" data-i="${i}" data-what="farm" style="--hc:#8b5a2b">
-        <span class="bo-ico">🌾</span><span class="bo-nm">농장</span><span class="bo-cost">💰 ${shortNum(P(FARM_COST))}</span>
+        <span class="bo-ico">🌾</span><span class="bo-nm">농장</span><span class="bo-cost">💰 ${shortNum(P(FARM_COST, 'farm'))}</span>
       </button>
       <button class="build-opt" data-act="build" data-i="${i}" data-what="mountain" style="--hc:#6a5acd">
-        <span class="bo-ico">🏔️</span><span class="bo-nm">교배산 <small>(${mountains().length}개 보유 · 동시에 교배)</small></span><span class="bo-cost">💰 ${shortNum(P(MOUNTAIN_COST))}</span>
+        <span class="bo-ico">🏔️</span><span class="bo-nm">교배산 <small>(${mountains().length}개 보유 · 동시에 교배)</small></span><span class="bo-cost">💰 ${shortNum(P(MOUNTAIN_COST, 'mtn'))}</span>
       </button>
       <button class="build-opt" data-act="build" data-i="${i}" data-what="hatchery" style="--hc:#c9953a">
-        <span class="bo-ico">🪺</span><span class="bo-nm">부화장 <small>(${hatcheries().length}개 보유 · 알 ${HATCH_CAP}칸 더)</small></span><span class="bo-cost">💰 ${shortNum(P(HATCHERY_COST))}</span>
+        <span class="bo-ico">🪺</span><span class="bo-nm">부화장 <small>(${hatcheries().length}개 보유 · 알 ${HATCH_CAP}칸 더)</small></span><span class="bo-cost">💰 ${shortNum(P(HATCHERY_COST, 'hatch'))}</span>
       </button>
       ${EL.map(e => habBtn(e.id)).join('')}
       ${habBtn('legend')}
@@ -2728,24 +2733,26 @@ function build(i, what) {
     const d = decoById(what.slice(5));
     if (d && d.wonder && S.plots.some(p => p && p.kind === 'deco' && p.id === d.id)) { toast('이미 지은 랜드마크예요'); return; }
     if (!d || !(d.gems ? spend(d.gems, 'gems') : spend(decoCost(d)))) return;
+    if (!d.gems && !d.wonder) bought('deco');
     S.plots[i] = { kind: 'deco', id: d.id };
     if (d.wonder) { sfx('yay'); toast(`${d.emoji} ${d.name} 완성! 모든 섬 골드 +${d.global}%`); save(); closeModal(); render(); return; }
     toast(`${d.emoji} ${d.name}을(를) 놓았어요! 이 섬 골드 +${decoPercent(islandOf(i))}%`);
   } else if (what === 'hatchery') {
-    if (!spend(P(HATCHERY_COST))) return;
+    if (!buyP(HATCHERY_COST, 'hatch')) return;
     S.plots[i] = { kind: 'hatchery', cap: HATCH_CAP };
     toast(`🪺 부화장을 하나 더 지었어요! 알을 ${hatchCap()}개까지 둘 수 있어요`);
   } else if (what === 'mountain') {
-    if (!spend(P(MOUNTAIN_COST))) return;
+    if (!buyP(MOUNTAIN_COST, 'mtn')) return;
     S.plots[i] = { kind: 'mountain', breeds: [null] };
     toast('🏔️ 교배산을 하나 더 지었어요! 동시에 교배할 수 있어요');
   } else if (what === 'farm') {
-    if (!spend(P(FARM_COST))) return;
+    if (!buyP(FARM_COST, 'farm')) return;
     S.plots[i] = { kind: 'farm', crop: null, end: 0 };
     toast('🌾 농장을 지었어요!');
   } else {
     const el = what.split(':')[1];
     if (!spend(habBuildCost(el))) return;
+    bought('hab');
     S.plots[i] = { kind: 'hab', el, lv: 1, gold: 0 };
     toast(`${habEmoji(el)} ${habName(el)}을(를) 지었어요!`);
   }
@@ -2787,9 +2794,9 @@ function openHab(i) {
 
 // ----- 철거 -----
 function demolishRefund(p) {
-  if (p.kind === 'farm') return P(FARM_COST) / 2;
-  if (p.kind === 'mountain') return P(MOUNTAIN_COST) / 2;
-  if (p.kind === 'hatchery') return Math.floor(P(HATCHERY_COST) / 2 * (p.cap || HATCH_CAP) / HATCH_CAP);
+  if (p.kind === 'farm') return P(FARM_COST, 'farm') / 2;
+  if (p.kind === 'mountain') return P(MOUNTAIN_COST, 'mtn') / 2;
+  if (p.kind === 'hatchery') return Math.floor(P(HATCHERY_COST, 'hatch') / 2 * (p.cap || HATCH_CAP) / HATCH_CAP);
   if (p.kind === 'deco') { const d = decoById(p.id); return d && d.cost ? Math.floor(decoCost(d) / 2) : 0; }
   if (p.kind === 'cloner') return Math.floor(CLONER_COST / 2);
   let spent = habBuildCost(p.el);
@@ -3101,7 +3108,7 @@ function mountainFooter(i) {
     ${n > 1 ? `<span class="muted small-note">교배산 ${mountains().indexOf(i) + 1}/${n} ${islandLabel(i)}</span>` : ''}
     ${(S.plots[i].lv || 1) > 1 ? `<span class="muted small-note">⭐ 큰 교배산 Lv.${S.plots[i].lv} · 동시에 ${mtnSlots(S.plots[i]).length}쌍 교배</span>` : ''}
     ${(S.plots[i].lv || 1) > 1 ? `<button class="btn ghost small" data-act="splitMtn" data-i="${i}">🔓 합치기 취소 (${S.plots[i].lv}개로 나누기)</button>` : ''}
-    ${canDemolish ? `<button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 철거 (+💰 ${shortNum(P(MOUNTAIN_COST) / 2)})</button>` : ''}
+    ${canDemolish ? `<button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 철거 (+💰 ${shortNum(P(MOUNTAIN_COST, 'mtn') / 2)})</button>` : ''}
     <button class="btn ghost small" data-act="close">닫기</button>
   </div>`;
 }
@@ -3906,6 +3913,7 @@ function roomOptions(idx, type) {
 function buildPlace(idx, el) {
   const i = findFreePlot();
   if (i < 0 || !spend(habBuildCost(el))) return;
+  bought('hab');
   S.plots[i] = { kind: 'hab', el, lv: 1, gold: 0 };
   place(idx, i);
 }
@@ -4178,19 +4186,19 @@ function renderShop() {
       </div>`;
     }).join('')}
       <div class="card mini hab-card" data-act="buyHab" data-el="farm">
-        <div class="price-tag">💰 ${shortNum(P(FARM_COST))}</div>
+        <div class="price-tag">💰 ${shortNum(P(FARM_COST, 'farm'))}</div>
         <div class="face" style="background:linear-gradient(135deg, #8c5a2c, #1a1a3d)">🌾</div>
         <div class="nm">농장</div>
         <div class="meta">먹이 생산</div>
       </div>
       <div class="card mini hab-card" data-act="buyHab" data-el="hatchery">
-        <div class="price-tag">💰 ${shortNum(P(HATCHERY_COST))}</div>
+        <div class="price-tag">💰 ${shortNum(P(HATCHERY_COST, 'hatch'))}</div>
         <div class="face" style="background:linear-gradient(135deg, #c9953a, #1a1a3d)">🪺</div>
         <div class="nm">부화장</div>
         <div class="meta">보유 ${hatcheries().length}개 · 알 ${hatchCap()}칸</div>
       </div>
       <div class="card mini hab-card" data-act="buyHab" data-el="mountain">
-        <div class="price-tag">💰 ${shortNum(P(MOUNTAIN_COST))}</div>
+        <div class="price-tag">💰 ${shortNum(P(MOUNTAIN_COST, 'mtn'))}</div>
         <div class="face" style="background:linear-gradient(135deg, #6a5acd, #1a1a3d)">🏔️</div>
         <div class="nm">교배산</div>
         <div class="meta">보유 ${mountains().length}개</div>
@@ -4204,10 +4212,10 @@ function renderShop() {
     ${kingdomShopHTML()}
     <h3 class="sub">🛍️ 룬 · 먹이 · 골드</h3>
     <div class="shop">
-      <button class="shop-item" data-act="buyRune" data-kind="gold"><span class="si-ico">📦</span><span class="si-nm">룬 상자<small>★ 70% · ★★ 25% · ★★★ 5%</small></span><span class="si-cost">💰 ${shortNum(P(1000))}</span></button>
+      <button class="shop-item" data-act="buyRune" data-kind="gold"><span class="si-ico">📦</span><span class="si-nm">룬 상자<small>★ 70% · ★★ 25% · ★★★ 5%</small></span><span class="si-cost">💰 ${shortNum(P(1000, 'rune'))}</span></button>
       <button class="shop-item" data-act="buyRune" data-kind="gem"><span class="si-ico">🎁</span><span class="si-nm">고급 룬 상자<small>★★ 60% · ★★★ 40%</small></span><span class="si-cost">💎 20</span></button>
-      <button class="shop-item" data-act="buyFood" data-n="100"><span class="si-ico">🍖</span><span class="si-nm">먹이 100개</span><span class="si-cost">💰 ${shortNum(P(150))}</span></button>
-      <button class="shop-item" data-act="buyFood" data-n="1000"><span class="si-ico">🍖</span><span class="si-nm">먹이 1,000개</span><span class="si-cost">💰 ${shortNum(P(1500))}</span></button>
+      <button class="shop-item" data-act="buyFood" data-n="100"><span class="si-ico">🍖</span><span class="si-nm">먹이 100개</span><span class="si-cost">💰 ${shortNum(P(150, 'food'))}</span></button>
+      <button class="shop-item" data-act="buyFood" data-n="1000"><span class="si-ico">🍖</span><span class="si-nm">먹이 1,000개</span><span class="si-cost">💰 ${shortNum(P(1500, 'food'))}</span></button>
       <button class="shop-item" data-act="buyGold" data-n="5"><span class="si-ico">💰</span><span class="si-nm">골드 500</span><span class="si-cost">💎 5</span></button>
       <button class="shop-item" data-act="buyGold" data-n="50"><span class="si-ico">💰</span><span class="si-nm">골드 6,000</span><span class="si-cost">💎 50</span></button>
     </div>
@@ -4303,7 +4311,7 @@ const MON_PRICE = 500;
 // 기본 8속성 알 + 얼음/금속/마법 서식지 전용 알 (화염 살라맨더처럼 기본 한 마리씩, 모두 500)
 const SPECIAL_EGGS = ['p:ice', 'p:metal', 'p:magic'];
 const EGG_SHOP = [...BASE.map(e => 'p:' + e), ...SPECIAL_EGGS];
-const eggPrice = () => P(MON_PRICE * (evtOn('hatchfest') ? 0.5 : 1));
+const eggPrice = () => P(MON_PRICE * (evtOn('hatchfest') ? 0.5 : 1), 'egg');
 // 🧬 혼합 몬스터 알: 두 속성 조합마다 대표 몬스터 (55종)
 const HYB_EGGS = PAIRS.map(([i, j]) => `h:${EL[i].id}+${EL[j].id}`);
 const HYB_EGG_PRICE = 1500;
@@ -4317,7 +4325,7 @@ function buyRankBox(r) {
   const box = RANK_BOXES.find(x => x.r === r);
   if (!box) return;
   if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
-  if (!spend(P(box.cost * (evtOn('hatchfest') ? 0.5 : 1)))) return;
+  if (!buyP(box.cost * (evtOn('hatchfest') ? 0.5 : 1), 'box:' + box.r)) return;
   const pool = CAT_LIST.filter(c => c.rarity === r && !c.shop);
   const c = pool[Math.floor(Math.random() * pool.length)];
   S.hatch.push(c.id);
@@ -4331,15 +4339,15 @@ function moreEggsHTML() {
   const list = HYB_EGGS.filter(t => hybEggEl === 'all' || CAT[t].els.includes(hybEggEl));
   return `<h3 class="sub" id="shopEgg2">🧬 혼합 몬스터 알 <small class="muted">두 속성 몬스터 55종 · 속성 서식지 둘 중 하나에 살아요</small></h3>
     <div class="chips">${[['all', '전체'], ...EL.map(e => [e.id, e.emoji])].map(([id, t]) => `<button class="chip ${hybEggEl === id ? 'on' : ''}" data-act="hybEggEl" data-e="${id}">${t}</button>`).join('')}</div>
-    <div class="grid small">${list.map(t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini', `<div class="price-tag">💰 ${shortNum(P(HYB_EGG_PRICE * disc))}</div>`)).join('')}</div>
+    <div class="grid small">${list.map(t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini', `<div class="price-tag">💰 ${shortNum(P(HYB_EGG_PRICE * disc, 'hyb'))}</div>`)).join('')}</div>
     <h3 class="sub" id="shopBox">🎲 등급 알 상자 <small class="muted">고른 등급의 몬스터가 무작위로! 도감 채우기에 딱</small></h3>
     <div class="rank-boxes">${RANK_BOXES.map(b => `<button class="rank-box" data-act="buyRankBox" data-r="${b.r}" style="--rc:${RAR[b.r].color}">
-        <span>🎲</span><b>${RAR[b.r].name} 알</b><small>${CAT_LIST.filter(c => c.rarity === b.r && !c.shop).length}종 중 하나</small><span class="rb-cost">💰 ${shortNum(P(b.cost * disc))}</span></button>`).join('')}</div>`;
+        <span>🎲</span><b>${RAR[b.r].name} 알</b><small>${CAT_LIST.filter(c => c.rarity === b.r && !c.shop).length}종 중 하나</small><span class="rb-cost">💰 ${shortNum(P(b.cost * disc, 'box:' + b.r))}</span></button>`).join('')}</div>`;
 }
 function buyMon(type) {
   if (CAT[type] && HYB_EGGS.includes(type)) {
     if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
-    if (!spend(P(HYB_EGG_PRICE * (evtOn('hatchfest') ? 0.5 : 1)))) return;
+    if (!buyP(HYB_EGG_PRICE * (evtOn('hatchfest') ? 0.5 : 1), 'hyb')) return;
     S.hatch.push(type);
     sfx('buy'); mission('buyEgg'); save();
     toast(`🥚 ${CAT[type].name} 알을 샀어요!`);
@@ -4349,6 +4357,7 @@ function buyMon(type) {
   if (!CAT[type] || !EGG_SHOP.includes(type)) return;
   if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
   if (!spend(eggPrice(type))) return;
+  bought('egg');
   S.hatch.push(type);
   sfx('buy');
   mission('buyEgg');
@@ -4371,7 +4380,7 @@ function buyLegend(id) {
 }
 
 function buyRune(kind) {
-  if (kind === 'gold' ? !spend(P(1000)) : !spend(20, 'gems')) return;
+  if (kind === 'gold' ? !buyP(1000, 'rune') : !spend(20, 'gems')) return;
   const r = giveRune(kind === 'gold' ? [0.7, 0.25, 0.05] : [0, 0.6, 0.4]);
   toast(`💠 ${runeText(r)} 획득!`);
   save();
@@ -4380,7 +4389,7 @@ function buyRune(kind) {
 
 function buyFood(n) {
   n = Number(n);
-  if (!spend(P(n * 1.5))) return;
+  if (!buyP(n * 1.5, 'food')) return;
   S.food += n;
   toast(`🍖 먹이 ${fmt(n)}개 구매!`);
   save();
@@ -7907,7 +7916,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
-  { icon: '📈', title: '물가', text: '상점 물건 값이 <b>10배</b>로 올랐어요!<br>알·서식지·건물·교배·합성·먹이·룬·특가·전설 몬스터·교환소가 비싸져요.<br>🏛️ 왕국 · 🌌 우주 · 🗽 랜드마크 · 🧬 복제기 · 💎 보석 가격은 그대로예요.' },
+  { icon: '📈', title: '오르는 가격', text: '처음 살 때는 <b>싸게</b>, 같은 물건을 살수록 <b>조금씩 비싸져요</b>!<br>🥚 알 · 🧬 혼합 알 · 🎲 알 상자 · 🏠 서식지 · 🌾 농장 · 🏔️ 교배산 · 🪺 부화장 · 🎨 장식 · 📦 룬 상자 · 🍖 먹이 · 🐾 펫 알<br>🏛️ 왕국 · 🌌 우주 · 🗽 랜드마크 · 🧬 복제기 · 💎 보석 가격은 원래대로예요.' },
   { icon: '🌌', title: '우주 발전', text: '골드가 <b>1Sx(1해의 1000배!)</b> 넘게 모였다면 상점의 <b>🌌 우주 발전</b>으로!<br>⚔️ 전투력 +25% · 🍀 교배 행운 · 💎 매일 보석 20개 · 🐾 펫 능력 +20% (레벨마다)<br>레벨마다 값이 <b>1000배</b>씩 오르고 끝이 없어요.<br>큰 숫자는 K·M·B·T·Qa·Qi·<b>Sx·Sp·Oc·No·Dc</b>… 순서로 커져요.' },
   { icon: '🏛️', title: '골드·보석 크게 쓰기', text: '상점의 <b>🏛️ 왕국 발전</b>: 골드로 끝없이 레벨 업 (골드·먹이·전투·교배 비용·매일 보석)<br><b>🗽 랜드마크</b>: 섬에 세우는 거대 건물, 모든 섬 골드 UP (최대 +170%)<br><b>💎 보석 상점</b>: 🤖 자동 수집 로봇, ⚡ 골드 2배 부스터, 👑 전설 알 상자' },
   { icon: '👥', title: '대전과 친구', text: '모험 탭 <b>👥 대전 · 친구</b> 칸에서<br>🌍 <b>랜덤 대전</b>으로 모르는 사람과 바로 싸우고, ⚔️ 방 코드로 <b>친구 대전</b>, 🎁 <b>선물</b>, 👀 <b>친구 섬 구경</b>도 해요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요.' },
