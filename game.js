@@ -4644,7 +4644,9 @@ async function nextTurn() {
     later(nextTurn, 800);
     return;
   }
-  if (u.side === 'me' && b.auto && !b.pvp) {
+  if (u.side === 'me' && u.remote) {
+    askRemote(u);
+  } else if (u.side === 'me' && (u.aiCtl || (b.auto && (!b.pvp || b.coop)))) {
     drawBattle();
     later(() => { if (B === b && !b.over) aiAct(u); }, 450);
   } else if (u.side === 'me') {
@@ -4652,7 +4654,7 @@ async function nextTurn() {
     if (!t || t.hp <= 0) b.target = aliveOf('foe')[0].id;
     b.waiting = true;
     drawBattle();
-  } else if (b.pvp) {
+  } else if (b.pvp && !b.coop) {
     askRemote(u);
   } else {
     later(() => aiAct(u), 650);
@@ -4803,7 +4805,7 @@ function playerSkill(i) {
   if (!sk || sk.cost > u.sta) return;
   if (B.pvp && B.pvp.role === 'guest') {
     // 친구 대전의 친구 쪽: 계산은 방장이 하니까 고른 스킬만 보낸다
-    netSend({ t: 'act', i: Number(i), target: flipId(B.target) });
+    netSend({ t: 'act', i: Number(i), target: gflip(B.target) });
     B.waiting = false;
     drawBattle();
     return;
@@ -4832,7 +4834,10 @@ function endBattle(win) {
   B.waiting = false;
   clearTimeout(B.timer);
   const rewards = [];
-  if (B.pvp) {
+  if (B.pvp && B.coop) {
+    rewards.push(...coopRewards(win));
+    if (B.pvp.role === 'host') netSend({ t: 'end', hostWin: win });
+  } else if (B.pvp) {
     if (win) { earn(PVP_REWARD.gold); earn(PVP_REWARD.gems, 'gems'); rewards.push(`💰 ${fmt(PVP_REWARD.gold)}`, `💎 ${PVP_REWARD.gems}`); }
         if (B.pvp.random) rewards.push(...pvpTrophy(win));
     if (B.pvp.role === 'host') netSend({ t: 'end', hostWin: win });
@@ -4883,6 +4888,7 @@ function quitBattle() {
 function unitHTML(u) {
   return `<div class="unit ${u.side} ${u.boss ? 'boss' : ''}" id="u-${u.id}" ${u.side === 'foe' ? `data-act="bTarget" data-id="${u.id}"` : ''}>
     <div class="tgt-mark">🎯</div>
+    ${u.ally ? '<div class="u-ally" title="친구 몬스터">🤝</div>' : ''}
     <div class="u-face" style="background:${grad(u.c)}"><span>${u.c.face}</span></div>
     <div class="u-nm">${u.c.name}</div>
     <div class="u-lv">Lv.${u.lv} ${elBadges(u.c.els)}</div>
@@ -4928,10 +4934,10 @@ function drawBattle() {
     $('#battle').innerHTML = `
       <div class="b-inner">
         <div class="b-top">
-          <b>${B.raid ? `🔥 레이드 · ${raidDef().name}` : B.gwar ? `⚔️ 길드전 · ${esc(B.gwar.opp.emblem)} ${esc(B.gwar.def.n)}` : B.pvp ? `👥 친구 대전 · vs ${B.pvp.oppName}` : B.bossIdx != null ? `👹 보스전 · ${BOSSES[B.bossIdx].name}` : `스테이지 ${B.stage}`}</b><span class="muted" id="bRound"></span>${S.petOn && petById(S.petOn) && !(B.pvp && B.pvp.role === 'guest') ? `<span class="b-pet" title="${petBonusText(petById(S.petOn), petLv(S.petOn))}">${petById(S.petOn).e}</span>` : ''}
+          <b>${B.raid ? `🔥 레이드 · ${raidDef().name}` : B.gwar ? `⚔️ 길드전 · ${esc(B.gwar.opp.emblem)} ${esc(B.gwar.def.n)}` : B.coop ? `🤝 협동 레이드 · ${B.units.find(u => u.boss) ? B.units.find(u => u.boss).c.name : ''}` : B.pvp ? `👥 친구 대전 · vs ${B.pvp.oppName}` : B.bossIdx != null ? `👹 보스전 · ${BOSSES[B.bossIdx].name}` : `스테이지 ${B.stage}`}</b><span class="muted" id="bRound"></span>${S.petOn && petById(S.petOn) && !(B.pvp && B.pvp.role === 'guest') ? `<span class="b-pet" title="${petBonusText(petById(S.petOn), petLv(S.petOn))}">${petById(S.petOn).e}</span>` : ''}
           <span class="spacer"></span>
           <button class="btn ghost small" data-act="typeChart">📘 상성표</button>
-          ${B.pvp ? '' : '<button class="btn ghost small" data-act="bAuto" id="bAuto"></button>'}
+          ${B.pvp && !B.coop ? '' : '<button class="btn ghost small" data-act="bAuto" id="bAuto"></button>'}
           <button class="btn ghost small" data-act="bFast" id="bFast"></button>
           <button class="btn ghost small" data-act="bQuit" id="bQuitTop">🏳️ 포기</button>
         </div>
@@ -5527,8 +5533,15 @@ function openPvp() {
     <input id="pvpCode" maxlength="6" placeholder="예: K7QM2P" style="text-transform:uppercase">
     <div class="row">
       <button class="btn green" data-act="pvpJoin" ${n ? '' : 'disabled'}>🔑 들어가기</button>
-      <button class="btn ghost" data-act="close">닫기</button>
-    </div>`);
+    </div>
+    <div class="coop-box">
+      <h4>🤝 친구와 함께 보스 레이드</h4>
+      <p class="muted">친구와 팀을 합쳐 (최대 6마리) <b>엄청 센 보스</b>와 싸워요! 이기면 <b>둘 다</b> 💎60 · 골드 · ★★★ 룬 · 👑 전설 알</p>
+      <div class="row"><button class="btn big coop-btn" data-act="coopHost" ${n ? '' : 'disabled'}>🏠 레이드 방 만들기</button></div>
+      <input id="coopCode" maxlength="6" placeholder="친구의 레이드 방 코드" style="text-transform:uppercase">
+      <div class="row"><button class="btn coop-btn" data-act="coopJoin" ${n ? '' : 'disabled'}>🔑 레이드 들어가기</button></div>
+    </div>
+    <div class="row"><button class="btn ghost" data-act="close">닫기</button></div>`);
 }
 function saveNick() {
   const el = $('#pvpName');
@@ -5545,15 +5558,15 @@ function pvpWaitModal(title, body) {
   showModal(`<h3>${title}</h3>${body}
     <div class="row"><button class="btn ghost" data-act="pvpCancel">취소</button></div>`);
 }
-function pvpHost(retry = 0) {
+function pvpHost(retry = 0, coop = false) {
   if (!saveNick()) return;
   netClose();
   const code = pvpCode();
   const peer = new Peer(PVP_PREFIX + code);
-  NET = { peer, role: 'host', code };
-  pvpWaitModal('🏠 방을 만드는 중…', '<p class="muted">잠깐만 기다려 주세요</p>');
+  NET = { peer, role: 'host', code, coop };
+  pvpWaitModal(coop ? '🤝 레이드 방을 만드는 중…' : '🏠 방을 만드는 중…', '<p class="muted">잠깐만 기다려 주세요</p>');
   peer.on('open', () => {
-    pvpWaitModal('🏠 방을 만들었어요!', `<p class="muted">이 코드를 친구에게 알려 주세요</p>
+    pvpWaitModal(coop ? '🤝 레이드 방을 만들었어요!' : '🏠 방을 만들었어요!', `<p class="muted">이 코드를 친구에게 알려 주세요${coop ? ' (친구는 <b>🔑 레이드 들어가기</b>에 넣어요)' : ''}</p>
       <div class="pvp-code">${code}</div>
       <div class="row"><button class="btn small" data-act="pvpCopy" data-code="${code}">📋 코드 복사</button></div>
       <p class="muted">친구가 들어오면 바로 대전이 시작돼요… ⏳</p>`);
@@ -5564,17 +5577,17 @@ function pvpHost(retry = 0) {
     setupConn(conn);
   });
   peer.on('error', (e) => {
-    if (e.type === 'unavailable-id' && retry < 3) { pvpHost(retry + 1); return; }
+    if (e.type === 'unavailable-id' && retry < 3) { pvpHost(retry + 1, coop); return; }
     toast('연결 오류: ' + e.type);
   });
 }
-function pvpJoin() {
+function pvpJoin(coop = false) {
   if (!saveNick()) return;
-  const code = ($('#pvpCode') ? $('#pvpCode').value : '').trim().toUpperCase();
+  const code = ($(coop ? '#coopCode' : '#pvpCode') ? $(coop ? '#coopCode' : '#pvpCode').value : '').trim().toUpperCase();
   if (!/^[A-Z0-9]{6}$/.test(code)) { toast('방 코드 6자리를 입력해 주세요'); return; }
   netClose();
   const peer = new Peer();
-  NET = { peer, role: 'guest', code };
+  NET = { peer, role: 'guest', code, coop };
   pvpWaitModal('🔑 방에 들어가는 중…', `<p class="muted">코드 <b>${code}</b> 방을 찾고 있어요</p>`);
   peer.on('open', () => {
     const conn = peer.connect(PVP_PREFIX + code, { reliable: true });
@@ -5692,8 +5705,8 @@ function rndHost(k) {
 
 function setupConn(conn) {
   conn.on('open', () => {
-    netSend({ t: 'hello', name: S.nick || '플레이어', team: myTeamData() });
-    pvpWaitModal('🤝 연결됐어요!', '<p class="muted">대전을 준비하는 중…</p>');
+    netSend({ t: 'hello', name: S.nick || '플레이어', team: myTeamData(), coop: !!(NET && NET.coop) });
+    pvpWaitModal('🤝 연결됐어요!', `<p class="muted">${NET && NET.coop ? '레이드' : '대전'}을 준비하는 중…</p>`);
   });
   conn.on('data', onNet);
   conn.on('close', onNetClose);
@@ -5702,6 +5715,19 @@ function setupConn(conn) {
 function onNetClose() {
   if (!NET) return;
   NET = null;
+  if (B && B.coop && !B.over) {
+    if (B.pvp.role === 'host') {
+      B.units.forEach(u => { if (u.remote) { u.remote = false; u.aiCtl = true; } });
+      if (B.remoteTurn) { const u = unitById(B.remoteTurn); B.remoteTurn = null; clearTimeout(B.remoteTimer); if (u && u.hp > 0) aiAct(u); }
+      logB('🔌 친구가 나가서 컴퓨터가 친구 몬스터를 대신 조종해요');
+      drawBattle();
+    } else {
+      B.over = true; B.waiting = false; clearTimeout(B.timer);
+      B.result = { win: false, rewards: ['방장이 나가서 레이드가 끝났어요'] };
+      drawBattle();
+    }
+    return;
+  }
   if (B && B.pvp && !B.over) {
     B.over = true;
     B.waiting = false;
@@ -5721,14 +5747,21 @@ function onNet(msg) {
     case 'hello':
       NET.oppName = esc(safeName(String(msg.name || '친구').slice(0, 10), '친구'));
       NET.oppTeam = Array.isArray(msg.team) ? msg.team.slice(0, 3) : [];
-      if (NET.role === 'host' && !NET.started) startPvpBattle();
+      // 대전 방과 레이드 방이 섞이면 안내하고 끊기
+      if (!!msg.coop !== !!NET.coop) { toast(NET.coop ? '친구가 대전으로 들어왔어요. 둘 다 🤝 레이드로 해 주세요' : '친구가 레이드로 들어왔어요. 둘 다 같은 방식으로 해 주세요'); netSend({ t: 'bye' }); netClose(); closeModal(); break; }
+      if (NET.role === 'host' && !NET.started) { if (NET.coop) startCoopBattle(); else startPvpBattle(); }
       break;
-    case 'start': if (NET.role === 'guest') startPvpGuest(msg); break;
+    case 'start': if (NET.role === 'guest') { if (msg.coop) startCoopGuest(msg); else startPvpGuest(msg); } break;
     case 'state': if (NET.role === 'guest') applyPvpState(msg); break;
     case 'skill': if (NET.role === 'guest') playPvpSkill(msg); break;
     case 'act': if (NET.role === 'host') remoteAct(msg); break;
     case 'end':
-      if (NET.role === 'guest' && B && B.pvp && !B.over) {
+      if (NET.role === 'guest' && B && B.pvp && !B.over && B.coop) {
+        const win = !!msg.hostWin;
+        B.over = true; B.waiting = false;
+        B.result = { win, rewards: coopRewards(win) };
+        save(); drawBattle(); updateHud();
+      } else if (NET.role === 'guest' && B && B.pvp && !B.over) {
         const win = !msg.hostWin;
         B.over = true;
         B.waiting = false;
@@ -5772,6 +5805,105 @@ function askRemote(u) {
   B.remoteTurn = u.id;
   B.waiting = false;
   drawBattle();
+  // 협동: 친구가 25초 동안 안 고르면 컴퓨터가 대신
+  if (B.coop) { const b = B; clearTimeout(b.remoteTimer); b.remoteTimer = setTimeout(() => { if (B === b && !b.over && b.remoteTurn === u.id) { b.remoteTurn = null; logB('⏰ 친구 대신 컴퓨터가 골랐어요'); aiAct(u); } }, 25000); }
+}
+// ===================== 🤝 협동 레이드 =====================
+const COOP_BOSSES = [
+  { name: '멸망의 용왕',   face: '🐉', els: ['fire', 'dark', 'magic'], ult: '멸망의 불꽃' },
+  { name: '태초의 크라켄', face: '🦑', els: ['water', 'dark', 'ice'], ult: '심해의 분노' },
+  { name: '천공의 신조',   face: '🦅', els: ['thunder', 'light', 'nature'], ult: '하늘 가르기' },
+  { name: '공허의 눈',     face: '👁️', els: ['magic', 'dark', 'poison'], ult: '공허의 시선' },
+  { name: '대지의 거신',   face: '🗿', els: ['earth', 'metal', 'nature'], ult: '대지 붕괴' },
+];
+const gflip = (id) => (B && B.coop ? id : flipId(id));
+function coopBossDef(k) {
+  const base = COOP_BOSSES[Math.max(0, Math.min(COOP_BOSSES.length - 1, Number(k) || 0))], e = base.els;
+  return { ...base, id: 'coop' + k, rarity: 'divine', enrage: 1,
+    skills: [basicSkill(e[0]), atkSkill(e[0]), effSkill(e[1]), atkSkill(e[2]), { name: base.ult, el: e[0], type: 'dmg', mult: 1.35, aoe: true, cost: 6 }] };
+}
+function coopRewards(win) {
+  const out = [];
+  if (win) {
+    const gold = Math.max(20000, Math.round(totalIncome() * 1800));
+    earn(gold); earn(60, 'gems');
+    out.push(`💰 ${fmt(gold)}`, '💎 60', runeText(giveRune([0, 0, 1])));
+    const pool = CAT_LIST.filter(c => c.rarity === 'legendary' && !c.shop), c = pool[Math.floor(Math.random() * pool.length)];
+    if (S.hatch.length < hatchCap()) { S.hatch.push(c.id); out.push(`👑 ${c.face} ${c.name} 알`); } else { earn(100, 'gems'); out.push('💎 100 (부화장이 가득)'); }
+    statAdd('coopWin', 1);
+    mission('win');
+  } else {
+    const gold = Math.max(2000, Math.round(totalIncome() * 300));
+    earn(gold);
+    out.push(`아쉬워요! 위로금 💰 ${fmt(gold)}`);
+  }
+  save();
+  return out;
+}
+// 방장: 내 팀 + 친구 팀(최대 6마리) vs 보스 (두 팀 힘에 맞춰 아주 세게)
+function startCoopBattle() {
+  S.potBattleOn = false;
+  const mine = S.team.map(byUid).filter(Boolean).slice(0, 3);
+  const friend = NET.oppTeam.map((d, k) => netUnit(d, 'me', 3 + k)).filter(Boolean);
+  if (!mine.length || !friend.length) { toast('둘 다 팀이 있어야 해요'); netSend({ t: 'bye' }); netClose(); closeModal(); return; }
+  NET.started = true;
+  closeModal();
+  const myUnits = mine.map((m, k) => mkUnit(m, 'me', k));
+  friend.forEach((u, k) => { u.id = 'me' + (3 + k); u.remote = true; u.ally = true; });
+  const all = [...myUnits, ...friend];
+  const sumAtk = all.reduce((s, u) => s + u.atk, 0), avgHp = all.reduce((s, u) => s + u.maxHp, 0) / all.length;
+  const bk = Math.floor(Math.random() * COOP_BOSSES.length), def = coopBossDef(bk);
+  const hp = Math.max(5000, Math.round(sumAtk * 12)), lv = Math.max(10, ...all.map(u => u.lv)) + 5;
+  const boss = { id: 'foe0', side: 'foe', c: def, lv, boss: true, turns: 3, maxHp: hp, hp, dispHp: hp, shownDead: false,
+    atk: Math.max(30, Math.round(avgHp * 0.07)), spd: 150, sta: 4, fx: newFx() };
+  B = {
+    stage: S.stage, coop: true, pvp: { role: 'host', oppName: NET.oppName, coop: true },
+    units: [...all, boss],
+    order: [], cur: null, target: 'foe0', log: [], round: 0, remoteTurn: null,
+    waiting: false, over: false, fast: !!S.fastBattle, auto: !!S.autoBattle, timer: null, result: null, built: false,
+  };
+  $('#battle').classList.remove('hidden');
+  updateGuide();
+  logB(`🤝 ${NET.oppName}와(과) 함께 ${def.face} ${def.name} 레이드 시작! 체력이 절반 아래면 😡 분노해요`);
+  netSend({ t: 'start', coop: true, name: S.nick || '플레이어', bk,
+    units: B.units.map(u => ({ id: u.id, side: u.side, type: u.boss ? null : u.c.id, lv: u.lv, hp: u.maxHp, atk: u.atk, spd: u.spd, remote: !!u.remote, boss: !!u.boss, turns: u.turns || 1 })) });
+  drawBattle();
+  later(nextTurn, 1200);
+}
+// 친구 쪽: 같은 편으로 (뒤집지 않음). 내 몬스터 = 방장이 remote로 표시한 것
+function startCoopGuest(msg) {
+  if (!Array.isArray(msg.units)) return;
+  NET.started = true;
+  NET.oppName = esc(safeName(String(msg.name || '').slice(0, 10), NET.oppName || '친구'));
+  closeModal();
+  const def = coopBossDef(msg.bk);
+  const num = (v, lo, hi) => Math.max(lo, Math.min(hi, Number(v) || lo));
+  const units = msg.units.map(d => {
+    if (d.boss) { const hp = num(d.hp, 1, 1e9); return { id: 'foe0', side: 'foe', c: def, lv: num(d.lv, 1, 99), boss: true, turns: num(d.turns, 1, 5), maxHp: hp, hp, dispHp: hp, shownDead: false, atk: num(d.atk, 1, 1e7), spd: num(d.spd, 1, 1e4), sta: 4, fx: newFx() }; }
+    const u = netUnit(d, d.side === 'foe' ? 'foe' : 'me', 0);
+    if (!u) return null;
+    u.id = String(d.id).slice(0, 6);
+    u.mine = !!d.remote;          // 방장이 remote로 보낸 게 내 몬스터
+    u.ally = !d.remote;           // 나머지는 친구(방장) 몬스터
+    return u;
+  }).filter(Boolean);
+  B = {
+    stage: S.stage, coop: true, pvp: { role: 'guest', oppName: NET.oppName, coop: true }, anim: 0,
+    units, order: [], cur: null, target: 'foe0', log: [`🤝 ${NET.oppName}와(과) 함께 ${def.face} ${def.name} 레이드 시작!`], round: 0,
+    waiting: false, over: false, fast: !!S.fastBattle, auto: !!S.autoBattle, timer: null, result: null, built: false,
+  };
+  $('#battle').classList.remove('hidden');
+  updateGuide();
+  drawBattle();
+}
+// 친구 쪽 자동 전투: 쓸 수 있는 가장 센 스킬을 골라서 보낸다
+function coopAutoPick() {
+  if (!B || !B.coop || !B.waiting || !B.cur) return;
+  const u = B.cur, low = aliveOf('me').some(a => a.hp < a.maxHp * 0.5);
+  const opts = u.c.skills.map((s, i) => ({ s, i })).filter(({ s }) => s.cost <= u.sta);
+  const heal = opts.find(({ s }) => (s.type === 'healTeam' || s.type === 'healSelf') && low);
+  const best = heal || opts.sort((a, b) => (b.s.mult || 0) * (b.s.aoe ? 1.2 : 1) - (a.s.mult || 0) * (a.s.aoe ? 1.2 : 1))[0];
+  if (best) playerSkill(best.i);
 }
 function remoteAct(msg) {
   if (!B || B.over || !B.remoteTurn) return;
@@ -5779,7 +5911,9 @@ function remoteAct(msg) {
   const sk = u && u.c.skills[Number(msg.i)];
   if (!u || !sk || sk.cost > u.sta) return;
   let tgt = unitById(msg.target);
-  if (!tgt || tgt.side !== 'me' || tgt.hp <= 0) tgt = aliveOf('me')[0];
+  const enemySide = B.coop ? 'foe' : 'me';   // 협동이면 친구도 보스를 공격
+  if (!tgt || tgt.side !== enemySide || tgt.hp <= 0) tgt = aliveOf(enemySide)[0];
+  clearTimeout(B.remoteTimer);
   B.remoteTurn = null;
   useSkill(u, sk, tgt);
 }
@@ -5810,7 +5944,7 @@ function startPvpGuest(msg) {
 function applyPvpState(msg) {
   if (!B || !B.pvp || B.over) return;
   (msg.units || []).forEach(su => {
-    const u = unitById(flipId(su.id));
+    const u = unitById(gflip(su.id));
     if (!u) return;
     u.hp = su.hp;
     u.sta = su.sta;
@@ -5820,17 +5954,18 @@ function applyPvpState(msg) {
   });
   B.round = msg.round || 0;
   B.log = Array.isArray(msg.log) ? msg.log.map(String) : B.log;
-  B.cur = unitById(flipId(msg.cur)) || null;
-  B.waiting = !!msg.remote && B.cur && B.cur.side === 'me';
+  B.cur = unitById(gflip(msg.cur)) || null;
+  B.waiting = !!msg.remote && !!B.cur && B.cur.id === gflip(msg.remote);
+  if (B.waiting && B.coop && B.auto) setTimeout(coopAutoPick, 500);
   if (B.waiting) { const t = unitById(B.target); if (!t || t.hp <= 0) { const f = aliveOf('foe')[0]; if (f) B.target = f.id; } }
   drawBattle();
 }
 function playPvpSkill(msg) {
   if (!B || !B.pvp) return;
-  const att = unitById(flipId(msg.att));
+  const att = unitById(gflip(msg.att));
   const sk = att && att.c.skills[Number(msg.sk)];
   if (!att || !sk) return;
-  const events = (msg.events || []).map(e => ({ ...e, t: unitById(flipId(e.t)) })).filter(e => e.t);
+  const events = (msg.events || []).map(e => ({ ...e, t: unitById(gflip(e.t)) })).filter(e => e.t);
   B.anim++;
   playSkill(att, sk, events).finally(() => { if (B) B.anim = Math.max(0, B.anim - 1); });
 }
@@ -6661,6 +6796,7 @@ const ACH_MORE = [
   ['boss',     '👹 보스 물리치기', () => Object.keys(S.bossCleared || {}).length, [1, 3, 6, 10, 16], [10, 30, 80, 200, 600]],
   ['raidClear', '🔥 레이드 보스 쓰러뜨리기', 'stat', [1, 5, 20, 50], [20, 60, 150, 400]],
   ['clone',    '🧬 몬스터 복제', 'stat', [1, 10, 100], [50, 150, 500]],
+  ['coopWin',  '🤝 협동 레이드 승리', 'stat', [1, 5, 20], [30, 80, 200]],
   ['lv20',     '⬆️ Lv.20 몬스터', () => S.monsters.filter(m => m.lv >= MAX_LV).length, [1, 10, 50], [10, 40, 120]],
   ['myth',     '🌌 신화 이상 몬스터', () => S.monsters.filter(m => RANK[CAT[m.type].rarity] >= RANK.mythic).length, [1, 10, 50], [20, 80, 250]],
 ];
@@ -7550,6 +7686,7 @@ const WELCOME = [
   { icon: '💰', title: '재화 3가지', text: '💰 <b>골드</b>: 서식지 몬스터가 벌어요 → 건물·알·교배·업그레이드<br>🍖 <b>먹이</b>: 농장에서 키워요 → 몬스터 레벨 업 (Lv.4면 교배!)<br>💎 <b>보석</b>: 미션·일일 보상·도전 과제 → 시간 단축·고급 룬<br>위쪽 <b>💰💎🍖 숫자를 누르면</b> 언제든 자세히 볼 수 있어요. 섬 위쪽 <b>🎯 다음 목표</b>도 따라가 봐요!' },
   { icon: '🐾', title: '펫', text: '섬 왼쪽 위 <b>🐾 펫 버튼</b>을 누르면 첫 펫 🐶을 선물로 받아요!<br>펫은 섬을 같이 돌아다니고, 💰골드·🍖먹이·⚔️공격·❤️체력·🏷️교배 할인 <b>보너스</b>를 줘요.<br>🍪 간식으로 Lv.10까지 키우고, 🥚 펫 알로 12마리를 모아 봐요.' },
   { icon: '🏝️', title: '섬 18개', text: '위쪽 <b>◀ ▶</b>로 섬을 옮겨 다녀요. 건물을 <b>꾹 눌러 끌면</b> 빈 땅으로 옮겨져요.<br>🎨 장식을 놓으면 그 섬 골드가 올라요.<br>두 손가락으로 <b>확대</b>, 🙈 숨기기로 이름표를 감출 수 있어요.' },
+  { icon: '🤝', title: '협동 레이드', text: '모험 탭 → 👥 <b>친구 대전</b> 창 아래 <b>🤝 친구와 함께 보스 레이드</b>!<br>한 명이 <b>레이드 방</b>을 만들고, 친구가 코드로 들어오면 두 팀(최대 6마리)이 힘을 합쳐 <b>엄청 센 보스</b>와 싸워요.<br>각자 자기 몬스터 차례에 스킬을 골라요 (🤖 자동도 돼요). 이기면 <b>둘 다</b> 💎60 · 골드 · ★★★ 룬 · 👑 전설 알!' },
   { icon: '🔥', title: '보스전과 레이드', text: '모험 탭 아래쪽 <b>👹 보스전</b>: 16명의 보스를 차례로! 뒤쪽 보스는 체력이 절반 아래가 되면 <b>😡 분노</b>해서 더 세져요.<br><b>🔥 오늘의 레이드</b>: 매일 바뀌는 거대 보스 (내 팀 힘에 맞춰 나와요). 하루 3번, 한 번에 10라운드! 준 피해가 쌓여서 10%·30%·60%·100%마다 보상, 끝까지 쓰러뜨리면 👑 전설 알!' },
   { icon: '⚔️', title: '모험과 보스', text: '몬스터 3마리로 팀을 짜서 싸워요 (<b>⚡ 자동 편성</b>이면 가장 센 3마리!). 📘 상성표를 보고 <b>강한 속성</b>으로 공격하면 피해 1.5배!<br><b>🔁 연속 전투</b>를 누르면 이길 때마다 다음 스테이지로 자동으로 계속 싸워요.<br>👹 보스전에서는 에너지가 엄청 많은 보스와 싸워요.' },
   { icon: '🎉', title: '이벤트', text: '<b>3일마다</b> 새 이벤트가 열려요: 💰골드 러시, 🌾풍년 축제, ⚔️전투 대회, 🐣부화 페스티벌, 🧬교배 러시, 🌈속성 축제<br>평소처럼 놀면 <b>🎟️ 이벤트 토큰</b>이 모이고 (이벤트 주제 활동은 2배!), 패스 보상을 받아요.<br>마지막 보상은 <b>이벤트 한정 펫</b>! 섬 왼쪽 <b>🎉 버튼</b>에서 확인해요.' },
@@ -7695,10 +7832,10 @@ const ACTIONS = {
   bTarget: (d) => setTarget(d.id),
   bFast: () => { B.fast = !B.fast; S.fastBattle = B.fast; drawBattle(); },
   bAuto: () => {
-    if (!B || B.pvp) return;
+    if (!B || (B.pvp && !B.coop)) return;
     B.auto = !B.auto; S.autoBattle = B.auto;
     // 내 차례를 기다리던 중이면 바로 자동으로 움직인다
-    if (B.auto && B.waiting && B.cur && B.cur.side === 'me') { B.waiting = false; aiAct(B.cur); } else drawBattle();
+    if (B.auto && B.waiting && B.cur && B.cur.side === 'me') { if (B.coop && B.pvp.role === 'guest') { coopAutoPick(); return; } B.waiting = false; aiAct(B.cur); } else drawBattle();
   },
   typeChart: () => openTypeChart(),
   applyUpdate: () => { if (B && !B.over) { toast('전투가 끝나면 적용할게요'); return; } save(); location.reload(); },
@@ -7731,6 +7868,8 @@ const ACTIONS = {
   giftUndo: () => { if (!SHARE || !SHARE.undo || SHARE.done) return; const u = SHARE.undo; SHARE.undo = null; stopShare(); u(); closeModal(); toast('↩️ 선물을 취소하고 돌려받았어요'); },
   copyCode: () => { const ta = $('#modalBox .code-box'); if (!ta) return; ta.select(); try { navigator.clipboard.writeText(ta.value).then(() => toast('📋 코드를 복사했어요! 친구에게 붙여 넣어 보내 주세요'), () => { document.execCommand('copy'); toast('📋 복사했어요'); }); } catch (e) { document.execCommand('copy'); toast('📋 복사했어요'); } },
   pvp: () => openPvp(),
+  coopHost: () => pvpHost(0, true),
+  coopJoin: () => pvpJoin(true),
   ranking: () => openRanking(),
   guildOpen: () => openGuild(),
   guildTab: (d) => openGuild(d.t),
@@ -7752,8 +7891,8 @@ const ACTIONS = {
     S.nick = v; save(); toast('✏️ 이름을 바꿨어요'); rankSubmit(true).then(() => { rankCache = null; openRanking(); });
   },
   pvpRandom: () => { if ($('#pvpName') && !saveNick()) return; if (!S.nick) { openPvp(); toast('상대에게 보일 이름을 적고 🌍 랜덤 대전을 눌러요'); return; } tutFlag('friends', true); pvpRandom(); },
-  pvpHost: () => pvpHost(),
-  pvpJoin: () => pvpJoin(),
+  pvpHost: () => pvpHost(0, false),
+  pvpJoin: () => pvpJoin(false),
   pvpCancel: () => { if (NET) clearInterval(NET.uiTimer); netClose(); closeModal(); toast('대전을 취소했어요'); },
   pvpCopy: (d) => { try { navigator.clipboard.writeText(d.code); toast('📋 코드를 복사했어요: ' + d.code); } catch (e) { toast('코드: ' + d.code); } },
   teamView: (d) => { const v = teamView(); v[d.k] = d.k === 'strong' ? d.v === 'true' : d.v; save(); const p = $('#panel'), y = p.scrollTop; renderAdventure(); p.scrollTop = y; },
