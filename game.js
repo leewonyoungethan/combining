@@ -160,6 +160,7 @@ const needsTarget = (sk) => ['dmg', 'burn', 'poison', 'stun', 'curse'].includes(
 
 // ===================== 몬스터 카탈로그 (500마리) =====================
 // 속성마다 31마리(순수 341), 두 속성 조합마다 29마리(혼합 1595) + 전설 34 + 신화 25 + 전설 상점 5 = 2000
+// + 2차: 속성마다 15마리(165), 조합마다 33마리(1815), 전설 10, 신화 10 = 2000 더 → 모두 4000
 const PURE_VARIANTS = 31;
 const HYB_VARIANTS = 29;
 const LEGEND_COUNT = 34;
@@ -283,6 +284,32 @@ EL.forEach((e, i) => addPure(e, i, 0));
 PAIRS.forEach(([i, j]) => addHybrid(i, j, 0));
 EL.forEach((e, i) => { for (let k = 1; k < PURE_VARIANTS; k++) addPure(e, i, k); });
 PAIRS.forEach(([i, j]) => { for (let v = 1; v < HYB_VARIANTS; v++) addHybrid(i, j, v); });
+// ---- 2차 몬스터 2000마리 (기존 몬스터의 이름·등급이 바뀌지 않게 맨 뒤에서 만든다) ----
+const PURE_EXTRA = 15, HYB_EXTRA = 33, LEGEND_EXTRA = 10, MYTHIC_EXTRA = 10;
+function addPureX(e, n) {
+  const group = 'p:' + e.id, k = PURE_VARIANTS + n, id = `${group}:${k}`;
+  const adjs = ADJ[e.id];
+  const look = freshCreature(adjs[(k * 5 + 3) % adjs.length], id, hashStr(group + '#2') + n * 11);
+  addMon({ id, group, variant: k, ...look, els: [e.id], rarity: RAR_ORDER[rankOfVariant(n, PURE_EXTRA, frac(group + '#2'))], mod: variantMod(id) });
+}
+function addHybridX(i, j, n) {
+  const a = EL[i], b = EL[j], group = `h:${a.id}+${b.id}`, v = HYB_VARIANTS + n, id = `${group}:${v}`;
+  const adjs = n % 2 ? ADJ[b.id] : ADJ[a.id];
+  const look = freshCreature(adjs[(v * 5 + 1) % adjs.length], id, hashStr(group + '#2') + n * 11);
+  addMon({ id, group, variant: v, ...look, els: [a.id, b.id], rarity: RAR_ORDER[rankOfVariant(n, HYB_EXTRA, frac(group + '#2'))], mod: variantMod(id) });
+}
+EL.forEach(e => { for (let n = 0; n < PURE_EXTRA; n++) addPureX(e, n); });
+PAIRS.forEach(([i, j]) => { for (let n = 0; n < HYB_EXTRA; n++) addHybridX(i, j, n); });
+// 2차 전설·신화: 아직 안 쓴 세 속성 조합으로
+function makeSpecialX(prefix, k, titles) {
+  const els = nextTriple(k * 3 + (prefix === 'M' ? 211 : 97));
+  const title = `${EL[ELI[els[2]]].adj}의 ${titles[(k + 3) % titles.length]}`;
+  const look = freshCreature(title, `${prefix}:x${k}`, hashStr(prefix + 'x' + k) % CREATURES.length);
+  usedNames.add(look.name);
+  return { id: `${prefix}:x${k}`, ...look, els, ult: `${EL[ELI[els[0]]].adj} ${ULT_WORDS[(k + 5) % ULT_WORDS.length]}` };
+}
+for (let k = 0; k < LEGEND_EXTRA; k++) LEGENDS.push(makeSpecialX('L', k, LEG_TITLES));
+for (let k = 0; k < MYTHIC_EXTRA; k++) MYTHICS.push(makeSpecialX('M', k, MYTH_TITLES));
 LEGENDS.forEach(l => addMon({ ...l, rarity: 'legendary' }));
 MYTHICS.forEach(m => addMon({ ...m, rarity: 'mythic' }));
 SHOP_LEGENDS.forEach(l => addMon({ ...l, rarity: l.rank || 'divine', shop: true }));
@@ -1194,7 +1221,7 @@ function clonerShopHTML() {
 }
 
 function shopNavHTML() {
-  const items = [['shopHab', '🏠 서식지'], ['shopEgg', '🥚 알'], ['shopDeals', '🔥 특가'], ['shopPotion', '🧪 물약'], ['shopKingdom', '🏛️ 왕국'], ['shopWonder', '🗽 랜드마크'], ['shopCloner', '🧬 복제기'], ['shopGem', '💎 보석'], ['shopExch', '💱 교환'], ['shopDeco', '🎨 장식']];
+  const items = [['shopHab', '🏠 서식지'], ['shopEgg', '🥚 알'], ['shopEgg2', '🧬 혼합 알'], ['shopBox', '🎲 알 상자'], ['shopDeals', '🔥 특가'], ['shopPotion', '🧪 물약'], ['shopKingdom', '🏛️ 왕국'], ['shopWonder', '🗽 랜드마크'], ['shopCloner', '🧬 복제기'], ['shopGem', '💎 보석'], ['shopExch', '💱 교환'], ['shopDeco', '🎨 장식']];
   return `<div class="shop-nav">${items.map(([id, t]) => `<button class="chip" data-act="shopJump" data-id="${id}">${t}</button>`).join('')}</div>`;
 }
 
@@ -1594,7 +1621,7 @@ const QUESTS = [
   { text: '서식지를 2개 지어요', say: '이 섬은 너무 조용하네요… 몬스터들이 살 집부터 지어 볼까요?', now: habCount, need: 2, r: { gold: 1000 } },
   { text: '몬스터 5마리를 모아요', say: '집이 생겼으니 친구들을 불러 와요! 상점의 알을 깨 봐요.', now: () => S.monsters.length, need: 5, r: { gems: 5 } },
   { text: '교배를 3번 해요', count: 'breed', need: 3, say: '두 몬스터를 교배산에 넣으면 새로운 몬스터가 태어나요. 신기하죠?', r: { food: 500 } },
-  { text: '도감을 10마리 채워요', say: '세상에는 2,000마리나 되는 몬스터가 있대요. 하나씩 기록해 봐요!', now: () => Object.keys(S.dex).length, need: 10, r: { gems: 10 } },
+  { text: '도감을 10마리 채워요', say: '세상에는 4,000마리나 되는 몬스터가 있대요. 하나씩 기록해 봐요!', now: () => Object.keys(S.dex).length, need: 10, r: { gems: 10 } },
   { text: '모험 스테이지 3에 가요', say: '섬 밖에는 야생 몬스터가 있어요. 우리 팀의 힘을 보여 줘요!', now: () => S.stage, need: 3, r: { gold: 3000, rune: 1 } },
   { ch: '2장 · 커져 가는 왕국' },
   { text: '서식지 하나를 Lv.3으로 올려요', say: '몬스터가 많아지면 집이 좁아져요. 서식지를 넓혀 줘요!', now: () => Math.max(0, ...S.plots.filter(p => p && p.kind === 'hab').map(p => p.lv)), need: 3, r: { gold: 5000 } },
@@ -4120,6 +4147,7 @@ function renderShop() {
     <h3 class="sub" id="shopEgg">🥚 몬스터 알 상점 <small class="muted">사면 부화장으로 가요. 알맞은 서식지가 있어야 키울 수 있어요</small></h3>
     <div class="grid small">${EGG_SHOP.map(t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini',
       `<div class="price-tag">💰 ${fmt(eggPrice(t))}</div>`)).join('')}</div>
+    ${moreEggsHTML()}
     ${shopMoreHTML()}
     ${kingdomShopHTML()}
     <h3 class="sub">🛍️ 룬 · 먹이 · 골드</h3>
@@ -4224,7 +4252,48 @@ const MON_PRICE = 500;
 const SPECIAL_EGGS = ['p:ice', 'p:metal', 'p:magic'];
 const EGG_SHOP = [...BASE.map(e => 'p:' + e), ...SPECIAL_EGGS];
 const eggPrice = () => Math.round(MON_PRICE * (evtOn('hatchfest') ? 0.5 : 1));
+// 🧬 혼합 몬스터 알: 두 속성 조합마다 대표 몬스터 (55종)
+const HYB_EGGS = PAIRS.map(([i, j]) => `h:${EL[i].id}+${EL[j].id}`);
+const HYB_EGG_PRICE = 1500;
+// 🎲 등급 알 상자: 고른 등급의 몬스터가 무작위로
+const RANK_BOXES = [
+  { r: 'rare', cost: 20000 }, { r: 'special', cost: 60000 }, { r: 'masterwork', cost: 180000 }, { r: 'hero', cost: 540000 },
+  { r: 'epic', cost: 1.6e6 }, { r: 'legendary', cost: 5e7 }, { r: 'mythic', cost: 5e9 },
+];
+let hybEggEl = 'all';
+function buyRankBox(r) {
+  const box = RANK_BOXES.find(x => x.r === r);
+  if (!box) return;
+  if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
+  if (!spend(Math.round(box.cost * (evtOn('hatchfest') ? 0.5 : 1)))) return;
+  const pool = CAT_LIST.filter(c => c.rarity === r && !c.shop);
+  const c = pool[Math.floor(Math.random() * pool.length)];
+  S.hatch.push(c.id);
+  sfx('buy'); mission('buyEgg'); save(); updateHud();
+  toast(`🎲 ${RAR[r].name} 알: ${c.face} ${c.name}!${S.dex[c.id] ? '' : ' (도감에 없는 몬스터!)'}`);
+  render();
+  openHatchery();
+}
+function moreEggsHTML() {
+  const disc = evtOn('hatchfest') ? 0.5 : 1;
+  const list = HYB_EGGS.filter(t => hybEggEl === 'all' || CAT[t].els.includes(hybEggEl));
+  return `<h3 class="sub" id="shopEgg2">🧬 혼합 몬스터 알 <small class="muted">두 속성 몬스터 55종 · 속성 서식지 둘 중 하나에 살아요</small></h3>
+    <div class="chips">${[['all', '전체'], ...EL.map(e => [e.id, e.emoji])].map(([id, t]) => `<button class="chip ${hybEggEl === id ? 'on' : ''}" data-act="hybEggEl" data-e="${id}">${t}</button>`).join('')}</div>
+    <div class="grid small">${list.map(t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini', `<div class="price-tag">💰 ${fmt(HYB_EGG_PRICE * disc)}</div>`)).join('')}</div>
+    <h3 class="sub" id="shopBox">🎲 등급 알 상자 <small class="muted">고른 등급의 몬스터가 무작위로! 도감 채우기에 딱</small></h3>
+    <div class="rank-boxes">${RANK_BOXES.map(b => `<button class="rank-box" data-act="buyRankBox" data-r="${b.r}" style="--rc:${RAR[b.r].color}">
+        <span>🎲</span><b>${RAR[b.r].name} 알</b><small>${CAT_LIST.filter(c => c.rarity === b.r && !c.shop).length}종 중 하나</small><span class="rb-cost">💰 ${shortNum(b.cost * disc)}</span></button>`).join('')}</div>`;
+}
 function buyMon(type) {
+  if (CAT[type] && HYB_EGGS.includes(type)) {
+    if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
+    if (!spend(Math.round(HYB_EGG_PRICE * (evtOn('hatchfest') ? 0.5 : 1)))) return;
+    S.hatch.push(type);
+    sfx('buy'); mission('buyEgg'); save();
+    toast(`🥚 ${CAT[type].name} 알을 샀어요!`);
+    render(); openHatchery();
+    return;
+  }
   if (!CAT[type] || !EGG_SHOP.includes(type)) return;
   if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
   if (!spend(eggPrice(type))) return;
@@ -6824,7 +6893,7 @@ function mission(id, n = 1) {
 }
 // ----- 🏆 도전 과제: 한 번만 받는 큰 목표 -----
 const ACH = [
-  ...[5, 10, 25, 50, 100, 200, 400, 700, 1000, 1500, 2000].map((n, k) => ({ id: 'dex' + n, text: `📖 도감 ${fmt(n)}마리 모으기`, now: () => Object.keys(S.dex).length, need: n, gems: [5, 10, 15, 25, 40, 60, 80, 100, 150, 200, 500][k] })),
+  ...[5, 10, 25, 50, 100, 200, 400, 700, 1000, 1500, 2000, 3000, 4000].map((n, k) => ({ id: 'dex' + n, text: `📖 도감 ${fmt(n)}마리 모으기`, now: () => Object.keys(S.dex).length, need: n, gems: [5, 10, 15, 25, 40, 60, 80, 100, 150, 200, 500, 800, 1500][k] })),
   ...[3, 5, 10, 15, 20, 30, 40, 50].map((n, k) => ({ id: 'stage' + n, text: `⚔️ 모험 스테이지 ${n} 도착`, now: () => S.stage, need: n, gems: [5, 10, 20, 30, 40, 60, 80, 100][k] })),
   ...['rare', 'epic', 'legendary', 'mythic', 'divine', 'holy', 'absolute', 'origin'].map((r, k) => ({ id: 'rank' + r, text: `✨ ${RAR[r].name} 등급 몬스터 얻기`, now: () => (S.monsters.some(m => RANK[CAT[m.type].rarity] >= RANK[r]) ? 1 : 0), need: 1, gems: [5, 10, 30, 60, 100, 150, 200, 300][k] })),
   ...[1, 4, 8, 12].map((n, k) => ({ id: 'pets' + n, text: `🐾 펫 ${n}마리 모으기`, now: () => PETS.filter(p => petLv(p.id)).length, need: n, gems: [5, 20, 50, 150][k] })),
@@ -8010,6 +8079,8 @@ const ACTIONS = {
   achClaim: (d) => achClaim(d.id),
   sound: () => toggleSound(),
   pets: () => openPets(),
+  buyRankBox: (d) => buyRankBox(d.r),
+  hybEggEl: (d) => { hybEggEl = d.e; const p = $('#panel'), y = p.scrollTop; render(); p.scrollTop = y; },
   buyCloner: () => buyCloner(),
   cloner: () => openCloner(),
   cloneMon: (d) => cloneMon(d.uid),

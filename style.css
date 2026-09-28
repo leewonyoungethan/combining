@@ -1262,3 +1262,12 @@ body.ui-hidden .evt-btn, body.ui-hidden .quest-btn { opacity: .55; }
 .fz-res small { color: #ffb3f0; white-space: nowrap; }
 .fuse-row .btn small { font-size: 9px; }
 @media (max-width: 560px) { .fuse-row { grid-template-columns: auto auto auto auto 1fr; } .fuse-row .btn { grid-column: 1 / -1; } }
+
+/* 🎲 등급 알 상자 */
+.rank-boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; margin: 8px 0; }
+.rank-box { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border-radius: 14px; font: inherit; color: var(--text); cursor: pointer;
+  border: 2px solid var(--rc); background: radial-gradient(circle at 50% 20%, color-mix(in srgb, var(--rc) 30%, transparent), rgba(0, 0, 0, .15)); }
+.rank-box > span:first-child { font-size: 28px; }
+.rank-box b { font-size: 13px; color: var(--rc); }
+.rank-box small { font-size: 10px; color: var(--muted); }
+.rb-cost { font-weight: 900; color: #ffe066; font-size: 13px; }
