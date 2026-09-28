@@ -334,6 +334,8 @@ const shuffle = (arr) => {
 };
 
 const SHOP_BREED_CHANCE = [0.15, 0.08, 0.02];   // 전설 상점 몬스터: 약한 부모와 같은 등급 / 한 단계 위 / 두 단계 위
+// 등급별로 더 낮추기: 근원은 위 확률의 1/10만 (15% → 1.5%, 8% → 0.8%, 2% → 0.2%)
+const SHOP_BREED_MUL = { origin: 0.1 };
 const LEGEND_RECIPE_CHANCE = 0.4;               // 족보를 맞췄을 때 레전더리 한 마리당 확률
 const LUCKY_LEGEND = { rare: 0.04, epic: 0.1 }; // 두 부모가 모두 레어 이상 / 에픽 이상일 때 행운의 레전더리
 
@@ -353,7 +355,7 @@ function breedDist(ta, tb) {
     RAR_ORDER.forEach((key, R) => {
       const list = SHOP_LEGENDS.filter(l => CAT[l.id].rarity === key);
       if (!list.length) return;
-      const p = R >= lo ? (SHOP_BREED_CHANCE[R - lo] || 0) : 0;   // 부모보다 낮은 등급은 안 나온다
+      const p = R >= lo ? (SHOP_BREED_CHANCE[R - lo] || 0) * (SHOP_BREED_MUL[key] || 1) : 0;   // 부모보다 낮은 등급은 안 나온다
       list.forEach(l => add(l.id, p / list.length));
       shopTotal += p;
     });
