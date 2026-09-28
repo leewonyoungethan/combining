@@ -1146,8 +1146,55 @@ function shopMoreHTML() {
     <h3 class="sub" id="shopExch">💱 교환소 <small class="muted">골드를 보석으로 · 오늘 살 때마다 값이 2배 (자정에 다시 싸져요)</small></h3>
     <div class="shop"><button class="shop-item" data-act="buyExchange"><span class="si-ico">💱</span><span class="si-nm">보석 ${EXCH_GEMS}개<small>오늘 ${S.exch && S.exch.day === dayKey() ? S.exch.n : 0}번 바꿨어요</small></span><span class="si-cost">💰 ${shortNum(exchCost())}</span></button></div>`;
 }
+// ===================== 🧬 복제기 =====================
+// 섬에 세우는 기계. 몬스터를 골라 레벨·별까지 똑같이 복제한다 (룬은 복제 안 됨)
+const CLONER_COST = 1e19, CLONE_COST = 1e7;
+const clonerIdx = () => S.plots.findIndex(p => p && p.kind === 'cloner');
+function buyCloner() {
+  if (clonerIdx() >= 0) { openCloner(); return; }
+  const i = findFreePlot();
+  if (i < 0) return;
+  if (!spend(CLONER_COST)) return;
+  S.plots[i] = { kind: 'cloner' };
+  sfx('yay'); save(); updateHud();
+  toast('🧬 복제기를 세웠어요! 섬에서 눌러서 몬스터를 복제해요');
+  render();
+}
+function openCloner() {
+  tutFlag('cloner', true);
+  if (clonerIdx() < 0) { toast('먼저 상점에서 🧬 복제기를 사야 해요 (💰 ' + shortNum(CLONER_COST) + ')'); return; }
+  const list = S.monsters.slice().sort((a, b) => rIdx(b.type) - rIdx(a.type) || (b.star || 0) - (a.star || 0) || b.lv - a.lv);
+  showModal(`<div class="cloner-head"><span class="cl-ico">🧬</span><div><h3>복제기</h3>
+      <div class="muted">몬스터를 누르면 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요 (룬은 빼고)</div>
+      <div class="cl-cost">한 번에 💰 ${shortNum(CLONE_COST)} · 지금까지 ${fmt(stat('clone'))}번 복제</div></div></div>
+    <div class="grid small cloner-grid">${list.length ? list.map(m => card(m, `data-act="cloneMon" data-uid="${m.uid}"`, 'mini', `<div class="price-tag">🧬 복제</div>`)).join('') : '<p class="muted">복제할 몬스터가 없어요</p>'}</div>
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+}
+function cloneMon(uid) {
+  const m = byUid(uid);
+  if (!m || clonerIdx() < 0) return;
+  const home = habsFor(m.type)[0];
+  if (!home) { toast(`🏠 복제한 몬스터가 살 곳이 없어요! ${isLegend(m.type) ? '전설의 서식지' : CAT[m.type].els.map(e => habName(e)).join(' 또는 ')}를 더 짓거나 올려 주세요`); return; }
+  if (!spend(CLONE_COST)) return;
+  S.monsters.push({ uid: S.nextUid++, type: m.type, lv: m.lv, star: m.star || 0, hab: home.i, runes: [null, null] });
+  statAdd('clone', 1);
+  sfx('hatch'); save(); updateHud(); render();
+  toast(`🧬 ${CAT[m.type].face} ${CAT[m.type].name} Lv.${m.lv}${m.star ? ' ' + '★'.repeat(m.star) : ''} 복제 완료! → ${habName(S.plots[home.i].el)}`);
+  const box = $('#modalBox'), y = box.scrollTop;
+  openCloner(); box.scrollTop = y;
+}
+function clonerShopHTML() {
+  const own = clonerIdx() >= 0;
+  return `<h3 class="sub" id="shopCloner">🧬 복제기 <small class="muted">섬에 세우는 기계 · 몬스터를 레벨·별까지 똑같이 복제</small></h3>
+    <div class="cloner-card ${own ? 'got' : ''}">
+      <span class="cl-ico">🧬</span>
+      <div class="cl-info"><b>복제기</b><small>한 번 복제에 💰 ${shortNum(CLONE_COST)}</small><small>${own ? '✅ 섬에 있어요' : '한 번 사면 계속 써요'}</small></div>
+      <button class="btn ${own ? 'green' : ''}" data-act="${own ? 'cloner' : 'buyCloner'}">${own ? '🧬 복제하러 가기' : '💰 ' + shortNum(CLONER_COST)}</button>
+    </div>`;
+}
+
 function shopNavHTML() {
-  const items = [['shopHab', '🏠 서식지'], ['shopEgg', '🥚 알'], ['shopDeals', '🔥 특가'], ['shopPotion', '🧪 물약'], ['shopKingdom', '🏛️ 왕국'], ['shopWonder', '🗽 랜드마크'], ['shopGem', '💎 보석'], ['shopExch', '💱 교환'], ['shopDeco', '🎨 장식']];
+  const items = [['shopHab', '🏠 서식지'], ['shopEgg', '🥚 알'], ['shopDeals', '🔥 특가'], ['shopPotion', '🧪 물약'], ['shopKingdom', '🏛️ 왕국'], ['shopWonder', '🗽 랜드마크'], ['shopCloner', '🧬 복제기'], ['shopGem', '💎 보석'], ['shopExch', '💱 교환'], ['shopDeco', '🎨 장식']];
   return `<div class="shop-nav">${items.map(([id, t]) => `<button class="chip" data-act="shopJump" data-id="${id}">${t}</button>`).join('')}</div>`;
 }
 
@@ -1172,6 +1219,7 @@ function kingdomShopHTML() {
     <h3 class="sub" id="shopWonder" data-act="bigshopSeen">🗽 랜드마크 <small class="muted">섬에 세우는 거대 건물 · 모든 섬 골드가 올라요 (지금 +${wonderPct()}%)</small></h3>
     <div class="wonder-grid">${wonders.map(d => `<button class="wonder-card ${got.has(d.id) ? 'got' : ''}" data-act="buyDeco" data-id="${d.id}" ${got.has(d.id) ? 'disabled' : ''}>
         <span class="wd-ico">${d.emoji}</span><b>${d.name}</b><small>모든 섬 골드 +${d.global}%</small><span class="wd-cost">${got.has(d.id) ? '✅ 완성' : '💰 ' + shortNum(d.cost)}</span></button>`).join('')}</div>
+    ${clonerShopHTML()}
     <h3 class="sub" id="shopGem" data-act="bigshopSeen">💎 보석 상점</h3>
     <div class="shop">
       <button class="shop-item" data-act="buyRobot" ${S.robot ? 'disabled' : ''}><span class="si-ico">🤖</span><span class="si-nm">자동 수집 로봇<small>${S.robot ? '✅ 일하는 중 (1분마다 모든 골드 걷기)' : '1분마다 모든 서식지 골드를 알아서 걷어요 (영구)'}</small></span><span class="si-cost">${S.robot ? '보유' : '💎 300'}</span></button>
@@ -2059,6 +2107,16 @@ function drawPlot(p, i, x, y, t, dt) {
     return;
   }
   const ready = plotReady(i);
+  if (p.kind === 'cloner') {
+    block(x, y, hw, hh, '#3a4a6b', '#1f2a44');
+    diamond(x, y, hw * 0.55, hh * 0.55);
+    ctx.fillStyle = `rgba(92, 225, 230, ${0.25 + Math.sin(t * 3) * 0.12})`;
+    ctx.fill();
+    shadow(x, y + 8, 60);
+    emoji('🧬', x, y - 44 + Math.sin(t * 2) * 4, 96, Math.sin(t * 1.5) * 0.12);
+    if (!S.hideUI) { emoji('⚙️', x - 58, y - 12, 34, t); emoji('⚙️', x + 58, y - 18, 28, -t); }
+    return;
+  }
   if (p.kind === 'deco') {
     const d = decoById(p.id);
     diamond(x, y, hw, hh);
@@ -2148,6 +2206,7 @@ function drawPlot(p, i, x, y, t, dt) {
 function drawLabel(p, i, x, y, t) {
   if (!p || p.kind === 'deco') return;
   const ready = plotReady(i);
+  if (p.kind === 'cloner') { label('🧬 복제기', x, y + TH / 2 + 10, 17); return; }
   const name = p.kind === 'mountain' ? ((p.lv || 1) > 1 ? `큰 교배산 Lv.${p.lv}` : '교배산') : p.kind === 'hatchery' ? ((p.cap || HATCH_CAP) > HATCH_CAP ? `큰 부화장 ${p.cap}칸` : '부화장') : p.kind === 'farm' ? '농장' : `${habName(p.el)} Lv.${p.lv}`;
   const ly = y + TH / 2 + 10;
   label(name, x, ly, 17);
@@ -2200,7 +2259,7 @@ function drawCarry(t) {
   ctx.fill();
   const w = toWorld(carry.sx, carry.sy);
   const icon = p.kind === 'mountain' ? '🏔️' : p.kind === 'hatchery' ? '🪺' : p.kind === 'farm' ? '🌾'
-    : p.kind === 'deco' ? (decoById(p.id) || { emoji: '❓' }).emoji : habEmoji(p.el);
+    : p.kind === 'cloner' ? '🧬' : p.kind === 'deco' ? (decoById(p.id) || { emoji: '❓' }).emoji : habEmoji(p.el);
   ctx.globalAlpha = 0.9;
   shadow(w.x, w.y + 30, 40);
   emoji(icon, w.x, w.y - 20 + Math.sin(t * 8) * 3, 90);
@@ -2494,6 +2553,7 @@ function openPlot(i) {
   if (p.kind === 'mountain') return openBreed(i);
   if (p.kind === 'hatchery') return openHatchery(i);
   if (p.kind === 'deco') return openDeco(i);
+  if (p.kind === 'cloner') return openCloner();
   if (p.kind === 'farm') return openFarm(i);
   if (p.kind === 'hab') return openHab(i);
 }
@@ -2599,6 +2659,7 @@ function demolishRefund(p) {
   if (p.kind === 'mountain') return MOUNTAIN_COST / 2;
   if (p.kind === 'hatchery') return Math.floor(HATCHERY_COST / 2 * (p.cap || HATCH_CAP) / HATCH_CAP);
   if (p.kind === 'deco') { const d = decoById(p.id); return d && d.cost ? Math.floor(d.cost / 2) : 0; }
+  if (p.kind === 'cloner') return Math.floor(CLONER_COST / 2);
   let spent = habBuildCost(p.el);
   for (let lv = 1; lv < p.lv; lv++) spent += habUpCost(lv);
   return Math.floor(spent / 2);
@@ -2618,7 +2679,7 @@ function demolish(i) {
     toast('안에 사는 몬스터를 먼저 다른 서식지로 이사시키거나 팔아 주세요');
     return;
   }
-  const name = p.kind === 'farm' ? '농장' : p.kind === 'mountain' ? '교배산' : p.kind === 'hatchery' ? '부화장' : p.kind === 'deco' ? (decoById(p.id) || { name: '장식' }).name : habName(p.el);
+  const name = p.kind === 'farm' ? '농장' : p.kind === 'mountain' ? '교배산' : p.kind === 'hatchery' ? '부화장' : p.kind === 'cloner' ? '복제기' : p.kind === 'deco' ? (decoById(p.id) || { name: '장식' }).name : habName(p.el);
   const lost = p.kind === 'farm' && p.crop != null ? '\n심어 둔 작물도 사라져요.' : '';
   if (!confirm(`${name}을(를) 철거할까요?\n지을 때 쓴 골드의 절반(💰${fmt(demolishRefund(p))})을 돌려받아요.${lost}`)) return;
   const refund = demolishRefund(p) + (p.kind === 'hab' ? Math.floor(p.gold) : 0);
@@ -6599,6 +6660,7 @@ const ACH_MORE = [
   ['login',    '📅 접속한 날', () => S.loginDays || 0, [3, 7, 30, 100, 365], [5, 15, 50, 150, 500]],
   ['boss',     '👹 보스 물리치기', () => Object.keys(S.bossCleared || {}).length, [1, 3, 6, 10, 16], [10, 30, 80, 200, 600]],
   ['raidClear', '🔥 레이드 보스 쓰러뜨리기', 'stat', [1, 5, 20, 50], [20, 60, 150, 400]],
+  ['clone',    '🧬 몬스터 복제', 'stat', [1, 10, 100], [50, 150, 500]],
   ['lv20',     '⬆️ Lv.20 몬스터', () => S.monsters.filter(m => m.lv >= MAX_LV).length, [1, 10, 50], [10, 40, 120]],
   ['myth',     '🌌 신화 이상 몬스터', () => S.monsters.filter(m => RANK[CAT[m.type].rarity] >= RANK.mythic).length, [1, 10, 50], [20, 80, 250]],
 ];
@@ -7163,6 +7225,9 @@ TUT.push(
 TUT.push(
   { text: '🔥 모험 탭의 🔥 오늘의 레이드에 도전해요 (매일 바뀌는 거대 보스!)', done: () => tutFlag('raid'), go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.raid-card'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
 );
+TUT.push(
+  { text: '🧬 상점의 🧬 복제기를 봐요 (💰10Qi · 복제 한 번 💰10M)', done: () => tutFlag('cloner') || clonerIdx() >= 0, go: () => goShop('shopCloner') },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -7307,6 +7372,9 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return S.team.length ? ['#view [data-act=raidFight]:not([disabled])', '#view .raid-card'] : ['#view [data-act=teamAuto]'];
+    case 33: // 복제기
+      if (inModal) return ['#modalBox [data-act=close]'];
+      return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopCloner]', '#shopCloner'];
   }
   return null;
 }
@@ -7489,6 +7557,7 @@ const WELCOME = [
   { icon: '📜', title: '퀘스트', text: '섬 왼쪽 <b>📜 버튼</b>에서 🧙‍♀️ 마법사 루나가 퀘스트를 줘요.<br><b>📜 스토리</b>: 6장 30개의 이야기를 하나씩 깨면 보상! (섬 위쪽 🎯에도 보여요)<br><b>📆 주간</b>: 월요일마다 새 퀘스트 4개, 모두 깨면 💎60 + 🥚 펫 알' },
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
+  { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
   { icon: '🏛️', title: '골드·보석 크게 쓰기', text: '상점의 <b>🏛️ 왕국 발전</b>: 골드로 끝없이 레벨 업 (골드·먹이·전투·교배 비용·매일 보석)<br><b>🗽 랜드마크</b>: 섬에 세우는 거대 건물, 모든 섬 골드 UP (최대 +170%)<br><b>💎 보석 상점</b>: 🤖 자동 수집 로봇, ⚡ 골드 2배 부스터, 👑 전설 알 상자' },
   { icon: '👥', title: '대전과 친구', text: '모험 탭 <b>👥 대전 · 친구</b> 칸에서<br>🌍 <b>랜덤 대전</b>으로 모르는 사람과 바로 싸우고, ⚔️ 방 코드로 <b>친구 대전</b>, 🎁 <b>선물</b>, 👀 <b>친구 섬 구경</b>도 해요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요.' },
   { icon: '🏆', title: '랭킹과 트로피', text: '🌍 랜덤 대전에서 이기면 <b>🏆 +30</b>, 지면 −15.<br>🥉브론즈 → 🥈실버 → 🥇골드 → 💠플래티넘 → 💎다이아 → 👑마스터 → 🏆챔피언!<br>모험 탭 <b>🏆 랭킹</b>에서 트로피·도감·모험·전투력 <b>전 세계 순위</b>를 봐요.' },
@@ -7727,6 +7796,9 @@ const ACTIONS = {
   achClaim: (d) => achClaim(d.id),
   sound: () => toggleSound(),
   pets: () => openPets(),
+  buyCloner: () => buyCloner(),
+  cloner: () => openCloner(),
+  cloneMon: (d) => cloneMon(d.uid),
   raidFight: () => startRaid(),
   raidClaim: (d) => raidClaim(d.k),
   menu: () => openMenu(),
@@ -7738,7 +7810,7 @@ const ACTIONS = {
   refreshDeals: () => refreshDeals(),
   buyPotion: (d) => buyPotion(d.id),
   buyExchange: () => buyExchange(),
-  shopJump: (d) => { if (d.id === 'shopDeals') tutFlag('deals', true); if (d.id === 'shopPotion' || d.id === 'shopExch') tutFlag('potion', true); updateGuide(); const el = document.getElementById(d.id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); } },
+  shopJump: (d) => { if (d.id === 'shopCloner') tutFlag('cloner', true); if (d.id === 'shopDeals') tutFlag('deals', true); if (d.id === 'shopPotion' || d.id === 'shopExch') tutFlag('potion', true); updateGuide(); const el = document.getElementById(d.id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); } },
   bigshopSeen: () => { if (!tutFlag('bigshop')) { tutFlag('bigshop', true); toast('🗽 랜드마크는 모든 섬 골드를, 💎 보석 상점은 로봇·부스터·전설 알을 팔아요!'); updateGuide(); } },
   kdGem: () => kdGemClaim(),
   buyBoost: () => buyBoost(),

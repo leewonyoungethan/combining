@@ -1226,3 +1226,15 @@ body.ui-hidden .evt-btn, body.ui-hidden .quest-btn { opacity: .55; }
 .raid-tier.ok { border-color: #7dff8f; background: rgba(125, 255, 143, .15); cursor: pointer; animation: ready 1.2s ease-in-out infinite; }
 .raid-tier.got { opacity: .55; }
 .raid-tier[disabled]:not(.got):not(.ok) { opacity: .6; }
+
+/* 🧬 복제기 */
+.cloner-card { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px; align-items: center; padding: 12px; border-radius: 18px; margin: 8px 0;
+  border: 2px solid #5ce1e6; background: radial-gradient(circle at 15% 30%, rgba(92, 225, 230, .3), rgba(10, 20, 40, .5) 70%); }
+.cloner-card.got { border-color: #7dff8f; }
+.cl-ico { font-size: 44px; text-align: center; filter: drop-shadow(0 0 10px rgba(92, 225, 230, .8)); animation: ldBob 1.4s ease-in-out infinite alternate; }
+.cl-info { display: flex; flex-direction: column; text-align: left; }
+.cl-info small { color: var(--muted); font-size: 11px; }
+.cloner-head { display: flex; gap: 12px; align-items: center; text-align: left; margin-bottom: 8px; }
+.cloner-head h3 { margin: 0; }
+.cl-cost { color: #5ce1e6; font-weight: 900; font-size: 13px; margin-top: 2px; }
+.cloner-grid { max-height: 52vh; overflow-y: auto; }
