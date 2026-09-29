@@ -162,6 +162,7 @@ const needsTarget = (sk) => ['dmg', 'burn', 'poison', 'stun', 'curse'].includes(
 // 속성마다 31마리(순수 341), 두 속성 조합마다 29마리(혼합 1595) + 전설 34 + 신화 25 + 전설 상점 5 = 2000
 // + 2차: 속성마다 15마리(165), 조합마다 33마리(1815), 전설 10, 신화 10 = 2000 더 → 모두 4000
 // + 3차: 속성마다 40마리(440), 조합마다 100마리(5500), 전설 30, 신화 30 = 6000 더 → 모두 10000
+// + 4차: 속성마다 57마리(627), 조합마다 170마리(9350), 전설 12, 신화 11 = 10000 더 → 모두 20000
 const PURE_VARIANTS = 31;
 const HYB_VARIANTS = 29;
 const LEGEND_COUNT = 34;
@@ -367,6 +368,44 @@ function makeSpecialY(prefix, k, titles) {
 }
 for (let k = 0; k < LEGEND_EXTRA2; k++) LEGENDS.push(makeSpecialY('L', k, LEG_TITLES));
 for (let k = 0; k < MYTHIC_EXTRA2; k++) MYTHICS.push(makeSpecialY('M', k, MYTH_TITLES));
+// ---- 4차 몬스터 10000마리 (또 새 수식어로) ----
+const PURE_EXTRA3 = 57, HYB_EXTRA3 = 170, LEGEND_EXTRA3 = 12, MYTHIC_EXTRA3 = 11;
+const ADJ3 = {
+  fire:    ['불타는', '화염꽃', '불꽃놀이', '적룡', '화산재', '용광로', '모닥불', '봉황', '열기', '불덩이', '화톳불', '성화'],
+  water:   ['은물결', '바다', '푸른물', '거품', '해파', '물방울', '강물', '수평선', '소나기', '빗줄기', '연못', '폭포'],
+  thunder: ['번개구름', '천둥새', '뇌우', '전기', '찌릿', '뇌운석', '번갯불', '뇌정', '광전', '천둥소리', '뇌룡', '섬전'],
+  nature:  ['새잎', '꽃향기', '덤불', '숲속', '나무', '풀숲', '꽃가루', '잔디', '개나리', '민들레', '단풍', '연꽃'],
+  earth:   ['흙', '돌멩이', '산', '언덕', '모래폭풍', '화석', '광석', '골짜기', '지층', '사암', '황금모래', '석회'],
+  dark:    ['밤', '암흑성', '먹구름', '그늘', '흑요', '밤하늘', '악령', '흑마', '어둠별', '그림자꽃', '흑룡', '심야'],
+  light:   ['햇빛', '반짝이는', '별빛꽃', '은하', '성광꽃', '빛방울', '천사', '광선', '새벽별', '무지갯빛', '금빛', '해오름'],
+  poison:  ['독풀', '독연기', '독나방', '독침꽃', '녹색독', '독웅덩이', '독뿔', '독가루', '독샘', '독진흙', '독이빨', '독덩굴'],
+  ice:     ['눈송이', '고드름', '빙판', '눈사태', '얼음별', '설화', '빙룡', '한설', '빙벽', '서리꽃', '눈꽃송이', '빙하수'],
+  metal:   ['은색', '쇠', '톱날', '강철별', '금속판', '철판', '태엽', '볼트', '쇳덩이', '합금별', '강철비', '무쇠팔'],
+  magic:   ['마녀', '부적', '주문서', '요정빛', '마법봉', '룬문자', '신비별', '환상꽃', '마력석', '마법별', '꿈', '수수께끼'],
+};
+function addPureZ(e, n) {
+  const group = 'p:' + e.id, k = PURE_VARIANTS + PURE_EXTRA + PURE_EXTRA2 + n, id = `${group}:${k}`;
+  const adjs = ADJ3[e.id];
+  const look = freshCreature2(adjs[n % adjs.length], id, hashStr(group + '#4') + n * 17);
+  addMon({ id, group, variant: k, ...look, els: [e.id], rarity: RAR_ORDER[rankOfVariant(n, PURE_EXTRA3, frac(group + '#4'))], mod: variantMod(id) });
+}
+function addHybridZ(i, j, n) {
+  const a = EL[i], b = EL[j], group = `h:${a.id}+${b.id}`, v = HYB_VARIANTS + HYB_EXTRA + HYB_EXTRA2 + n, id = `${group}:${v}`;
+  const adjs = n % 2 ? ADJ3[b.id] : ADJ3[a.id];
+  const look = freshCreature2(adjs[Math.floor(n / 2) % adjs.length], id, hashStr(group + '#4') + n * 17);
+  addMon({ id, group, variant: v, ...look, els: [a.id, b.id], rarity: RAR_ORDER[rankOfVariant(n, HYB_EXTRA3, frac(group + '#4'))], mod: variantMod(id) });
+}
+EL.forEach(e => { for (let n = 0; n < PURE_EXTRA3; n++) addPureZ(e, n); });
+PAIRS.forEach(([i, j]) => { for (let n = 0; n < HYB_EXTRA3; n++) addHybridZ(i, j, n); });
+function makeSpecialZ(prefix, k, titles) {
+  const els = nextTriple(k * 11 + (prefix === 'M' ? 419 : 263));
+  const title = `${EL[ELI[els[2]]].adj}의 ${titles[(k + 1) % titles.length]}`;
+  const look = freshCreature2(title, `${prefix}:z${k}`, hashStr(prefix + 'z' + k) % ALL_CREATURES.length);
+  usedNames.add(look.name);
+  return { id: `${prefix}:z${k}`, ...look, els, ult: `${EL[ELI[els[1]]].adj} ${ULT_WORDS[(k + 7) % ULT_WORDS.length]}` };
+}
+for (let k = 0; k < LEGEND_EXTRA3; k++) LEGENDS.push(makeSpecialZ('L', k, LEG_TITLES));
+for (let k = 0; k < MYTHIC_EXTRA3; k++) MYTHICS.push(makeSpecialZ('M', k, MYTH_TITLES));
 LEGENDS.forEach(l => addMon({ ...l, rarity: 'legendary' }));
 MYTHICS.forEach(m => addMon({ ...m, rarity: 'mythic' }));
 SHOP_LEGENDS.forEach(l => addMon({ ...l, rarity: l.rank || 'divine', shop: true }));
@@ -1930,7 +1969,7 @@ const QUESTS = [
   { text: '서식지를 2개 지어요', say: '이 섬은 너무 조용하네요… 몬스터들이 살 집부터 지어 볼까요?', now: habCount, need: 2, r: { gold: 1000 } },
   { text: '몬스터 5마리를 모아요', say: '집이 생겼으니 친구들을 불러 와요! 상점의 알을 깨 봐요.', now: () => S.monsters.length, need: 5, r: { gems: 5 } },
   { text: '교배를 3번 해요', count: 'breed', need: 3, say: '두 몬스터를 교배산에 넣으면 새로운 몬스터가 태어나요. 신기하죠?', r: { food: 500 } },
-  { text: '도감을 10마리 채워요', say: '세상에는 10,000마리나 되는 몬스터가 있대요. 하나씩 기록해 봐요!', now: () => Object.keys(S.dex).length, need: 10, r: { gems: 10 } },
+  { text: '도감을 10마리 채워요', say: '세상에는 20,000마리나 되는 몬스터가 있대요. 하나씩 기록해 봐요!', now: () => Object.keys(S.dex).length, need: 10, r: { gems: 10 } },
   { text: '모험 스테이지 3에 가요', say: '섬 밖에는 야생 몬스터가 있어요. 우리 팀의 힘을 보여 줘요!', now: () => S.stage, need: 3, r: { gold: 3000, rune: 1 } },
   { ch: '2장 · 커져 가는 왕국' },
   { text: '서식지 하나를 Lv.3으로 올려요', say: '몬스터가 많아지면 집이 좁아져요. 서식지를 넓혀 줘요!', now: () => Math.max(0, ...S.plots.filter(p => p && p.kind === 'hab').map(p => p.lv)), need: 3, r: { gold: 5000 } },
@@ -7435,7 +7474,7 @@ function mission(id, n = 1) {
 }
 // ----- 🏆 도전 과제: 한 번만 받는 큰 목표 -----
 const ACH = [
-  ...[5, 10, 25, 50, 100, 200, 400, 700, 1000, 1500, 2000, 3000, 4000, 6000, 8000, 10000].map((n, k) => ({ id: 'dex' + n, text: `📖 도감 ${fmt(n)}마리 모으기`, now: () => Object.keys(S.dex).length, need: n, gems: [5, 10, 15, 25, 40, 60, 80, 100, 150, 200, 500, 800, 1500, 2500, 4000, 10000][k] })),
+  ...[5, 10, 25, 50, 100, 200, 400, 700, 1000, 1500, 2000, 3000, 4000, 6000, 8000, 10000, 15000, 20000].map((n, k) => ({ id: 'dex' + n, text: `📖 도감 ${fmt(n)}마리 모으기`, now: () => Object.keys(S.dex).length, need: n, gems: [5, 10, 15, 25, 40, 60, 80, 100, 150, 200, 500, 800, 1500, 2500, 4000, 10000, 15000, 30000][k] })),
   ...[3, 5, 10, 15, 20, 30, 40, 50].map((n, k) => ({ id: 'stage' + n, text: `⚔️ 모험 스테이지 ${n} 도착`, now: () => S.stage, need: n, gems: [5, 10, 20, 30, 40, 60, 80, 100][k] })),
   ...['rare', 'epic', 'legendary', 'mythic', 'divine', 'holy', 'absolute', 'origin'].map((r, k) => ({ id: 'rank' + r, text: `✨ ${RAR[r].name} 등급 몬스터 얻기`, now: () => (S.monsters.some(m => RANK[CAT[m.type].rarity] >= RANK[r]) ? 1 : 0), need: 1, gems: [5, 10, 30, 60, 100, 150, 200, 300][k] })),
   ...[1, 4, 8, 12].map((n, k) => ({ id: 'pets' + n, text: `🐾 펫 ${n}마리 모으기`, now: () => PETS.filter(p => petLv(p.id)).length, need: n, gems: [5, 20, 50, 150][k] })),
