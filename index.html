@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="몬스터 합치기">
-<link rel="stylesheet" href="style.css?v=130">
+<link rel="stylesheet" href="style.css?v=132">
 <script>
   // 게임이 켜지다가 문제가 생기면 멈춘 화면 대신 다시 시도 버튼을 보여 준다
   window.addEventListener('error', function (e) { window.__bootErr = (e && e.message) || '알 수 없는 오류'; });
@@ -85,6 +85,7 @@
 <button id="hideBtn" class="hide-btn" data-act="hideUI">🙈 숨기기</button>
 <button id="petBtn" class="pet-btn hidden" data-act="pets">🐾<small>펫</small></button>
 <button id="evtBtn" class="pet-btn evt-btn hidden" data-act="event">🎉<small>이벤트</small></button>
+<button id="fishBtn" class="pet-btn fish-btn hidden" data-act="fishing">🎣<small>낚시</small></button>
 <button id="questBtn" class="pet-btn quest-btn hidden" data-act="quests">📜<small>퀘스트</small><i class="dot"></i></button>
 <div id="zoomBtns" class="zoom-btns"><button data-act="zoomIn" title="확대">＋</button><button data-act="zoomOut" title="축소">−</button></div>
 <div id="guide" class="guide hidden"></div>
@@ -105,7 +106,7 @@
 <div id="toast" class="toast"></div>
 <div id="finger" class="finger hidden"><span class="f-hand">👆</span><span class="f-tip">여기를 눌러요!</span></div>
 
-<script src="game.js?v=131"></script>
+<script src="game.js?v=132"></script>
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
 </body>
 </html>

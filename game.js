@@ -1620,7 +1620,202 @@ function updatePetBtn() {
   const p = S.petOn && petById(S.petOn);
   b.classList.toggle('hidden', tab !== 'island' || !!VISIT);
   b.innerHTML = p ? `${p.e}<small>Lv.${petLv(p.id)}</small>` : '🐾<small>펫</small>';
+  updateFishBtn();
 }
+// ===================== 🎣 낚시 =====================
+// 미끼를 던지고, 물고기가 물면 움직이는 바늘이 초록 칸에 왔을 때 눌러서 낚는다.
+// 희귀한 물고기일수록 초록 칸이 좁고 바늘이 빨라요. 미끼는 20분마다 1개씩 (최대 5개)
+const FISH_RAR = {
+  junk:      { name: '잡동사니', color: '#9aa4b2', w: 8,  zone: 0.34, speed: 0.7 },
+  common:    { name: '보통',     color: '#b4bccb', w: 55, zone: 0.28, speed: 0.85 },
+  rare:      { name: '희귀',     color: '#5cb6ff', w: 25, zone: 0.2,  speed: 1.15 },
+  epic:      { name: '서사',     color: '#e45cff', w: 9,  zone: 0.14, speed: 1.5 },
+  legendary: { name: '전설',     color: '#ffb020', w: 3,  zone: 0.09, speed: 2.0 },
+};
+const FISHES = [
+  { id: 'boot',   e: '👢', name: '낡은 장화',       r: 'junk',      cm: [25, 35],   say: '앗… 누가 버렸지?' },
+  { id: 'can',    e: '🥫', name: '빈 깡통',         r: 'junk',      cm: [8, 12],    say: '바다를 깨끗하게! 🍖 먹이로 바꿔 줄게요' },
+  { id: 'weed',   e: '🌿', name: '미역',            r: 'junk',      cm: [20, 80],   say: '미역국 끓여 먹을까?' },
+  { id: 'crucian', e: '🐟', name: '붕어',           r: 'common',    cm: [15, 35] },
+  { id: 'tropic', e: '🐠', name: '열대어',          r: 'common',    cm: [8, 20] },
+  { id: 'shrimp', e: '🦐', name: '새우',            r: 'common',    cm: [5, 15] },
+  { id: 'crab',   e: '🦀', name: '꽃게',            r: 'common',    cm: [10, 25] },
+  { id: 'puffer', e: '🐡', name: '복어',            r: 'common',    cm: [15, 40],   say: '뿌우! 화났어요' },
+  { id: 'squid',  e: '🦑', name: '오징어',          r: 'rare',      cm: [30, 60] },
+  { id: 'octo',   e: '🐙', name: '문어',            r: 'rare',      cm: [40, 90] },
+  { id: 'turtle', e: '🐢', name: '바다거북',        r: 'rare',      cm: [50, 120],  say: '천천히… 반가워요' },
+  { id: 'lobster', e: '🦞', name: '랍스터',         r: 'rare',      cm: [25, 50] },
+  { id: 'clam',   e: '🦪', name: '보석 조개',       r: 'rare',      cm: [10, 20],   say: '안에서 💎 보석이 나왔어요!' },
+  { id: 'dolphin', e: '🐬', name: '돌고래',         r: 'epic',      cm: [150, 300], say: '끼익끼익! 신나요' },
+  { id: 'shark',  e: '🦈', name: '상어',            r: 'epic',      cm: [200, 500] },
+  { id: 'seal',   e: '🦭', name: '물범',            r: 'epic',      cm: [120, 200] },
+  { id: 'egg',    e: '🥚', name: '신비한 바다 알',   r: 'epic',      cm: [20, 40],   say: '부화장에 넣었어요!' },
+  { id: 'whale',  e: '🐋', name: '고래',            r: 'legendary', cm: [800, 2500] },
+  { id: 'dragon', e: '🐉', name: '바다의 용',        r: 'legendary', cm: [1000, 3000], say: '전설 속의 용을 낚았어요!!' },
+  { id: 'chest',  e: '🎁', name: '해적의 보물상자',  r: 'legendary', cm: [60, 100],  say: '보물이 가득!' },
+];
+const FISH_MAX_BAIT = 5, FISH_REGEN = 20 * 60 * 1000, FISH_BAIT_GEMS = 5;
+function fishBait() {
+  const f = S.fish = S.fish || { bait: FISH_MAX_BAIT, t: Date.now() };
+  if (f.bait >= FISH_MAX_BAIT) { f.t = Date.now(); return f.bait; }
+  const n = Math.floor((Date.now() - f.t) / FISH_REGEN);
+  if (n > 0) { f.bait = Math.min(FISH_MAX_BAIT, f.bait + n); f.t += n * FISH_REGEN; if (f.bait >= FISH_MAX_BAIT) f.t = Date.now(); }
+  return f.bait;
+}
+const fishNext = () => Math.max(0, Math.ceil((S.fish.t + FISH_REGEN - Date.now()) / 1000));
+let FISH = null;   // { st: 'wait'|'reel'|'done', fish, zone, speed, pos, dir, t0, raf }
+function fishPick() {
+  const rars = Object.keys(FISH_RAR);
+  let r = Math.random() * rars.reduce((s, k) => s + FISH_RAR[k].w, 0), rar = 'common';
+  for (const k of rars) { r -= FISH_RAR[k].w; if (r <= 0) { rar = k; break; } }
+  const pool = FISHES.filter(f => f.r === rar);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function openFishing() {
+  tutFlag('fish', true);
+  fishStop();
+  const bait = fishBait(), dex = S.fishDex || {};
+  const got = FISHES.filter(f => dex[f.id]).length;
+  showModal(`<div class="fish-panel"><h3>🎣 낚시터</h3>
+    <div class="fish-sea" id="fishSea"><span class="fish-bob" id="fishBob">🎣</span><span class="fish-msg" id="fishMsg">미끼를 던져 봐요!</span>
+      <span class="fish-wave">🌊</span><span class="fish-wave w2">🌊</span><span class="fish-wave w3">🌊</span></div>
+    <div class="fish-bar hidden" id="fishBar"><i class="fish-zone" id="fishZone"><b></b></i><span class="fish-hook" id="fishHook">🪝</span></div>
+    <div class="fish-bait">🪱 미끼 <b>${bait}</b>/${FISH_MAX_BAIT} ${bait < FISH_MAX_BAIT ? `<small class="muted">다음 미끼 ${mmss(fishNext())}</small>` : ''}</div>
+    <div class="row" id="fishBtns">
+      ${bait ? '<button class="btn big green" data-act="fishCast">🎣 던지기</button>' : `<button class="btn big" data-act="fishBuy">🪱 미끼 ${FISH_MAX_BAIT}개 (💎 ${FISH_BAIT_GEMS})</button>`}
+    </div>
+    <details class="fish-dex"><summary>📖 물고기 도감 ${got}/${FISHES.length}</summary>
+      <div class="fish-grid">${FISHES.map(f => dex[f.id] ? `<div class="fish-card" style="--fc:${FISH_RAR[f.r].color}"><span>${f.e}</span><b>${f.name}</b><small>${FISH_RAR[f.r].name} · ${dex[f.id].n}마리</small><small>최고 ${dex[f.id].cm}cm</small></div>`
+        : `<div class="fish-card no"><span>❓</span><b>???</b><small>${FISH_RAR[f.r].name}</small></div>`).join('')}</div>
+    </details>
+    <p class="muted fish-help">던진 뒤 <b>❗</b>가 뜨면 움직이는 🪝가 <b style="color:#7dff8f">초록 칸</b>에 왔을 때 <b>낚아채기</b>! 가운데 노란 칸이면 <b>완벽!</b></p>
+    <div class="row"><button class="btn ghost small" data-act="fishClose">닫기</button></div></div>`);
+  updateFishBtn();
+}
+function fishStop() { if (FISH && FISH.raf) cancelAnimationFrame(FISH.raf); if (FISH && FISH.timer) clearTimeout(FISH.timer); FISH = null; }
+function fishCast() {
+  if (FISH) return;
+  if (!fishBait()) { toast('🪱 미끼가 없어요'); return; }
+  S.fish.bait--; save();
+  { const bb = document.querySelector('#modalBox .fish-bait b'); if (bb) bb.textContent = S.fish.bait; }
+  updateFishBtn();
+  const fish = fishPick(), R = FISH_RAR[fish.r];
+  FISH = { st: 'wait', fish, zone: R.zone, speed: R.speed, pos: 0, dir: 1 };
+  const zs = 0.1 + Math.random() * (0.8 - R.zone);
+  FISH.z0 = zs; FISH.z1 = zs + R.zone;
+  $('#fishBtns').innerHTML = '<button class="btn big" data-act="fishHit">⏳ 기다리는 중…</button>';
+  $('#fishMsg').textContent = '찌가 흔들흔들…';
+  $('#fishBob').classList.add('cast');
+  sfx('breed');
+  FISH.timer = setTimeout(fishBite, 1200 + Math.random() * 2300);
+}
+function fishBite() {
+  if (!FISH || !$('#fishBar')) { fishStop(); return; }
+  FISH.st = 'reel';
+  FISH.t0 = performance.now();
+  $('#fishMsg').innerHTML = '<b class="fish-bang">❗ 물었다!</b>';
+  $('#fishBob').classList.add('bite');
+  const bar = $('#fishBar'), z = $('#fishZone');
+  bar.classList.remove('hidden');
+  z.style.left = (FISH.z0 * 100) + '%'; z.style.width = (FISH.zone * 100) + '%';
+  $('#fishBtns').innerHTML = '<button class="btn big green fish-hit" data-act="fishHit">🎣 낚아채기!</button>';
+  sfx('coin');
+  let last = performance.now();
+  const step = (now) => {
+    if (!FISH || FISH.st !== 'reel') return;
+    const hook = $('#fishHook');
+    if (!hook) { fishStop(); return; }
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    FISH.pos += FISH.dir * FISH.speed * dt;
+    if (FISH.pos >= 1) { FISH.pos = 1; FISH.dir = -1; }
+    if (FISH.pos <= 0) { FISH.pos = 0; FISH.dir = 1; }
+    hook.style.left = (FISH.pos * 100) + '%';
+    // 8초 안에 안 누르면 도망
+    if (now - FISH.t0 > 8000) { fishEnd(false, '물고기가 지쳐서 도망갔어요…'); return; }
+    FISH.raf = requestAnimationFrame(step);
+  };
+  FISH.raf = requestAnimationFrame(step);
+}
+function fishHit() {
+  if (!FISH) return;
+  if (FISH.st === 'wait') { fishEnd(false, '너무 빨랐어요! 물고기가 놀라서 도망갔어요 💨'); return; }
+  if (FISH.st !== 'reel') return;
+  const p = FISH.pos, mid = (FISH.z0 + FISH.z1) / 2;
+  if (p < FISH.z0 || p > FISH.z1) { fishEnd(false, `앗, 놓쳤어요! (놓친 물고기: ${FISH.fish.e} ${FISH.fish.name})`); return; }
+  fishEnd(true, '', Math.abs(p - mid) <= FISH.zone * 0.15);
+}
+function fishEnd(ok, msg, perfect) {
+  if (!FISH) return;
+  const fish = FISH.fish;
+  if (FISH.raf) cancelAnimationFrame(FISH.raf);
+  if (FISH.timer) clearTimeout(FISH.timer);
+  FISH.st = 'done';
+  const btns = $('#fishBtns');
+  if (!btns) { fishStop(); return; }
+  $('#fishBob').classList.remove('cast', 'bite');
+  if (!ok) {
+    sfx('err');
+    $('#fishMsg').textContent = msg;
+  } else {
+    const [a, b] = fish.cm;
+    let cm = Math.round(a + Math.random() * (b - a));
+    if (perfect) cm = Math.round(cm * 1.3);
+    S.fishDex = S.fishDex || {};
+    const d = S.fishDex[fish.id], isNew = !d, rec = d && cm > d.cm;
+    S.fishDex[fish.id] = { n: (d ? d.n : 0) + 1, cm: Math.max(cm, d ? d.cm : 0) };
+    statAdd('fish', 1);
+    const inc = totalIncome(), mul = perfect ? 1.5 : 1;
+    let gold = 0, gems = 0, food = 0, extra = '';
+    if (fish.r === 'junk') food = fish.id === 'can' ? 200 : 60;
+    if (fish.r === 'common') gold = Math.max(300, inc * 120);
+    if (fish.r === 'rare') { gold = Math.max(1500, inc * 400); gems = fish.id === 'clam' ? 5 : 1; }
+    if (fish.r === 'epic') { gold = Math.max(6000, inc * 1200); gems = 3; }
+    if (fish.r === 'legendary') { gold = Math.max(30000, inc * 4000); gems = fish.id === 'chest' ? 25 : 10; }
+    if (fish.id === 'egg') {
+      if (S.hatch.length < hatchCap()) {
+        const pool = CAT_LIST.filter(c => c.rarity === 'epic' && !c.shop), c = pool[Math.floor(Math.random() * pool.length)];
+        S.hatch.push(c.id); extra = ` · 🥚 ${c.face} ${c.name} 알!`;
+      } else { gems += 5; extra = ' · (부화장이 가득 차서 대신 💎5)'; }
+    }
+    gold = Math.round(gold * mul); gems = Math.round(gems * mul);
+    if (gold) earn(gold);
+    if (gems) earn(gems, 'gems');
+    if (food) earn(food, 'food');
+    sfx(fish.r === 'legendary' || fish.r === 'epic' ? 'win' : fish.r === 'junk' ? 'breed' : 'yay');
+    updateHud();
+    $('#fishMsg').innerHTML = `<span class="fish-catch" style="--fc:${FISH_RAR[fish.r].color}"><span class="fc-e">${fish.e}</span>
+      <b>${perfect ? '✨ 완벽! ' : ''}${fish.name}${isNew ? ' <i class="fc-new">NEW</i>' : ''}</b>
+      <small>${FISH_RAR[fish.r].name} · ${fmt(cm)}cm${rec ? ' 🏅 최고 기록!' : ''}</small>
+      <small>${[gold ? '💰 ' + shortNum(gold) : '', gems ? '💎 ' + gems : '', food ? '🍖 ' + food : ''].filter(Boolean).join(' · ')}${extra}</small>
+      ${fish.say ? `<small class="muted">${fish.say}</small>` : ''}</span>`;
+  }
+  $('#fishBar').classList.add('hidden');
+  save();
+  const bait = fishBait();
+  btns.innerHTML = bait ? `<button class="btn big green" data-act="fishAgain">🎣 한 번 더 (🪱 ${bait})</button>`
+    : `<button class="btn big" data-act="fishBuy">🪱 미끼 ${FISH_MAX_BAIT}개 (💎 ${FISH_BAIT_GEMS})</button>`;
+  const bb = document.querySelector('#modalBox .fish-bait b'); if (bb) bb.textContent = bait;
+  FISH = null;
+  updateFishBtn();
+}
+function fishBuy() {
+  if (!spend(FISH_BAIT_GEMS, 'gems')) return;
+  fishBait();
+  S.fish.bait = Math.max(S.fish.bait, 0) + FISH_MAX_BAIT;
+  sfx('buy'); save(); updateHud();
+  toast(`🪱 미끼 ${FISH_MAX_BAIT}개!`);
+  openFishing();
+}
+function updateFishBtn() {
+  const b = $('#fishBtn');
+  if (!b) return;
+  b.classList.toggle('hidden', tab !== 'island' || !!VISIT);
+  const n = fishBait();
+  b.classList.toggle('ready', n > 0);
+  b.innerHTML = `🎣<small>낚시 ${n}</small>`;
+}
+setInterval(() => { if (typeof S !== 'undefined' && S) updateFishBtn(); }, 30000);
+
 // 섬 위를 돌아다니는 펫 (섬 가장자리를 천천히 한 바퀴)
 function petWalkPos(t) {
   const a = t * 0.12;
@@ -1921,6 +2116,7 @@ function showModal(html) {
 }
 function closeModal() {
   if (typeof SHARE !== 'undefined' && SHARE) stopShare();
+  if (typeof FISH !== 'undefined' && FISH) fishStop();
   $('#modal').classList.add('hidden');
   $('#modalBox').innerHTML = '';
   modalStack = null;
@@ -7212,6 +7408,7 @@ const ACH_MORE = [
   ['boss',     '👹 보스 물리치기', () => Object.keys(S.bossCleared || {}).length, [1, 3, 6, 10, 16], [10, 30, 80, 200, 600]],
   ['raidClear', '🔥 레이드 보스 쓰러뜨리기', 'stat', [1, 5, 20, 50], [20, 60, 150, 400]],
   ['clone',    '🧬 몬스터 복제', 'stat', [1, 10, 100], [50, 150, 500]],
+  ['fish',     '🎣 물고기 낚기', 'stat', [1, 10, 50, 200, 500], [10, 20, 50, 120, 300]],
   ['friendGift', '💌 친구에게 하트 보내기', 'stat', [1, 10, 50, 200], [10, 30, 80, 200]],
   ['coopWin',  '🤝 협동 레이드 승리', 'stat', [1, 5, 20], [30, 80, 200]],
   ['fusepet',  '🧪 합성 펫 모으기', () => PETS.filter(p => p.fusion && petLv(p.id)).length, [1, 4, 8], [20, 80, 250]],
@@ -7796,6 +7993,9 @@ TUT.push(
   { text: '👫 모험 탭의 👫 친구에서 친구 코드로 친구를 추가해 봐요 (💌 하트 · ⚔️ 초대!)', done: () => tutFlag('friendAdd') || (S.friends || []).length > 0,
     go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
 );
+TUT.push(
+  { text: '🎣 섬 왼쪽의 🎣 낚시에서 물고기를 한 마리 낚아 봐요!', done: () => tutFlag('fish') || stat('fish') > 0, go: () => { closeModal(); tab = 'island'; render(); openFishing(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -7958,6 +8158,10 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox #frCode', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=friends]'];
+    case 38: // 낚시
+      if (inModal) return ['#modalBox [data-act=fishCast]', '#modalBox [data-act=fishHit]', '#modalBox [data-act=fishClose]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#fishBtn'];
   }
   return null;
 }
@@ -8143,6 +8347,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🎣', title: '낚시', text: '섬 왼쪽의 <b>🎣 낚시</b>에서 미끼를 던져요.<br><b>❗</b>가 뜨면 움직이는 🪝가 <b style="color:#7dff8f">초록 칸</b>에 올 때 <b>낚아채기</b>! 가운데 노란 칸이면 <b>✨ 완벽</b> (보상 1.5배).<br>물고기 20종 · 💰골드 · 💎보석 · 🥚알 · 🎁보물상자! 미끼는 20분마다 1개 (최대 5개).' },
   { icon: '👫', title: '친구', text: '모험 탭 <b>👫 친구</b>에서 내 <b>친구 코드</b>(6글자)를 친구에게 알려 주고, 친구 코드를 넣으면 친구가 돼요.<br>🏆 랭킹에서 ➕를 눌러도 추가돼요!<br>💌 <b>하트</b>를 매일 보내면 친구가 💰골드와 💎를 받아요. ⚔️ 누르면 바로 <b>대전 초대</b>, 🤝 누르면 <b>레이드 초대</b>!' },
   { icon: '🌌', title: '우주 발전', text: '골드가 <b>1Sx(1해의 1000배!)</b> 넘게 모였다면 상점의 <b>🌌 우주 발전</b>으로!<br>⚔️ 전투력 +25% · 🍀 교배 행운 · 💎 매일 보석 20개 · 🐾 펫 능력 +20% (레벨마다)<br>레벨마다 값이 <b>1000배</b>씩 오르고 끝이 없어요.<br>큰 숫자는 K·M·B·T·Qa·Qi·<b>Sx·Sp·Oc·No·Dc</b>… 순서로 커져요.' },
   { icon: '🏛️', title: '골드·보석 크게 쓰기', text: '상점의 <b>🏛️ 왕국 발전</b>: 골드로 끝없이 레벨 업 (골드·먹이·전투·교배 비용·매일 보석)<br><b>🗽 랜드마크</b>: 섬에 세우는 거대 건물, 모든 섬 골드 UP (최대 +170%)<br><b>💎 보석 상점</b>: 🤖 자동 수집 로봇, ⚡ 골드 2배 부스터, 👑 전설 알 상자' },
@@ -8322,6 +8527,12 @@ const ACTIONS = {
   coopJoin: () => { tutFlag('coop', true); pvpJoin(true); },
   coopSeen: () => { if (!tutFlag('coop')) { tutFlag('coop', true); toast('🤝 한 명이 레이드 방을 만들고, 친구가 코드로 들어오면 시작해요!'); updateGuide(); } },
   ranking: () => openRanking(),
+  fishing: () => openFishing(),
+  fishCast: () => fishCast(),
+  fishHit: () => fishHit(),
+  fishAgain: () => { FISH = null; fishCast(); },
+  fishBuy: () => fishBuy(),
+  fishClose: () => { fishStop(); closeModal(); },
   friends: () => openFriends(true),
   frAdd: () => frAddByCode(),
   frAddRank: (d) => { const p = rankCache && rankCache.list.find(x => x.id === d.id); if (p && frAdd(p)) openRanking(); },
