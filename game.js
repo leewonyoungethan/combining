@@ -1,7 +1,7 @@
 'use strict';
 
 // ===================== 속성 =====================
-// 앞의 8개는 기본 속성(처음부터 가진 몬스터), 뒤의 3개는 교배로만 얻는 특수 속성
+// 앞의 8개는 기본 속성(처음부터 가진 몬스터), 뒤의 12개는 교배로 얻는 특수 속성
 const EL = [
   { id: 'fire',    name: '불',   emoji: '🔥', color: '#ff6b3d', adj: '화염',   noun: '살라맨더', face: '🦎', sp: 8 },
   { id: 'water',   name: '물',   emoji: '💧', color: '#3da5ff', adj: '물결',   noun: '거북',     face: '🐢', sp: 0 },
@@ -14,23 +14,44 @@ const EL = [
   { id: 'ice',     name: '얼음', emoji: '❄️', color: '#9be7ff', adj: '서리',   noun: '펭귄',     face: '🐧', sp: 2 },
   { id: 'metal',   name: '금속', emoji: '⚙️', color: '#a8b2c1', adj: '강철',   noun: '로봇',     face: '🤖', sp: -8 },
   { id: 'magic',   name: '마법', emoji: '🔮', color: '#ff5ce1', adj: '비전',   noun: '고블린',   face: '👺', sp: 5 },
+  // 새 특수 속성 9개 (모두 20개)
+  { id: 'wind',    name: '바람', emoji: '🌪️', color: '#9ff5e1', adj: '질풍',   noun: '회오리새', face: '🕊️', sp: 12 },
+  { id: 'sound',   name: '소리', emoji: '🎵', color: '#ff9ed8', adj: '메아리', noun: '노래새',   face: '🐦', sp: 7 },
+  { id: 'space',   name: '우주', emoji: '🪐', color: '#6a5cff', adj: '성간',   noun: '우주고래', face: '🐋', sp: 3 },
+  { id: 'time',    name: '시간', emoji: '⏳', color: '#d9b77e', adj: '영겁',   noun: '시계토끼', face: '🐇', sp: 10 },
+  { id: 'dragon',  name: '용',   emoji: '🐲', color: '#ff4d4d', adj: '용린',   noun: '비룡',     face: '🐉', sp: 5 },
+  { id: 'spirit',  name: '영혼', emoji: '👻', color: '#c8b6ff', adj: '혼불',   noun: '도깨비불', face: '👻', sp: 6 },
+  { id: 'crystal', name: '수정', emoji: '💎', color: '#7ff0ff', adj: '결정',   noun: '보석거미', face: '🕷️', sp: -6 },
+  { id: 'candy',   name: '사탕', emoji: '🍭', color: '#ff8fcf', adj: '달콤',   noun: '곰젤리',   face: '🧸', sp: 4 },
+  { id: 'beast',   name: '야수', emoji: '🐾', color: '#c97b4a', adj: '야생',   noun: '늑대왕',   face: '🐺', sp: 9 },
 ];
+// 처음 11개 속성으로 만든 몬스터 20000마리는 이름·등급이 바뀌지 않게 따로 만든다
+const EL_OLD_N = 11;
 const ELI = Object.fromEntries(EL.map((e, i) => [e.id, i]));
 const BASE = ['fire', 'water', 'thunder', 'nature', 'earth', 'dark', 'light', 'poison'];
 
 // 상성: 키 속성이 배열 속성에게 강하다
 const BEATS = {
-  fire: ['nature', 'ice', 'metal'],
-  water: ['fire', 'earth'],
-  thunder: ['water', 'metal'],
+  fire: ['nature', 'ice', 'metal', 'candy'],
+  water: ['fire', 'earth', 'crystal'],
+  thunder: ['water', 'metal', 'wind'],
   nature: ['water', 'earth'],
-  earth: ['thunder', 'fire', 'poison'],
-  dark: ['light', 'magic'],
-  light: ['dark', 'poison'],
-  poison: ['nature', 'water'],
-  ice: ['nature', 'earth'],
-  metal: ['ice', 'magic', 'poison'],
-  magic: ['nature', 'thunder'],
+  earth: ['thunder', 'fire', 'poison', 'sound'],
+  dark: ['light', 'magic', 'time'],
+  light: ['dark', 'poison', 'spirit'],
+  poison: ['nature', 'water', 'beast'],
+  ice: ['nature', 'earth', 'dragon'],
+  metal: ['ice', 'magic', 'poison', 'crystal'],
+  magic: ['nature', 'thunder', 'space'],
+  wind: ['nature', 'poison'],
+  sound: ['spirit', 'crystal'],
+  space: ['time', 'light'],
+  time: ['beast', 'metal'],
+  dragon: ['fire', 'wind'],
+  spirit: ['magic', 'beast'],
+  crystal: ['thunder', 'dark'],
+  candy: ['beast', 'spirit'],
+  beast: ['nature', 'wind'],
 };
 
 // ===================== 등급 =====================
@@ -63,6 +84,15 @@ const ADV_RECIPES = [
   { el: 'ice',   need: ['water', 'thunder'] },
   { el: 'metal', need: ['fire', 'earth'] },
   { el: 'magic', need: ['light', 'dark'] },
+  { el: 'wind',    need: ['nature', 'thunder'] },
+  { el: 'sound',   need: ['thunder', 'magic'] },
+  { el: 'space',   need: ['magic', 'ice'] },
+  { el: 'time',    need: ['light', 'metal'] },
+  { el: 'dragon',  need: ['fire', 'dark'] },
+  { el: 'spirit',  need: ['dark', 'nature'] },
+  { el: 'crystal', need: ['earth', 'ice'] },
+  { el: 'candy',   need: ['nature', 'light'] },
+  { el: 'beast',   need: ['water', 'earth'] },
 ];
 const LEGENDS = [
   { id: 'L:phoenix', name: '피닉스 킹',     face: '🦚', els: ['fire', 'light', 'magic'],  ult: '불사조의 비상' },
@@ -117,6 +147,15 @@ const SK = {
   metal:   { atk: { n: '강철 주먹', m: 1.7 },          eff: { n: '강화', type: 'buffSelf' } },
   magic:   { atk: { n: '비전 폭발', m: 0.9, aoe: true }, eff: { n: '마력 증폭', type: 'buffTeam' } },
   poison:  { atk: { n: '독침', m: 1.6 },               eff: { n: '맹독 안개', type: 'poison', m: 0.6 } },
+  wind:    { atk: { n: '회오리', m: 0.9, aoe: true },   eff: { n: '순풍', type: 'buffTeam' } },
+  sound:   { atk: { n: '음파', m: 1.6 },               eff: { n: '자장가', type: 'stun', m: 0.5 } },
+  space:   { atk: { n: '유성 낙하', m: 0.9, aoe: true }, eff: { n: '중력장', type: 'curse', m: 0.6 } },
+  time:    { atk: { n: '시간 베기', m: 1.7 },          eff: { n: '되감기', type: 'healSelf', v: 0.35 } },
+  dragon:  { atk: { n: '용의 숨결', m: 1.8 },          eff: { n: '용의 불꽃', type: 'burn', m: 0.8 } },
+  spirit:  { atk: { n: '영혼 흡수', m: 1.6 },          eff: { n: '영혼 보호', type: 'shield' } },
+  crystal: { atk: { n: '수정 파편', m: 1.6 },          eff: { n: '수정 갑옷', type: 'shield' } },
+  candy:   { atk: { n: '사탕 폭탄', m: 1.6 },          eff: { n: '달콤한 간식', type: 'healTeam', v: 0.2 } },
+  beast:   { atk: { n: '야수의 발톱', m: 1.8 },        eff: { n: '포효', type: 'buffSelf' } },
 };
 const EFF_COST = { burn: 4, poison: 4, healTeam: 5, healSelf: 4, shield: 3, stun: 5, curse: 4, buffSelf: 3, buffTeam: 5 };
 const MAX_STA = 10;
@@ -163,6 +202,7 @@ const needsTarget = (sk) => ['dmg', 'burn', 'poison', 'stun', 'curse'].includes(
 // + 2차: 속성마다 15마리(165), 조합마다 33마리(1815), 전설 10, 신화 10 = 2000 더 → 모두 4000
 // + 3차: 속성마다 40마리(440), 조합마다 100마리(5500), 전설 30, 신화 30 = 6000 더 → 모두 10000
 // + 4차: 속성마다 57마리(627), 조합마다 170마리(9350), 전설 12, 신화 11 = 10000 더 → 모두 20000
+// + 5차: 새 속성 9개 → 속성마다 41마리(369), 새 조합 135개마다 20마리(2700), 전설 10, 신화 5 = 3084 더 → 모두 23084
 const PURE_VARIANTS = 31;
 const HYB_VARIANTS = 29;
 const LEGEND_COUNT = 34;
@@ -256,7 +296,7 @@ function addHybrid(i, j, v) {
 
 // 전설/신화 늘리기: 아직 안 쓴 세 속성 조합마다 이름을 붙여 만든다
 const TRIPLES = [];
-for (let x = 0; x < EL.length; x++) for (let y = x + 1; y < EL.length; y++) for (let z = y + 1; z < EL.length; z++) TRIPLES.push([EL[x].id, EL[y].id, EL[z].id]);
+for (let x = 0; x < EL_OLD_N; x++) for (let y = x + 1; y < EL_OLD_N; y++) for (let z = y + 1; z < EL_OLD_N; z++) TRIPLES.push([EL[x].id, EL[y].id, EL[z].id]);
 const tripleKey = (els) => els.slice().sort().join('+');
 const usedTriples = new Set([...LEGENDS, ...MYTHICS].map(m => tripleKey(m.els)));
 const LEG_TITLES = ['제왕', '군주', '수호신', '폭군', '현자', '기사', '여제', '대왕', '거인', '패왕'];
@@ -279,12 +319,13 @@ for (let k = 0; LEGENDS.length < LEGEND_COUNT; k++) LEGENDS.push(makeSpecial('L'
 for (let k = 0; MYTHICS.length < MYTHIC_COUNT; k++) MYTHICS.push(makeSpecial('M', k, MYTH_TITLES));
 
 const PAIRS = [];
-for (let i = 0; i < EL.length; i++) for (let j = i + 1; j < EL.length; j++) PAIRS.push([i, j]);
+for (let i = 0; i < EL_OLD_N; i++) for (let j = i + 1; j < EL_OLD_N; j++) PAIRS.push([i, j]);
+const EL_OLD = EL.slice(0, EL_OLD_N);
 // 이름 붙은 전설/신화가 이름을 먼저 차지하고, 대표 몬스터 → 나머지 변종 순서로 만든다
 LEGENDS.concat(MYTHICS).forEach(m => usedNames.add(m.name));
-EL.forEach((e, i) => addPure(e, i, 0));
+EL_OLD.forEach((e, i) => addPure(e, i, 0));
 PAIRS.forEach(([i, j]) => addHybrid(i, j, 0));
-EL.forEach((e, i) => { for (let k = 1; k < PURE_VARIANTS; k++) addPure(e, i, k); });
+EL_OLD.forEach((e, i) => { for (let k = 1; k < PURE_VARIANTS; k++) addPure(e, i, k); });
 PAIRS.forEach(([i, j]) => { for (let v = 1; v < HYB_VARIANTS; v++) addHybrid(i, j, v); });
 // ---- 2차 몬스터 2000마리 (기존 몬스터의 이름·등급이 바뀌지 않게 맨 뒤에서 만든다) ----
 const PURE_EXTRA = 15, HYB_EXTRA = 33, LEGEND_EXTRA = 10, MYTHIC_EXTRA = 10;
@@ -300,7 +341,7 @@ function addHybridX(i, j, n) {
   const look = freshCreature(adjs[(v * 5 + 1) % adjs.length], id, hashStr(group + '#2') + n * 11);
   addMon({ id, group, variant: v, ...look, els: [a.id, b.id], rarity: RAR_ORDER[rankOfVariant(n, HYB_EXTRA, frac(group + '#2'))], mod: variantMod(id) });
 }
-EL.forEach(e => { for (let n = 0; n < PURE_EXTRA; n++) addPureX(e, n); });
+EL_OLD.forEach(e => { for (let n = 0; n < PURE_EXTRA; n++) addPureX(e, n); });
 PAIRS.forEach(([i, j]) => { for (let n = 0; n < HYB_EXTRA; n++) addHybridX(i, j, n); });
 // 2차 전설·신화: 아직 안 쓴 세 속성 조합으로
 function makeSpecialX(prefix, k, titles) {
@@ -357,7 +398,7 @@ function addHybridY(i, j, n) {
   const look = freshCreature2(adjs[Math.floor(n / 2) % adjs.length], id, hashStr(group + '#3') + n * 13);
   addMon({ id, group, variant: v, ...look, els: [a.id, b.id], rarity: RAR_ORDER[rankOfVariant(n, HYB_EXTRA2, frac(group + '#3'))], mod: variantMod(id) });
 }
-EL.forEach(e => { for (let n = 0; n < PURE_EXTRA2; n++) addPureY(e, n); });
+EL_OLD.forEach(e => { for (let n = 0; n < PURE_EXTRA2; n++) addPureY(e, n); });
 PAIRS.forEach(([i, j]) => { for (let n = 0; n < HYB_EXTRA2; n++) addHybridY(i, j, n); });
 function makeSpecialY(prefix, k, titles) {
   const els = nextTriple(k * 7 + (prefix === 'M' ? 331 : 157));
@@ -395,7 +436,7 @@ function addHybridZ(i, j, n) {
   const look = freshCreature2(adjs[Math.floor(n / 2) % adjs.length], id, hashStr(group + '#4') + n * 17);
   addMon({ id, group, variant: v, ...look, els: [a.id, b.id], rarity: RAR_ORDER[rankOfVariant(n, HYB_EXTRA3, frac(group + '#4'))], mod: variantMod(id) });
 }
-EL.forEach(e => { for (let n = 0; n < PURE_EXTRA3; n++) addPureZ(e, n); });
+EL_OLD.forEach(e => { for (let n = 0; n < PURE_EXTRA3; n++) addPureZ(e, n); });
 PAIRS.forEach(([i, j]) => { for (let n = 0; n < HYB_EXTRA3; n++) addHybridZ(i, j, n); });
 function makeSpecialZ(prefix, k, titles) {
   const els = nextTriple(k * 11 + (prefix === 'M' ? 419 : 263));
@@ -406,6 +447,55 @@ function makeSpecialZ(prefix, k, titles) {
 }
 for (let k = 0; k < LEGEND_EXTRA3; k++) LEGENDS.push(makeSpecialZ('L', k, LEG_TITLES));
 for (let k = 0; k < MYTHIC_EXTRA3; k++) MYTHICS.push(makeSpecialZ('M', k, MYTH_TITLES));
+// ---- 5차: 새 속성 9개의 몬스터 ----
+const PURE_NEW = 41, HYB_NEW = 20, LEGEND_NEW = 10, MYTHIC_NEW = 5;
+const ADJ_NEW = {
+  wind:    ['질풍', '회오리', '산들', '돌풍', '바람개비', '폭풍우', '미풍', '날개바람', '하늬', '바람결', '구름길', '흩날리는'],
+  sound:   ['메아리', '노래', '울림', '멜로디', '박자', '합창', '휘파람', '북소리', '종소리', '하모니', '음표', '노래하는'],
+  space:   ['성간', '별똥', '블랙홀', '혜성', '행성', '은하계', '초신성', '달빛', '성좌', '궤도', '운석', '무중력'],
+  time:    ['영겁', '시계', '모래시계', '찰나', '과거', '미래', '태엽시계', '시간여행', '순간', '영원', '자정', '새벽녘'],
+  dragon:  ['용린', '비룡', '용아', '용혼', '화룡왕', '용비늘', '드래곤', '용날개', '천룡', '용의눈', '용발톱', '용궁'],
+  spirit:  ['혼불', '유령빛', '수호령', '정령', '망자', '넋', '영체', '귀혼', '혼백', '요괴', '떠도는', '영혼'],
+  crystal: ['결정', '보석', '다이아', '루비', '사파이어', '에메랄드', '자수정', '진주', '호박', '수정꽃', '유리', '프리즘'],
+  candy:   ['달콤', '사탕', '젤리', '초코', '마카롱', '솜사탕', '롤리팝', '쿠키', '케이크', '푸딩', '캐러멜', '꿀'],
+  beast:   ['야생', '맹수', '포효', '사냥꾼', '발톱', '송곳니', '초원', '정글왕', '들짐승', '야수왕', '갈기', '으르렁'],
+};
+const adjsOf = (id) => ADJ_NEW[id] || ADJ3[id];
+const NEW_PAIRS = [];
+for (let i = 0; i < EL.length; i++) for (let j = Math.max(i + 1, EL_OLD_N); j < EL.length; j++) NEW_PAIRS.push([i, j]);
+// 대표 몬스터 이름이 이미 있으면 새로 짓는다
+function repLook(name, face, adj, id, seed) { return usedNames.has(name) ? freshCreature2(adj, id, seed) : { face, name }; }
+function addPureN(e, k) {
+  const group = 'p:' + e.id, id = k === 0 ? group : `${group}:${k}`, seed = hashStr(group + '#5') + k * 19;
+  const look = k === 0 ? repLook(`${e.adj} ${e.noun}`, e.face, e.adj, id, seed) : freshCreature2(adjsOf(e.id)[k % 12], id, seed);
+  addMon({ id, group, variant: k, ...look, els: [e.id], rarity: RAR_ORDER[k === 0 ? 0 : rankOfVariant(k, PURE_NEW, frac(group + '#5'))], mod: k === 0 ? null : variantMod(id) });
+}
+function addHybridN(i, j, v) {
+  const a = EL[i], b = EL[j], group = `h:${a.id}+${b.id}`, id = v === 0 ? group : `${group}:${v}`, seed = hashStr(group + '#5') + v * 19;
+  const look = v === 0 ? repLook(`${a.adj} ${b.noun}`, b.face, a.adj, id, seed) : freshCreature2(adjsOf(v % 2 ? a.id : b.id)[Math.floor(v / 2) % 12], id, seed);
+  addMon({ id, group, variant: v, ...look, els: [a.id, b.id], rarity: RAR_ORDER[v === 0 ? 0 : rankOfVariant(v, HYB_NEW, frac(group + '#5'))], mod: v === 0 ? null : variantMod(id) });
+}
+EL.slice(EL_OLD_N).forEach(e => { for (let k = 0; k < PURE_NEW; k++) addPureN(e, k); });
+NEW_PAIRS.forEach(([i, j]) => { for (let v = 0; v < HYB_NEW; v++) addHybridN(i, j, v); });
+// 새 속성이 들어간 세 속성 조합으로 전설·신화
+const NEW_TRIPLES = [];
+for (let x = 0; x < EL.length; x++) for (let y = x + 1; y < EL.length; y++) for (let z = Math.max(y + 1, EL_OLD_N); z < EL.length; z++) NEW_TRIPLES.push([EL[x].id, EL[y].id, EL[z].id]);
+function makeSpecialN(prefix, k, titles) {
+  let els = null;
+  for (let t = 0; t < NEW_TRIPLES.length && !els; t++) {
+    const tr = NEW_TRIPLES[((k + (prefix === 'M' ? 500 : 0)) * 97 + t * 31) % NEW_TRIPLES.length];
+    if (!usedTriples.has(tripleKey(tr))) { usedTriples.add(tripleKey(tr)); els = tr; }
+  }
+  els = els || NEW_TRIPLES[k % NEW_TRIPLES.length];
+  const newEl = els.find(x => ELI[x] >= EL_OLD_N);
+  const title = `${EL[ELI[newEl]].adj}의 ${titles[(k + 2) % titles.length]}`;
+  const look = freshCreature2(title, `${prefix}:n${k}`, hashStr(prefix + 'n' + k) % ALL_CREATURES.length);
+  usedNames.add(look.name);
+  return { id: `${prefix}:n${k}`, ...look, els, ult: `${EL[ELI[newEl]].adj} ${ULT_WORDS[(k + 4) % ULT_WORDS.length]}` };
+}
+for (let k = 0; k < LEGEND_NEW; k++) LEGENDS.push(makeSpecialN('L', k, LEG_TITLES));
+for (let k = 0; k < MYTHIC_NEW; k++) MYTHICS.push(makeSpecialN('M', k, MYTH_TITLES));
+PAIRS.push(...NEW_PAIRS);
 LEGENDS.forEach(l => addMon({ ...l, rarity: 'legendary' }));
 MYTHICS.forEach(m => addMon({ ...m, rarity: 'mythic' }));
 SHOP_LEGENDS.forEach(l => addMon({ ...l, rarity: l.rank || 'divine', shop: true }));
@@ -1969,7 +2059,7 @@ const QUESTS = [
   { text: '서식지를 2개 지어요', say: '이 섬은 너무 조용하네요… 몬스터들이 살 집부터 지어 볼까요?', now: habCount, need: 2, r: { gold: 1000 } },
   { text: '몬스터 5마리를 모아요', say: '집이 생겼으니 친구들을 불러 와요! 상점의 알을 깨 봐요.', now: () => S.monsters.length, need: 5, r: { gems: 5 } },
   { text: '교배를 3번 해요', count: 'breed', need: 3, say: '두 몬스터를 교배산에 넣으면 새로운 몬스터가 태어나요. 신기하죠?', r: { food: 500 } },
-  { text: '도감을 10마리 채워요', say: '세상에는 20,000마리나 되는 몬스터가 있대요. 하나씩 기록해 봐요!', now: () => Object.keys(S.dex).length, need: 10, r: { gems: 10 } },
+  { text: '도감을 10마리 채워요', say: '세상에는 20,000마리가 넘는 몬스터가 있대요. 하나씩 기록해 봐요!', now: () => Object.keys(S.dex).length, need: 10, r: { gems: 10 } },
   { text: '모험 스테이지 3에 가요', say: '섬 밖에는 야생 몬스터가 있어요. 우리 팀의 힘을 보여 줘요!', now: () => S.stage, need: 3, r: { gold: 3000, rune: 1 } },
   { ch: '2장 · 커져 가는 왕국' },
   { text: '서식지 하나를 Lv.3으로 올려요', say: '몬스터가 많아지면 집이 좁아져요. 서식지를 넓혀 줘요!', now: () => Math.max(0, ...S.plots.filter(p => p && p.kind === 'hab').map(p => p.lv)), need: 3, r: { gold: 5000 } },
@@ -4605,7 +4695,7 @@ function openDeco(i) {
 
 const MON_PRICE = 500;
 // 기본 8속성 알 + 얼음/금속/마법 서식지 전용 알 (화염 살라맨더처럼 기본 한 마리씩, 모두 500)
-const SPECIAL_EGGS = ['p:ice', 'p:metal', 'p:magic'];
+const SPECIAL_EGGS = ['p:ice', 'p:metal', 'p:magic', ...EL.slice(EL_OLD_N).map(e => 'p:' + e.id)];
 const EGG_SHOP = [...BASE.map(e => 'p:' + e), ...SPECIAL_EGGS];
 const eggPrice = () => Math.round(MON_PRICE * (evtOn('hatchfest') ? 0.5 : 1));
 // 🧬 혼합 몬스터 알: 두 속성 조합마다 대표 몬스터 (55종)
@@ -7563,7 +7653,8 @@ ACH_MORE.forEach(([key, name, src, needs, gems]) => needs.forEach((n, k) => ACH.
   now: src === 'stat' ? () => stat(key) : src, need: n, gems: gems[k],
 })));
 ACH.push(
-  { id: 'allhab', text: '🌈 11가지 속성 서식지 모두 짓기', now: () => EL.filter(e => S.plots.some(p => p && p.kind === 'hab' && p.el === e.id)).length, need: 11, gems: 50 },
+  { id: 'allhab', text: '🌈 처음 11가지 속성 서식지 모두 짓기', now: () => EL_OLD.filter(e => S.plots.some(p => p && p.kind === 'hab' && p.el === e.id)).length, need: 11, gems: 50 },
+  { id: 'allhab20', text: `🌈 ${EL.length}가지 속성 서식지 모두 짓기`, now: () => EL.filter(e => S.plots.some(p => p && p.kind === 'hab' && p.el === e.id)).length, need: EL.length, gems: 300 },
   { id: 'gems1k', text: '💎 보석 1,000개 모으기', now: () => (S.infinite ? 1000 : S.gems), need: 1000, gems: 50 },
   { id: 'allpets', text: '🐾 펫 18마리 모두 모으기', now: () => PETS.filter(p => petLv(p.id)).length, need: PETS.length, gems: 500 },
   { id: 'maxpet', text: '🐾 Lv.10 펫 만들기', now: () => Math.max(0, ...PETS.map(p => petLv(p.id))), need: 10, gems: 60 },
@@ -8491,6 +8582,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🌈', title: '새 속성 9개', text: `속성이 <b>20개</b>가 되었어요! 새 특수 속성은 두 속성 몬스터를 교배하면 나와요 (상점 알로도 살 수 있어요).<br>${ADV_RECIPES.slice(3).map(r => `${EL[ELI[r.el]].emoji}<b>${EL[ELI[r.el]].name}</b> = ${r.need.map(x => EL[ELI[x]].emoji + EL[ELI[x]].name).join('+')}`).join(' · ')}` },
   { icon: '🎣', title: '낚시', text: '섬 왼쪽의 <b>🎣 낚시</b>에서 미끼를 던져요.<br><b>❗</b>가 뜨면 움직이는 🪝가 <b style="color:#7dff8f">초록 칸</b>에 올 때 <b>낚아채기</b>! 가운데 노란 칸이면 <b>✨ 완벽</b> (보상 1.5배).<br>물고기 20종 · 💰골드 · 💎보석 · 🥚알 · 🎁보물상자! 미끼는 20분마다 1개 (최대 5개).' },
   { icon: '👫', title: '친구', text: '모험 탭 <b>👫 친구</b>에서 내 <b>친구 코드</b>(6글자)를 친구에게 알려 주고, 친구 코드를 넣으면 친구가 돼요.<br>🏆 랭킹에서 ➕를 눌러도 추가돼요!<br>💌 <b>하트</b>를 매일 보내면 친구가 💰골드와 💎를 받아요. ⚔️ 누르면 바로 <b>대전 초대</b>, 🤝 누르면 <b>레이드 초대</b>!' },
   { icon: '🌌', title: '우주 발전', text: '골드가 <b>1Sx(1해의 1000배!)</b> 넘게 모였다면 상점의 <b>🌌 우주 발전</b>으로!<br>⚔️ 전투력 +25% · 🍀 교배 행운 · 💎 매일 보석 20개 · 🐾 펫 능력 +20% (레벨마다)<br>레벨마다 값이 <b>1000배</b>씩 오르고 끝이 없어요.<br>큰 숫자는 K·M·B·T·Qa·Qi·<b>Sx·Sp·Oc·No·Dc</b>… 순서로 커져요.' },
