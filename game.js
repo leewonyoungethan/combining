@@ -535,6 +535,23 @@ let ACC = null;
   ACC = list.find(a => a.id === lsGet(ACC_CUR)) || list[0];
 })();
 const SECRET_CODE = '방탄유리';
+// ----- 🔒 계정 잠금 (관리자): 정해진 시간까지 그 계정으로 못 들어간다. 시간이 지나면 저절로 풀린다 -----
+// name: 계정 이름(대소문자 무시) · rid: 랭킹 id
+const ACC_LOCKS = [
+  { name: 'jiho0523', rid: 'e8th0emsajnf', until: 1790718290970 },   // 12시간 잠금 (한국 시간 2026-09-30 06:44까지)
+];
+function accLocked(a) {
+  if (!a) return null;
+  let rid = '', nick = '';
+  try { const d = JSON.parse(lsGet(accKey(a.id)) || 'null'); if (d) { rid = d.rankId || ''; nick = String(d.nick || ''); } } catch (e) { /* 저장 없음 */ }
+  const nm = String(a.name || '').trim().toLowerCase();
+  return ACC_LOCKS.find(l => Date.now() < l.until && (nm === l.name || nick.trim().toLowerCase() === l.name || (rid && rid === l.rid))) || null;
+}
+function lockLeft(l) {
+  const s = Math.max(0, Math.ceil((l.until - Date.now()) / 1000));
+  return `${Math.floor(s / 3600)}시간 ${Math.floor(s % 3600 / 60)}분`;
+}
+function lockToast(a, l) { toast(`🔒 ${a.name} 계정은 잠겨 있어요. ${lockLeft(l)} 뒤에 풀려요`); }
 
 function newState() {
   const s = {
@@ -6715,7 +6732,7 @@ function openLogin() {
       <div class="acc-row">
         <button class="acc-card ${ACC && a.id === ACC.id ? 'on' : ''}" data-act="accPick" data-id="${a.id}">
           <span class="acc-icon">👤</span>
-          <span class="acc-nm">${esc(a.name)} ${a.pin ? '🔒' : ''}<small>${accSummary(a)}</small></span>
+          <span class="acc-nm">${esc(a.name)} ${a.pin ? '🔒' : ''}<small>${accLocked(a) ? `⛔ 잠김 · ${lockLeft(accLocked(a))} 뒤에 풀려요` : accSummary(a)}</small></span>
         </button>
         <button class="btn ghost small danger" data-act="accDel" data-id="${a.id}" title="계정 삭제">🗑️</button>
       </div>`).join('')}</div>
@@ -6731,6 +6748,7 @@ function closeLogin() { $('#login').classList.add('hidden'); }
 function accPick(id) {
   const a = accounts().find(x => x.id === id);
   if (!a) return;
+  if (accLocked(a)) { lockToast(a, accLocked(a)); return; }
   if (!a.pin) { enterAccount(a); return; }
   showModal(`<h3>🔒 ${esc(a.name)}</h3>
     <p class="muted">비밀번호 4자리를 입력해요</p>
@@ -6749,6 +6767,7 @@ function accPinOk(id) {
 }
 // 계정으로 들어가기: 지금 섬을 저장하고, 그 계정의 섬을 불러온다
 function enterAccount(a) {
+  if (accLocked(a)) { lockToast(a, accLocked(a)); openLogin(); return; }
   if (VISIT) visitExit();
   if (B) { clearTimeout(B.timer); if (B.pvp) { netSend({ t: 'bye' }); netClose(); } B = null; $('#battle').classList.add('hidden'); }
   if (ACC && S) save();
@@ -8618,7 +8637,16 @@ render();
 requestAnimationFrame(drawWorld);
 setInterval(tick, 250);
 setInterval(updateHud, 30000);   // 자정이 지나면 🎁 점 다시 켜기
-if (accounts().length > 1 || (ACC && ACC.pin)) openLogin();
+if (accounts().length > 1 || (ACC && ACC.pin) || accLocked(ACC)) openLogin();
+if (accLocked(ACC)) setTimeout(() => lockToast(ACC, accLocked(ACC)), 500);
+setInterval(() => {
+  if (!ACC || !accLocked(ACC) || !$('#login').classList.contains('hidden')) return;
+  save();
+  if (B) { clearTimeout(B.timer); if (B.pvp) { netSend({ t: 'bye' }); netClose(); } B = null; $('#battle').classList.add('hidden'); }
+  closeModal();
+  openLogin();
+  lockToast(ACC, accLocked(ACC));
+}, 5000);
 // 환영/일일 보상 창은 로딩 화면이 끝난 뒤에 (startLoading에서)
 // 오프라인에서도 켜지도록 (한 번 접속하면 파일을 저장해 둔다)
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
