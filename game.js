@@ -161,6 +161,7 @@ const needsTarget = (sk) => ['dmg', 'burn', 'poison', 'stun', 'curse'].includes(
 // ===================== 몬스터 카탈로그 (500마리) =====================
 // 속성마다 31마리(순수 341), 두 속성 조합마다 29마리(혼합 1595) + 전설 34 + 신화 25 + 전설 상점 5 = 2000
 // + 2차: 속성마다 15마리(165), 조합마다 33마리(1815), 전설 10, 신화 10 = 2000 더 → 모두 4000
+// + 3차: 속성마다 40마리(440), 조합마다 100마리(5500), 전설 30, 신화 30 = 6000 더 → 모두 10000
 const PURE_VARIANTS = 31;
 const HYB_VARIANTS = 29;
 const LEGEND_COUNT = 34;
@@ -310,6 +311,62 @@ function makeSpecialX(prefix, k, titles) {
 }
 for (let k = 0; k < LEGEND_EXTRA; k++) LEGENDS.push(makeSpecialX('L', k, LEG_TITLES));
 for (let k = 0; k < MYTHIC_EXTRA; k++) MYTHICS.push(makeSpecialX('M', k, MYTH_TITLES));
+// ---- 3차 몬스터 6000마리 (새 수식어 · 새 동물로 이름을 만들어서 이름이 모자라지 않게) ----
+const PURE_EXTRA2 = 40, HYB_EXTRA2 = 100, LEGEND_EXTRA2 = 30, MYTHIC_EXTRA2 = 30;
+const ADJ2 = {
+  fire:    ['불멸', '작열', '홍염', '열화', '화룡', '붉은', '타오르는', '염화', '업화', '불씨'],
+  water:   ['푸른', '깊은', '물안개', '해심', '조류', '샘물', '파랑', '해무', '여울', '해조'],
+  thunder: ['벼락', '뇌광', '폭뢰', '전광', '번쩍', '뇌신', '천뢰', '뇌명', '질풍', '뇌격'],
+  nature:  ['초록', '들꽃', '잎새', '버들', '뿌리', '열매', '꽃봉오리', '솔잎', '풀꽃', '녹음'],
+  earth:   ['황무지', '돌산', '흙먼지', '사막', '절벽', '동굴', '자갈', '대륙', '산맥', '흑요석'],
+  dark:    ['어둠', '밤안개', '검은', '흑염', '저주', '유령', '암야', '흑월', '명계', '침묵'],
+  light:   ['빛나는', '황금', '순백', '성스러운', '태양빛', '별무리', '오로라', '광명', '백금', '천상'],
+  poison:  ['독가시', '독구름', '녹색늪', '독이끼', '맹독꽃', '독방울', '독거품', '부패', '독장미', '독사'],
+  ice:     ['얼어붙은', '빙설', '설빙', '한기', '빙정', '극지', '빙산', '동토', '서늘한', '얼음꽃'],
+  metal:   ['쇠사슬', '녹슨', '금속', '은도금', '강화', '철인', '나사', '백동', '코발트', '니켈'],
+  magic:   ['마법진', '수정구', '환영', '마도', '신비로운', '차원', '성운', '마술', '운명', '시간'],
+};
+const CREATURES2 = [
+  ['🦄', '유니콘'], ['🐉', '드래곤'], ['🦅', '독수리'], ['🦆', '오리'], ['🐧', '펭귄'], ['🦇', '박쥐'],
+  ['🐸', '개구리'], ['🦎', '도마뱀'], ['🐢', '거북'], ['🐋', '향유고래'], ['🦤', '도도새'], ['🦫', '비버'],
+  ['🦨', '스컹크'], ['🦛', '하마'], ['🐅', '백호'], ['🐃', '물소'], ['🐏', '숫양'], ['🐥', '병아리'],
+  ['🦪', '조개'], ['🐚', '소라'], ['🧛', '뱀파이어'], ['🧟', '좀비'], ['🧙', '마법사'], ['🗿', '석상'],
+  ['🤖', '로봇'], ['👾', '외계인'], ['🦁', '사자'], ['🐹', '햄스터'], ['🐦', '참새'], ['🐜', '개미'],
+  ['🦠', '미생물'], ['🧸', '곰인형'], ['🐂', '투우소'], ['🦣', '매머드'], ['🐪', '쌍봉낙타'], ['🦓', '얼룩말'],
+  ['🪱', '지렁이'], ['🐩', '푸들'], ['🐔', '암탉'], ['🐤', '아기새'], ['🐟', '물고기'],
+];
+const ALL_CREATURES = CREATURES.concat(CREATURES2);
+function freshCreature2(adj, seedKey, start) {
+  let k = start % ALL_CREATURES.length;
+  for (let tries = 0; tries < ALL_CREATURES.length; tries++, k = (k + 1) % ALL_CREATURES.length) {
+    const [face, noun] = ALL_CREATURES[k];
+    if (!usedNames.has(`${adj} ${noun}`)) return { face, name: `${adj} ${noun}` };
+  }
+  return { face: '❓', name: `${adj} 몬스터 ${seedKey}` };
+}
+function addPureY(e, n) {
+  const group = 'p:' + e.id, k = PURE_VARIANTS + PURE_EXTRA + n, id = `${group}:${k}`;
+  const adjs = ADJ2[e.id];
+  const look = freshCreature2(adjs[n % adjs.length], id, hashStr(group + '#3') + n * 13);
+  addMon({ id, group, variant: k, ...look, els: [e.id], rarity: RAR_ORDER[rankOfVariant(n, PURE_EXTRA2, frac(group + '#3'))], mod: variantMod(id) });
+}
+function addHybridY(i, j, n) {
+  const a = EL[i], b = EL[j], group = `h:${a.id}+${b.id}`, v = HYB_VARIANTS + HYB_EXTRA + n, id = `${group}:${v}`;
+  const adjs = n % 2 ? ADJ2[b.id] : ADJ2[a.id];
+  const look = freshCreature2(adjs[Math.floor(n / 2) % adjs.length], id, hashStr(group + '#3') + n * 13);
+  addMon({ id, group, variant: v, ...look, els: [a.id, b.id], rarity: RAR_ORDER[rankOfVariant(n, HYB_EXTRA2, frac(group + '#3'))], mod: variantMod(id) });
+}
+EL.forEach(e => { for (let n = 0; n < PURE_EXTRA2; n++) addPureY(e, n); });
+PAIRS.forEach(([i, j]) => { for (let n = 0; n < HYB_EXTRA2; n++) addHybridY(i, j, n); });
+function makeSpecialY(prefix, k, titles) {
+  const els = nextTriple(k * 7 + (prefix === 'M' ? 331 : 157));
+  const title = `${EL[ELI[els[1]]].adj}의 ${titles[(k + 7) % titles.length]}`;
+  const look = freshCreature2(title, `${prefix}:y${k}`, hashStr(prefix + 'y' + k) % ALL_CREATURES.length);
+  usedNames.add(look.name);
+  return { id: `${prefix}:y${k}`, ...look, els, ult: `${EL[ELI[els[2]]].adj} ${ULT_WORDS[(k + 3) % ULT_WORDS.length]}` };
+}
+for (let k = 0; k < LEGEND_EXTRA2; k++) LEGENDS.push(makeSpecialY('L', k, LEG_TITLES));
+for (let k = 0; k < MYTHIC_EXTRA2; k++) MYTHICS.push(makeSpecialY('M', k, MYTH_TITLES));
 LEGENDS.forEach(l => addMon({ ...l, rarity: 'legendary' }));
 MYTHICS.forEach(m => addMon({ ...m, rarity: 'mythic' }));
 SHOP_LEGENDS.forEach(l => addMon({ ...l, rarity: l.rank || 'divine', shop: true }));
@@ -1873,7 +1930,7 @@ const QUESTS = [
   { text: '서식지를 2개 지어요', say: '이 섬은 너무 조용하네요… 몬스터들이 살 집부터 지어 볼까요?', now: habCount, need: 2, r: { gold: 1000 } },
   { text: '몬스터 5마리를 모아요', say: '집이 생겼으니 친구들을 불러 와요! 상점의 알을 깨 봐요.', now: () => S.monsters.length, need: 5, r: { gems: 5 } },
   { text: '교배를 3번 해요', count: 'breed', need: 3, say: '두 몬스터를 교배산에 넣으면 새로운 몬스터가 태어나요. 신기하죠?', r: { food: 500 } },
-  { text: '도감을 10마리 채워요', say: '세상에는 4,000마리나 되는 몬스터가 있대요. 하나씩 기록해 봐요!', now: () => Object.keys(S.dex).length, need: 10, r: { gems: 10 } },
+  { text: '도감을 10마리 채워요', say: '세상에는 10,000마리나 되는 몬스터가 있대요. 하나씩 기록해 봐요!', now: () => Object.keys(S.dex).length, need: 10, r: { gems: 10 } },
   { text: '모험 스테이지 3에 가요', say: '섬 밖에는 야생 몬스터가 있어요. 우리 팀의 힘을 보여 줘요!', now: () => S.stage, need: 3, r: { gold: 3000, rune: 1 } },
   { ch: '2장 · 커져 가는 왕국' },
   { text: '서식지 하나를 Lv.3으로 올려요', say: '몬스터가 많아지면 집이 좁아져요. 서식지를 넓혀 줘요!', now: () => Math.max(0, ...S.plots.filter(p => p && p.kind === 'hab').map(p => p.lv)), need: 3, r: { gold: 5000 } },
@@ -7378,7 +7435,7 @@ function mission(id, n = 1) {
 }
 // ----- 🏆 도전 과제: 한 번만 받는 큰 목표 -----
 const ACH = [
-  ...[5, 10, 25, 50, 100, 200, 400, 700, 1000, 1500, 2000, 3000, 4000].map((n, k) => ({ id: 'dex' + n, text: `📖 도감 ${fmt(n)}마리 모으기`, now: () => Object.keys(S.dex).length, need: n, gems: [5, 10, 15, 25, 40, 60, 80, 100, 150, 200, 500, 800, 1500][k] })),
+  ...[5, 10, 25, 50, 100, 200, 400, 700, 1000, 1500, 2000, 3000, 4000, 6000, 8000, 10000].map((n, k) => ({ id: 'dex' + n, text: `📖 도감 ${fmt(n)}마리 모으기`, now: () => Object.keys(S.dex).length, need: n, gems: [5, 10, 15, 25, 40, 60, 80, 100, 150, 200, 500, 800, 1500, 2500, 4000, 10000][k] })),
   ...[3, 5, 10, 15, 20, 30, 40, 50].map((n, k) => ({ id: 'stage' + n, text: `⚔️ 모험 스테이지 ${n} 도착`, now: () => S.stage, need: n, gems: [5, 10, 20, 30, 40, 60, 80, 100][k] })),
   ...['rare', 'epic', 'legendary', 'mythic', 'divine', 'holy', 'absolute', 'origin'].map((r, k) => ({ id: 'rank' + r, text: `✨ ${RAR[r].name} 등급 몬스터 얻기`, now: () => (S.monsters.some(m => RANK[CAT[m.type].rarity] >= RANK[r]) ? 1 : 0), need: 1, gems: [5, 10, 30, 60, 100, 150, 200, 300][k] })),
   ...[1, 4, 8, 12].map((n, k) => ({ id: 'pets' + n, text: `🐾 펫 ${n}마리 모으기`, now: () => PETS.filter(p => petLv(p.id)).length, need: n, gems: [5, 20, 50, 150][k] })),
