@@ -1339,3 +1339,10 @@ body.ui-hidden .fish-btn { opacity: .55; }
 .fish-card small { font-size: 9px; color: var(--muted); }
 .fish-card.no { opacity: .45; border-style: dashed; }
 .fish-help { font-size: 11px; }
+
+/* 💬 길드 자유 채팅 */
+.gchat-input { display: flex; gap: 6px; margin: 0 0 8px; }
+.gchat-input input { flex: 1; min-width: 0; }
+.gchat-rule { font-size: 11px; }
+.gc-mute { border: 0; background: none; cursor: pointer; font-size: 12px; padding: 0 2px; opacity: .6; }
+.gc-mute:hover { opacity: 1; }

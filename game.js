@@ -5903,8 +5903,9 @@ async function openGuild(t) {
       <p class="muted">최근 12시간 동안 게임을 한 길드원만 보여요</p>`;
   } else if (guildTab === 'chat') {
     body = `<div class="gchat" id="gChat"><p class="muted">⏳ 불러오는 중…</p></div>
+      <div class="gchat-input"><input id="gChatText" maxlength="${GCHAT_MAX}" placeholder="메시지를 적어요 (${GCHAT_MAX}자까지)" autocomplete="off"><button class="btn green" data-act="gSend">보내기</button></div>
       <div class="gchat-send">${GUILD_CHAT.map((m, k) => `<button class="chip" data-act="gSay" data-k="${k}">${m}</button>`).join('')}</div>
-      <p class="muted">모르는 사람과도 이야기하니까 정해진 말과 이모지만 보낼 수 있어요</p>`;
+      <p class="muted gchat-rule">🛡️ 욕설 · 전화번호 · 주소 · 링크 · 다른 앱 아이디는 못 보내요. 싫은 사람은 🙈를 누르면 안 보여요</p>`;
   } else {
     body = `<div class="rank-list">${guilds.slice(0, 50).map((x, k) => `<div class="rank-row ${x.id === g.id ? 'me' : ''} ${k < 3 ? 'top' : ''}">
         <span class="rk-pos">${k === 0 ? '🥇' : k === 1 ? '🥈' : k === 2 ? '🥉' : `<small>${k + 1}</small>`}</span><span class="rk-face">${esc(x.emblem)}</span>
@@ -5919,7 +5920,11 @@ async function openGuild(t) {
     <div class="chips">${tabs.map(([id, nm]) => `<button class="chip ${guildTab === id ? 'on' : ''}" data-act="guildTab" data-t="${id}">${nm}</button>`).join('')}</div>
     ${body}
     <div class="row"><button class="btn ghost small" data-act="guildRefresh">🔄 새로고침</button><button class="btn ghost small danger" data-act="guildLeave">🚪 길드 나가기</button><button class="btn ghost small" data-act="close">닫기</button></div>`);
-  if (guildTab === 'chat') guildChatLoad();
+  if (guildTab === 'chat') {
+    guildChatLoad();
+    const inp = $('#gChatText');
+    if (inp) inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); gSend(); } });
+  }
 }
 function guildBrowse(guilds) {
   showModal(`<h3>🛡️ 길드</h3>
@@ -6140,6 +6145,43 @@ async function gSay(k) {
   await guildSay(m);
   guildChatLoad();
 }
+// ----- 자유 채팅: 모르는 사람과도 이야기하니까 보내기 전에, 받을 때도 한 번 더 검사한다 -----
+const GCHAT_MAX = 60;
+const CHAT_BLOCK = ['카톡', '카카오', '오픈채팅', '오픈톡', '디스코드', '디코', '인스타', '페북', '페이스북', '틱톡', '텔레그램', '라인아이디', '전화번호', '폰번호', '핸드폰번호',
+  '주소', '사는곳', '어디살', '학교이름', '무슨학교', '몇학년몇반', '비밀번호', '비번', '만나자', '만날래', '실제로만나', 'kakao', 'discord', 'insta', 'telegram'];
+function chatProblem(s) {
+  const t = String(s || '').trim();
+  if (!t) return '메시지를 적어 주세요';
+  if (t.length > GCHAT_MAX) return `${GCHAT_MAX}자까지 보낼 수 있어요`;
+  if (badName(t)) return '🙅 부적절한 말은 보낼 수 없어요';
+  if ((t.match(/\d/g) || []).length >= 7) return '📵 전화번호 같은 개인정보는 보낼 수 없어요';
+  if (/https?:|www\.|\.(com|net|kr|io|gg|me|ly)\b|@/i.test(t)) return '📵 링크나 이메일은 보낼 수 없어요';
+  const core = nameCore(t);
+  if (CHAT_BLOCK.some(w => core.includes(w))) return '📵 개인정보나 다른 앱 연락처는 보낼 수 없어요. 게임 안에서만 이야기해요!';
+  if (/(.)\1{9,}/.test(t)) return '같은 글자를 너무 많이 반복했어요';
+  return '';
+}
+let gLastMsg = '';
+async function gSend() {
+  const inp = $('#gChatText');
+  if (!inp || !S.guild) return;
+  const t = inp.value.replace(/\s+/g, ' ').trim();
+  const p = chatProblem(t);
+  if (p) { toast(p); return; }
+  if (Date.now() - gSayAt < 3000) { toast('조금 천천히 보내 주세요 😊'); return; }
+  if (t === gLastMsg && Date.now() - gSayAt < 30000) { toast('같은 말을 또 보냈어요'); return; }
+  gSayAt = Date.now(); gLastMsg = t;
+  inp.value = '';
+  await guildSay(t);
+  guildChatLoad();
+  const i2 = $('#gChatText'); if (i2) i2.focus();
+}
+function gMute(id) {
+  S.gMute = S.gMute || [];
+  if (S.gMute.includes(id)) S.gMute = S.gMute.filter(x => x !== id);
+  else { S.gMute.push(id); toast('🙈 이 사람의 메시지를 숨겼어요. 채팅 아래 🙉로 다시 볼 수 있어요'); }
+  save(); guildChatLoad();
+}
 let gChatTimer = null;
 async function guildChatLoad() {
   clearTimeout(gChatTimer);
@@ -6150,15 +6192,19 @@ async function guildChatLoad() {
     const msgs = txt.split('\n').filter(Boolean).map(l => { try { const e = JSON.parse(l); const d = JSON.parse(e.message); return { ...d, t: e.time }; } catch (e) { return null; } })
       .filter(d => d && d.v === 1 && typeof d.m === 'string')
       // 정해진 말과 시스템 알림만 보여 준다 (다른 글은 무시)
-      .filter(d => GUILD_CHAT.includes(d.m) || (d.sys && /^(🎉|👋|🚪) .{1,20}님이 (길드를 만들었어요!|길드에 들어왔어요!|길드를 떠났어요)$/.test(d.m) && !badName(d.m)))
+      .filter(d => GUILD_CHAT.includes(d.m) || (d.sys && /^(🎉|👋|🚪) .{1,20}님이 (길드를 만들었어요!|길드에 들어왔어요!|길드를 떠났어요)$/.test(d.m) && !badName(d.m))
+        || (!d.sys && d.m.length <= GCHAT_MAX))
+      .map(d => (!d.sys && !GUILD_CHAT.includes(d.m) && chatProblem(d.m) ? { ...d, m: '🙊 (가려진 메시지)', hid: 1 } : d))
+      .filter(d => !(S.gMute || []).includes(d.id))
       .slice(-60);
     const b = $('#gChat');
     if (!b) return;
     const me = S.rankId;
     b.innerHTML = msgs.length ? msgs.map(d => d.sys
       ? `<div class="gc-sys">${esc(d.m)}</div>`
-      : `<div class="gc-msg ${d.id === me ? 'mine' : ''}"><span class="gc-face">${esc(String(d.f || '🥚').slice(0, 4))}</span><div><b>${esc(safeName(String(d.n || '').slice(0, 10)))}</b><span>${esc(d.m)}</span></div><small>${new Date(d.t * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</small></div>`).join('')
+      : `<div class="gc-msg ${d.id === me ? 'mine' : ''}"><span class="gc-face">${esc(String(d.f || '🥚').slice(0, 4))}</span><div><b>${esc(safeName(String(d.n || '').slice(0, 10)))}${d.id !== me && typeof d.id === 'string' ? ` <button class="gc-mute" data-act="gMute" data-id="${esc(d.id)}" title="이 사람 숨기기">🙈</button>` : ''}</b><span>${esc(d.m)}</span></div><small>${new Date(d.t * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</small></div>`).join('')
       : '<p class="muted">아직 메시지가 없어요. 첫 인사를 해 봐요! 👋</p>';
+    if ((S.gMute || []).length) b.innerHTML += `<div class="gc-sys"><button class="chip" data-act="gUnmuteAll">🙉 숨긴 사람 ${S.gMute.length}명 다시 보기</button></div>`;
     b.scrollTop = b.scrollHeight;
   } catch (e) { box.innerHTML = '<p class="warn">채팅을 불러오지 못했어요</p>'; }
   // 채팅 창이 열려 있는 동안 8초마다 새 메시지 확인
@@ -8451,7 +8497,7 @@ const WELCOME = [
   { icon: '🏛️', title: '골드·보석 크게 쓰기', text: '상점의 <b>🏛️ 왕국 발전</b>: 골드로 끝없이 레벨 업 (골드·먹이·전투·교배 비용·매일 보석)<br><b>🗽 랜드마크</b>: 섬에 세우는 거대 건물, 모든 섬 골드 UP (최대 +170%)<br><b>💎 보석 상점</b>: 🤖 자동 수집 로봇, ⚡ 골드 2배 부스터, 👑 전설 알 상자' },
   { icon: '👥', title: '대전과 친구', text: '모험 탭 <b>👥 대전 · 친구</b> 칸에서<br>🌍 <b>랜덤 대전</b>으로 모르는 사람과 바로 싸우고, ⚔️ 방 코드로 <b>친구 대전</b>, 🎁 <b>선물</b>, 👀 <b>친구 섬 구경</b>도 해요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요.' },
   { icon: '🏆', title: '랭킹과 트로피', text: '🌍 랜덤 대전에서 이기면 <b>🏆 +30</b>, 지면 −15.<br>🥉브론즈 → 🥈실버 → 🥇골드 → 💠플래티넘 → 💎다이아 → 👑마스터 → 🏆챔피언!<br>모험 탭 <b>🏆 랭킹</b>에서 트로피·도감·모험·전투력 <b>전 세계 순위</b>를 봐요.' },
-  { icon: '🛡️', title: '길드', text: '모험 탭 <b>🛡️ 길드</b>에서 길드에 들어가거나 직접 만들어요 (💰5,000).<br>길드원이 트로피·도감을 모을수록 <b>길드 레벨</b>이 올라가고, 레벨마다 <b>서식지 골드 +2%</b>!<br>💬 길드 채팅은 정해진 말과 이모지로 안전하게 해요.' },
+  { icon: '🛡️', title: '길드', text: '모험 탭 <b>🛡️ 길드</b>에서 길드에 들어가거나 직접 만들어요 (💰5,000).<br>길드원이 트로피·도감을 모을수록 <b>길드 레벨</b>이 올라가고, 레벨마다 <b>서식지 골드 +2%</b>!<br>💬 길드 채팅에서 자유롭게 이야기해요! (욕설 · 전화번호 · 주소 · 링크는 자동으로 막혀요, 🙈로 숨기기)' },
   { icon: '⚔️', title: '길드전', text: '매일 비슷한 길드와 짝이 돼요. 길드원마다 하루 <b>3번</b> 상대 길드원의 방어 팀을 공격해요.<br>이기면 ⭐1, 두 마리 살아남으면 ⭐2, 모두 살면 ⭐3!<br>길드 별이 ⭐10·25·50개가 되면 <b>🎁 길드전 상자</b>를 받아요. 내 모험 팀은 자동으로 <b>방어 팀</b>이 돼요.' },
   { icon: '📋', title: '미션과 도전 과제', text: '위쪽 <b>📋</b>에서 매일 <b>미션 3개</b>를 깨면 💎 보석! 셋 다 깨면 보너스 💎30.<br>🏆 <b>도전 과제</b>(도감·스테이지·등급·트로피)도 한 번씩 큰 보상을 줘요.<br>전투에서 <b>🤖 자동</b>을 켜면 알아서 싸워요.' },
   { icon: '👤', title: '계정과 오프라인', text: '오른쪽 위 <b>👤</b>에서 <b>계정</b>을 여러 개 만들 수 있어요. 계정마다 <b>자기 섬</b>이 따로 있고, 🔒 비밀번호도 걸 수 있어요.<br>다른 기기로는 <b>📤 옮기기 코드</b>로 섬을 옮겨요.<br>한 번 접속하면 <b>인터넷 없이도</b> 켜지고, 홈 화면에 앱처럼 설치할 수 있어요.<br>👤 메뉴에서 <b>🎵 음악 · 🔊 소리</b>를 켜고 끄고, 폰에서는 <b>⛶ 전체화면</b>도 돼요.<br>🙅 이름에는 욕설·나쁜 말·전화번호 같은 개인정보를 쓸 수 없어요 (다른 사람에게 보이니까요!).' },
@@ -8625,6 +8671,9 @@ const ACTIONS = {
   coopJoin: () => { tutFlag('coop', true); pvpJoin(true); },
   coopSeen: () => { if (!tutFlag('coop')) { tutFlag('coop', true); toast('🤝 한 명이 레이드 방을 만들고, 친구가 코드로 들어오면 시작해요!'); updateGuide(); } },
   ranking: () => openRanking(),
+  gSend: () => gSend(),
+  gMute: (d) => gMute(d.id),
+  gUnmuteAll: () => { S.gMute = []; save(); guildChatLoad(); toast('🙉 숨긴 사람을 다시 보여요'); },
   fishing: () => openFishing(),
   fishCast: () => fishCast(),
   fishHit: () => fishHit(),
