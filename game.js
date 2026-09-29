@@ -8002,6 +8002,8 @@ TUT.push(
 { const qi = TUT.findIndex(t => t.text.startsWith('📜')); if (qi > 10) TUT.splice(10, 0, TUT.splice(qi, 1)[0]); }
 // 🏆 업적은 기본 튜토리얼 12단계 (퀘스트 다음)
 { const ai = TUT.findIndex(t => t.text.startsWith('🏆 📜')); if (ai > 11) TUT.splice(11, 0, TUT.splice(ai, 1)[0]); }
+// 🎣 낚시는 기본 튜토리얼 13단계 (업적 다음)
+{ const fi = TUT.findIndex(t => t.text.startsWith('🎣')); if (fi > 12) TUT.splice(12, 0, TUT.splice(fi, 1)[0]); }
 function tutFlag(k, set) {
   S.tutFlags = S.tutFlags || {};
   if (set && !S.tutFlags[k]) { S.tutFlags[k] = true; save(); }
@@ -8050,34 +8052,34 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return S.team.length >= Math.min(3, S.monsters.length) ? ['[data-act=fight]'] : ['#view [data-act=teamAuto]'];
-    case 12: // 일일 보상
+    case 13: // 일일 보상
       if (inModal) return ['#modalBox [data-act=claimDaily]', '#modalBox [data-act=close]'];
       return ['.hud [data-act=daily]'];
-    case 13: // 도감 추천
+    case 14: // 도감 추천
       if (inModal) return ['#modalBox [data-act=goBreed]', '#modalBox [data-act=close]'];
       return need('dex') || ['#view [data-act=dexMon]'];
-    case 14: // 섬 꾸미기
+    case 15: // 섬 꾸미기
       if (inModal) return ['#modalBox [data-act=build][data-what^="deco:"]', '#modalBox [data-act=decoPick]', '#modalBox [data-act=close]'];
       return need('shop') || ['[data-act=buyDeco]'];
-    case 15: // 보스전
+    case 16: // 보스전
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return S.team.length ? ['[data-act=bossFight]:not([disabled])'] : ['#view [data-act=team]'];
-    case 16: // 계정
+    case 17: // 계정
       if (inModal) return ['#modalBox [data-act=accExport]', '#modalBox [data-act=close]'];
       return ['.hud [data-act=account]'];
-    case 17: // 친구 · 랜덤 대전
+    case 18: // 친구 · 랜덤 대전
       if (inModal) return ['#modalBox [data-act=pvpCancel]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=pvpRandom]', '.pvp-box [data-act=giftSend]'];
-    case 18: // 미션
+    case 19: // 미션
       if (inModal) return ['#modalBox [data-act=misClaim]:not([disabled])', '#modalBox [data-act=achClaim]:not([disabled])', '#modalBox [data-act=close]'];
       return ['.hud [data-act=missions]'];
-    case 19: // 길드
+    case 20: // 길드
       if (inModal) return ['#modalBox [data-act=guildJoin]:not([disabled])', '#modalBox [data-act=guildNew]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=guildOpen]'];
-    case 20: // 길드전
+    case 21: // 길드전
       if (inModal) {
         if (!S.guild) return ['#modalBox [data-act=guildJoin]:not([disabled])', '#modalBox [data-act=guildNew]', '#modalBox [data-act=guildCreate]', '#modalBox [data-act=close]'];
         if (guildTab !== 'war') return ['#modalBox [data-act=guildTab][data-t=war]'];
@@ -8087,18 +8089,18 @@ function tutPoint(k) {
       if (!S.team.length) return tab !== 'adventure' ? [bottomBtn('adventure')] : ['#view [data-act=team]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=guildOpen]'];
-    case 21: // 랭킹
+    case 22: // 랭킹
       if (inModal) return ['#modalBox [data-act=rankCat]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=ranking]'];
-    case 22: // 펫
+    case 23: // 펫
       if (inModal) return ['#modalBox [data-act=petEquip]', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#petBtn'];
-    case 23: // 재화 안내
+    case 24: // 재화 안내
       if (inModal) return ['#modalBox [data-act=close]'];
       return ['.hud [data-act=resInfo][data-r=gold]'];
-    case 24: // 다음 목표
+    case 25: // 다음 목표
       if (inModal) return ['#modalBox [data-act=misClaim]:not([disabled])', '#modalBox [data-act=achClaim]:not([disabled])', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#goalChip:not(.hidden)'];
@@ -8106,26 +8108,26 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=evtClaim]:not([disabled])', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#evtBtn'];
-    case 25: // 연속 전투
+    case 26: // 연속 전투
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return S.team.length ? ['#view [data-act=fightLoop]'] : ['#view [data-act=teamAuto]'];
-    case 26: // 왕국 발전
+    case 27: // 왕국 발전
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['[data-act=kdUp]:not([disabled])'];
-    case 27: // 랜드마크·보석 상점
+    case 28: // 랜드마크·보석 상점
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['#shopGem', '#shopWonder'];
-    case 28: // 오늘의 특가
+    case 29: // 오늘의 특가
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopDeals]'];
-    case 29: // 물약·교환소
+    case 30: // 물약·교환소
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopPotion]'];
-    case 30: // 합성 제단
+    case 31: // 합성 제단
       if (inModal) return ['#modalBox [data-act=altarFuse]:not([disabled])', '#modalBox [data-act=altarAuto]:not([disabled])', '#modalBox [data-act=close]'];
       return need('mons') || ['#view [data-act=altar]'];
-    case 31: // 별 합성
+    case 32: // 별 합성
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('mons') || ['#view [data-act=starList]'];
     case 10: // 퀘스트
@@ -8136,29 +8138,29 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=achAll]', '#modalBox [data-act=achClaim2]:not([disabled])', '#modalBox .chips [data-act=achOpen]', '#modalBox [data-act=achOpen]', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#questBtn'];
-    case 32: // 레이드
+    case 33: // 레이드
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return S.team.length ? ['#view [data-act=raidFight]:not([disabled])', '#view .raid-card'] : ['#view [data-act=teamAuto]'];
-    case 33: // 복제기
+    case 34: // 복제기
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopCloner]', '#shopCloner'];
-    case 34: // 협동 레이드
+    case 35: // 협동 레이드
       if (inModal) return ['#modalBox .coop-box h4', '#modalBox [data-act=pvpCancel]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=pvp]'];
-    case 35: // 펫 합성
+    case 36: // 펫 합성
       if (inModal) return ['#modalBox [data-act=petFuse]:not([disabled])', '#modalBox #petFuse', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#petBtn'];
-    case 36: // 우주 발전
+    case 37: // 우주 발전
       if (inModal) return ['#modalBox [data-act=close]'];
       return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopCosmos]', '#shopCosmos'];
-    case 37: // 친구
+    case 38: // 친구
       if (inModal) return ['#modalBox #frCode', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=friends]'];
-    case 38: // 낚시
+    case 12: // 낚시
       if (inModal) return ['#modalBox [data-act=fishCast]', '#modalBox [data-act=fishHit]', '#modalBox [data-act=fishClose]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#fishBtn'];
@@ -8292,8 +8294,8 @@ function tutStep() {
   while (S.tutStep < TUT.length && TUT[S.tutStep].done()) S.tutStep++;
   return S.tutStep;
 }
-// 말풍선으로 안내하는 건 기본 12단계뿐. 그 뒤(일일 보상·도감·길드…)는 🎓 창의 "더 알아보기"에서 원할 때만
-const TUT_CORE = 12;
+// 말풍선으로 안내하는 건 기본 13단계뿐. 그 뒤(일일 보상·도감·길드…)는 🎓 창의 "더 알아보기"에서 원할 때만
+const TUT_CORE = 13;
 const tutGuided = (k) => tutFocus != null || k < TUT_CORE;
 function updateGuide() {
   const g = $('#guide');
