@@ -6327,7 +6327,11 @@ function gMute(id) {
   else { S.gMute.push(id); toast('🙈 이 사람의 메시지를 숨겼어요. 채팅 아래 🙉로 다시 볼 수 있어요'); }
   save(); guildChatLoad();
 }
-let gChatTimer = null, gReadAt = 0;
+let gChatTimer = null, gReadAt = 0, gArcAt = 0;
+const GLOG_MAX = 400, GARC_BATCH = 12, GARC_POSTS = 4, GARC_OLD = 9 * 3600;
+const gLogKey = () => `combining-gchat:${ACC ? ACC.id : ''}:${S.guild ? S.guild.id : ''}`;
+const gKey = (d) => d.id + '|' + d.t + '|' + d.m;
+const gDay = (t) => new Date(t * 1000).toLocaleDateString(window.LANG === 'en' ? 'en-US' : 'ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
 async function guildChatLoad() {
   clearTimeout(gChatTimer);
   const box = $('#gChat');
@@ -6341,13 +6345,38 @@ async function guildChatLoad() {
     const readTo = {};
     const seen = (id, t) => { if (id && t > (readTo[id] || 0)) readTo[id] = t; };
     evs.forEach(d => { if (d.rd) seen(d.id, Number(d.rd) || 0); else if (typeof d.m === 'string') seen(d.id, d.t); });
-    const chatMsgs = evs.filter(d => typeof d.m === 'string');
+    // 서버에 있는 메시지 (그냥 메시지 + 다시 올린 묶음) · 언제 올라가 있는지(carrier)
+    const nowS = Date.now() / 1000, carrier = {}, live = [];
+    const keep = (a, at) => {
+      if (!a || typeof a.id !== 'string' || typeof a.m !== 'string') return;
+      const d = { id: a.id.slice(0, 20), n: String(a.n || '').slice(0, 10), f: String(a.f || '🥚').slice(0, 4), m: a.m.slice(0, 200), sys: a.sys ? 1 : 0, t: Math.min(Number(a.t) || at, at) };
+      live.push(d); const k = gKey(d); carrier[k] = Math.max(carrier[k] || 0, at);
+    };
+    evs.forEach(e => { if (typeof e.m === 'string') keep(e, e.t); else if (Array.isArray(e.arc)) e.arc.slice(0, 30).forEach(a => keep(a, e.t)); });
+    // 내 기기에 저장된 기록과 합치기
+    let log = [];
+    try { log = JSON.parse(lsGet(gLogKey()) || '[]'); } catch (e) { log = []; }
+    const merged = new Map();
+    [...log, ...live].forEach(d => merged.set(gKey(d), d));
+    const chatMsgs = [...merged.values()].sort((a, b) => a.t - b.t).slice(-GLOG_MAX);
+    lsSet(gLogKey(), JSON.stringify(chatMsgs));
+    // 곧 지워지거나 이미 지워진 메시지는 묶어서 다시 올려 둔다 (다른 길드원도 볼 수 있게)
+    if (Date.now() - gArcAt > 60000) {
+      const need = chatMsgs.filter(d => (carrier[gKey(d)] || 0) < nowS - GARC_OLD).slice(-GARC_BATCH * GARC_POSTS);
+      if (need.length) {
+        gArcAt = Date.now();
+        for (let i = 0; i < need.length; i += GARC_BATCH) {
+          const arc = need.slice(i, i + GARC_BATCH).map(d => ({ id: d.id, n: d.n, f: d.f, m: d.m, sys: d.sys, t: d.t }));
+          try { fetch(GUILD_TOPIC(S.guild.id), { method: 'POST', body: JSON.stringify({ v: 1, id: me, arc }) }).catch(() => {}); } catch (e) { /* 인터넷 없음 */ }
+        }
+      }
+    }
     const newest = chatMsgs.reduce((x, d) => Math.max(x, d.t), 0);
     seen(me, newest);   // 지금 보고 있으니 나는 다 읽었다
     // 길드원: 최근 12시간 동안 접속한 길드원 + 채팅에 나온 사람
     const mine = guildCache && guildCache.guilds && guildCache.guilds.find(g => g.id === S.guild.id);
     const members = new Set([me, ...(mine ? mine.members.map(p => p.id) : []), ...Object.keys(readTo)]);
-    const unread = (d) => { let n = 0; members.forEach(id => { if (id !== d.id && (readTo[id] || 0) < d.t) n++; }); return n; };
+    const unread = (d) => { if (d.t < Date.now() / 1000 - 12 * 3600) return 0; let n = 0; members.forEach(id => { if (id !== d.id && (readTo[id] || 0) < d.t) n++; }); return n; };
     // 내 읽음 표시 올리기 (새 메시지가 있을 때만)
     if (newest > (S.gReadSent || 0) && Date.now() - gReadAt > 4000) {
       gReadAt = Date.now(); S.gReadSent = newest; save();
@@ -6359,12 +6388,14 @@ async function guildChatLoad() {
         || (!d.sys && d.m.length <= GCHAT_MAX))
       .map(d => (!d.sys && !GUILD_CHAT.includes(d.m) && chatProblem(d.m) ? { ...d, m: '🙊 (가려진 메시지)', hid: 1 } : d))
       .filter(d => !(S.gMute || []).includes(d.id))
-      .slice(-60);
+      .slice(-150);
+    let lastDay = '';
+    const dayLine = (d) => { const dd = gDay(d.t); if (dd === lastDay) return ''; lastDay = dd; return `<div class="gc-day"><span>📅 ${dd}</span></div>`; };
     const b = $('#gChat');
     if (!b) return;
-    b.innerHTML = msgs.length ? msgs.map(d => d.sys
+    b.innerHTML = msgs.length ? msgs.map(d => dayLine(d) + (d.sys
       ? `<div class="gc-sys">${esc(d.m)}</div>`
-      : `<div class="gc-msg ${d.id === me ? 'mine' : ''}"><span class="gc-face">${esc(String(d.f || '🥚').slice(0, 4))}</span><div><b>${esc(safeName(String(d.n || '').slice(0, 10)))}${d.id !== me && typeof d.id === 'string' ? ` <button class="gc-mute" data-act="gMute" data-id="${esc(d.id)}" title="이 사람 숨기기">🙈</button>` : ''}</b><span${d.sys || GUILD_CHAT.includes(d.m) ? '' : ' translate="no"'}>${esc(d.m)}</span></div><small>${unread(d) ? `<i class="gc-unread">${unread(d)}</i>` : ''}${new Date(d.t * 1000).toLocaleTimeString(window.LANG === 'en' ? 'en-US' : 'ko-KR', { hour: '2-digit', minute: '2-digit' })}</small></div>`).join('')
+      : `<div class="gc-msg ${d.id === me ? 'mine' : ''}"><span class="gc-face">${esc(String(d.f || '🥚').slice(0, 4))}</span><div><b>${esc(safeName(String(d.n || '').slice(0, 10)))}${d.id !== me && typeof d.id === 'string' ? ` <button class="gc-mute" data-act="gMute" data-id="${esc(d.id)}" title="이 사람 숨기기">🙈</button>` : ''}</b><span${d.sys || GUILD_CHAT.includes(d.m) ? '' : ' translate="no"'}>${esc(d.m)}</span></div><small>${unread(d) ? `<i class="gc-unread">${unread(d)}</i>` : ''}${new Date(d.t * 1000).toLocaleTimeString(window.LANG === 'en' ? 'en-US' : 'ko-KR', { hour: '2-digit', minute: '2-digit' })}</small></div>`)).join('')
       : '<p class="muted">아직 메시지가 없어요. 첫 인사를 해 봐요! 👋</p>';
     if ((S.gMute || []).length) b.innerHTML += `<div class="gc-sys"><button class="chip" data-act="gUnmuteAll">🙉 숨긴 사람 ${S.gMute.length}명 다시 보기</button></div>`;
     b.scrollTop = b.scrollHeight;

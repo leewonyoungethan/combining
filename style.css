@@ -1353,3 +1353,7 @@ body.ui-hidden .fish-btn { opacity: .55; }
 
 /* 💬 안 읽은 사람 수 (카톡처럼) */
 .gc-unread { font-style: normal; font-weight: 900; color: #ffe066; margin-right: 4px; font-size: 11px; }
+
+/* 💬 날짜 줄 */
+.gc-day { text-align: center; margin: 6px 0; }
+.gc-day span { font-size: 11px; color: var(--muted); background: rgba(255, 255, 255, .08); border-radius: 10px; padding: 2px 10px; }
