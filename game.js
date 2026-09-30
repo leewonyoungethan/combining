@@ -8527,6 +8527,10 @@ TUT.push(
   { text: '📦 🏆 랭킹을 한 번 열어 봐요. 랭킹 · 길드 기록이 내 기기에 저장돼서 2년 동안 남아요!', done: () => !!lsGet(RANK_STORE),
     go: () => { closeModal(); tab = 'adventure'; render(); openRanking(); } },
 );
+TUT.push(
+  { text: '🔍 🏆 랭킹 위쪽 검색칸에서 이름 · 길드 · 친구 코드로 사람을 찾아봐요', done: () => tutFlag('rankSearch'),
+    go: () => { closeModal(); tab = 'adventure'; render(); openRanking(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -8711,6 +8715,10 @@ function tutPoint(k) {
       return ['#raceBtn'];
     case 42: // 기록 2년 보관 (랭킹 열기)
       if (inModal) return ['#modalBox [data-act=rankCat]', '#modalBox [data-act=close]'];
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return ['.pvp-box [data-act=ranking]'];
+    case 43: // 랭킹 사람 찾기
+      if (inModal) return ['#modalBox #rankSearch', '#modalBox [data-act=rankSearch]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=ranking]'];
   }
@@ -8909,6 +8917,7 @@ const WELCOME = [
   { icon: '🏛️', title: '골드·보석 크게 쓰기', text: '상점의 <b>🏛️ 왕국 발전</b>: 골드로 끝없이 레벨 업 (골드·먹이·전투·교배 비용·매일 보석)<br><b>🗽 랜드마크</b>: 섬에 세우는 거대 건물, 모든 섬 골드 UP (최대 +170%)<br><b>💎 보석 상점</b>: 🤖 자동 수집 로봇, ⚡ 골드 2배 부스터, 👑 전설 알 상자' },
   { icon: '👥', title: '대전과 친구', text: '모험 탭 <b>👥 대전 · 친구</b> 칸에서<br>🌍 <b>랜덤 대전</b>으로 모르는 사람과 바로 싸우고, ⚔️ 방 코드로 <b>친구 대전</b>, 🎁 <b>선물</b>, 👀 <b>친구 섬 구경</b>도 해요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요.' },
   { icon: '🏆', title: '랭킹과 트로피', text: '🌍 랜덤 대전에서 이기면 <b>🏆 +30</b>, 지면 −15.<br>🥉브론즈 → 🥈실버 → 🥇골드 → 💠플래티넘 → 💎다이아 → 👑마스터 → 🏆챔피언!<br>모험 탭 <b>🏆 랭킹</b>에서 트로피·도감·모험·전투력 <b>전 세계 순위</b>를 봐요.' },
+  { icon: '🔍', title: '사람 찾기', text: '🏆 랭킹을 열면 맨 위에 <b>🔍 검색칸</b>이 있어요. <b>이름 · 길드 이름 · 친구 코드</b>를 적고 찾기!<br>일부만 적어도 찾아요 (예: "방탄"). 찾은 사람의 🛡️ 길드 (👑 길드장) · 🕒 마지막 접속 · 🔑 친구 코드가 보여요.<br>옆의 ➕로 바로 친구 추가! 최근 2년 동안 랭킹에 올라간 사람을 찾을 수 있어요.' },
   { icon: '📦', title: '기록 2년 보관', text: '🏆 <b>랭킹</b> · 🛡️ <b>길드</b> · 👫 <b>친구 찾기</b> 기록이 12시간 동안 안 들어와도 <b>최대 2년</b> 동안 남아요.<br>랭킹이나 길드를 열면 모두의 기록이 내 기기에 저장되고, 곧 지워질 기록은 자동으로 다시 올려서 다른 사람도 볼 수 있어요.<br>💬 길드 채팅도 모든 날 저장! (2년 넘게 안 들어온 기록은 사라져요)' },
   { icon: '🛡️', title: '길드', text: '모험 탭 <b>🛡️ 길드</b>에서 길드에 들어가거나 직접 만들어요 (💰5,000).<br>길드원이 트로피·도감을 모을수록 <b>길드 레벨</b>이 올라가고, 레벨마다 <b>서식지 골드 +2%</b>!<br>💬 길드 채팅에서 자유롭게 이야기해요! 메시지 옆 <b style="color:#ffe066">노란 숫자</b>는 아직 안 읽은 길드원 수예요 (읽을수록 줄어요). (전화번호 · 주소 · 링크는 자동으로 막히고, 욕은 5번 물어봐요 · 🙈로 숨기기)' },
   { icon: '⚔️', title: '길드전', text: '매일 비슷한 길드와 짝이 돼요. 길드원마다 하루 <b>3번</b> 상대 길드원의 방어 팀을 공격해요.<br>이기면 ⭐1, 두 마리 살아남으면 ⭐2, 모두 살면 ⭐3!<br>길드 별이 ⭐10·25·50개가 되면 <b>🎁 길드전 상자</b>를 받아요. 내 모험 팀은 자동으로 <b>방어 팀</b>이 돼요.' },
@@ -9125,7 +9134,7 @@ const ACTIONS = {
   gwarChest: (d) => gwarChest(d.k),
   rankCat: (d) => openRanking(d.c),
   rankRefresh: () => { rankCache = null; openRanking(); },
-  rankSearch: () => { rankQuery = (($('#rankSearch') || {}).value || '').trim().slice(0, 12); openRanking(); },
+  rankSearch: () => { tutFlag('rankSearch', true); rankQuery = (($('#rankSearch') || {}).value || '').trim().slice(0, 12); openRanking(); },
   rankSearchClear: () => { rankQuery = ''; openRanking(); },
   rankName: () => {
     const v = ($('#rankName') ? $('#rankName').value : '').trim().slice(0, 10);
