@@ -1183,11 +1183,29 @@ const wantSong = () => (B ? 'battle' : tab === 'shop' ? 'shop' : tab === 'dex' ?
 setInterval(() => { if (MUS.started) setMusic(wantSong()); }, 400);
 // 소리가 막혀 있으면 화면을 처음 누를 때 켠다
 ['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, () => { if (AC && AC.state === 'suspended' && !document.hidden && !muteOn()) AC.resume(); }, true));
-document.addEventListener('visibilitychange', () => {
+// 앱을 닫거나 · 다른 앱/창으로 가거나 · 화면이 꺼지면 소리를 완전히 멈춘다
+let audioAway = false;
+function audioSleep() {
+  audioAway = true;
   if (!AC) return;
-  if (document.hidden) AC.suspend();
-  else if (!muteOn()) { AC.resume(); MUS.next = Math.max(MUS.next, AC.currentTime + 0.1); }
-});
+  if (MUS.gain) { try { MUS.gain.gain.cancelScheduledValues(AC.currentTime); MUS.gain.gain.setValueAtTime(0, AC.currentTime); } catch (e) { /* 이미 멈춤 */ } }
+  if (AC.state === 'running') AC.suspend();
+}
+function audioWake() {
+  if (!audioAway || document.hidden || !document.hasFocus()) return;
+  audioAway = false;
+  if (!AC || muteOn()) return;
+  AC.resume();
+  MUS.next = Math.max(MUS.next, AC.currentTime + 0.1);
+  // 멈출 때 0으로 내린 음악 볼륨을 다시 올리기 (새 곡으로 다시 시작)
+  const cur = MUS.cur; MUS.cur = null; setMusic(cur || wantSong());
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) audioSleep(); else audioWake(); });
+window.addEventListener('pagehide', audioSleep);
+window.addEventListener('blur', audioSleep);
+document.addEventListener('freeze', audioSleep);
+window.addEventListener('focus', audioWake);
+window.addEventListener('pageshow', audioWake);
 function toggleMute() {
   lsSet('combining-mute', muteOn() ? 'off' : 'on');
   if (muteOn()) {
@@ -6329,7 +6347,7 @@ async function guildChatLoad() {
     const me = S.rankId;
     b.innerHTML = msgs.length ? msgs.map(d => d.sys
       ? `<div class="gc-sys">${esc(d.m)}</div>`
-      : `<div class="gc-msg ${d.id === me ? 'mine' : ''}"><span class="gc-face">${esc(String(d.f || '🥚').slice(0, 4))}</span><div><b>${esc(safeName(String(d.n || '').slice(0, 10)))}${d.id !== me && typeof d.id === 'string' ? ` <button class="gc-mute" data-act="gMute" data-id="${esc(d.id)}" title="이 사람 숨기기">🙈</button>` : ''}</b><span>${esc(d.m)}</span></div><small>${new Date(d.t * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</small></div>`).join('')
+      : `<div class="gc-msg ${d.id === me ? 'mine' : ''}"><span class="gc-face">${esc(String(d.f || '🥚').slice(0, 4))}</span><div><b>${esc(safeName(String(d.n || '').slice(0, 10)))}${d.id !== me && typeof d.id === 'string' ? ` <button class="gc-mute" data-act="gMute" data-id="${esc(d.id)}" title="이 사람 숨기기">🙈</button>` : ''}</b><span${d.sys || GUILD_CHAT.includes(d.m) ? '' : ' translate="no"'}>${esc(d.m)}</span></div><small>${new Date(d.t * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</small></div>`).join('')
       : '<p class="muted">아직 메시지가 없어요. 첫 인사를 해 봐요! 👋</p>';
     if ((S.gMute || []).length) b.innerHTML += `<div class="gc-sys"><button class="chip" data-act="gUnmuteAll">🙉 숨긴 사람 ${S.gMute.length}명 다시 보기</button></div>`;
     b.scrollTop = b.scrollHeight;
@@ -7205,6 +7223,7 @@ function openLogin() {
       <button class="btn" data-act="accNew">➕ 새 계정 만들기</button>
       <button class="btn ghost" data-act="accImport">📥 다른 기기에서 가져오기</button>
     </div>
+    <div class="row"><button class="btn ghost small" data-act="lang" translate="no">🌐 ${window.LANG === 'en' ? '한국어' : 'English'}</button></div>
     <p class="muted small-note">계정은 이 기기(브라우저)에 저장돼요. 다른 기기로 옮기려면 게임 안 👤 메뉴의 📤 옮기기 코드를 쓰세요.</p>
   </div>`;
   el.classList.remove('hidden');
@@ -7321,6 +7340,7 @@ function openAccountMenu() {
       <button class="build-opt" data-act="accRename" style="--hc:#ffb020"><span class="bo-ico">✏️</span><span class="bo-nm">이름 바꾸기</span></button>
       <button class="build-opt" data-act="accPinSet" style="--hc:#ff5ce1"><span class="bo-ico">🔒</span><span class="bo-nm">비밀번호 ${ACC.pin ? '바꾸기 / 없애기' : '만들기'}</span></button>
       ${isPhone() && !isStandalone() ? `<button class="build-opt" data-act="fullscreen" style="--hc:#ffb020"><span class="bo-ico">⛶</span><span class="bo-nm">전체화면 ${isFull() ? '끄기' : '켜기'}<br><small>주소창·상태바 없이 게임만 꽉 차게</small></span></button>` : ''}
+      <button class="build-opt" data-act="lang" style="--hc:#5cc8ff" translate="no"><span class="bo-ico">🌐</span><span class="bo-nm">${window.LANG === 'en' ? '한국어로 바꾸기 (Korean)' : 'English (영어로 바꾸기)'}</span></button>
       <button class="build-opt" data-act="mute" style="--hc:#ff6b6b"><span class="bo-ico">${muteOn() ? '🔇' : '🔊'}</span><span class="bo-nm">무음 모드 ${muteOn() ? '켜짐 (누르면 소리 켜기)' : '꺼짐 (누르면 모든 소리 끄기)'}</span></button>
       <button class="build-opt" data-act="music" style="--hc:#b388ff"><span class="bo-ico">${musicOn() ? '🎵' : '🔈'}</span><span class="bo-nm">배경음악 ${musicOn() ? '켜짐 (누르면 끄기)' : '꺼짐 (누르면 켜기)'}</span></button>
       <button class="build-opt" data-act="sound" style="--hc:#7dff8f"><span class="bo-ico">${soundOn() ? '🔊' : '🔇'}</span><span class="bo-nm">소리 ${soundOn() ? '켜짐 (누르면 끄기)' : '꺼짐 (누르면 켜기)'}</span></button>
@@ -7813,6 +7833,7 @@ function openMenu() {
       ${it('account', '👤', '계정', esc(ACC ? ACC.name : ''))}
       ${it('help', '🎓', '튜토리얼', '')}
       ${isPhone() && !isStandalone() ? it('fullscreen', '⛶', '전체화면', isFull() ? '끄기' : '켜기') : ''}
+      ${it('lang', '🌐', window.LANG === 'en' ? '한국어' : 'English', window.LANG === 'en' ? '한국어로 바꾸기' : 'Switch to English', 'translate="no"')}
       ${it('mute', muteOn() ? '🔇' : '🔊', '무음 모드', muteOn() ? '켜짐 (소리 없음)' : '꺼짐')}
       ${it('music', musicOn() ? '🎵' : '🔈', '음악', musicOn() ? '켜짐' : '꺼짐')}
       ${it('sound', soundOn() ? '🔊' : '🔇', '효과음', soundOn() ? '켜짐' : '꺼짐')}
@@ -8932,6 +8953,7 @@ const ACTIONS = {
   weekClaim: (d) => weekClaim(d.id),
   weekBonus: () => weekBonus(),
   music: () => toggleMusic(),
+  lang: () => { save(); window.setLang(window.LANG === 'en' ? 'ko' : 'en'); },
   mute: () => { toggleMute(); if ($('#modalBox .build-opt[data-act=mute]')) openAccountMenu(); },
   fullscreen: () => toggleFullscreen(),
   wbCollect: () => { collectAll(); closeModal(); if (dailyReady() && tutStep() >= 8) setTimeout(openDaily, 300); },
