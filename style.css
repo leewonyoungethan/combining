@@ -1382,3 +1382,8 @@ body.ui-hidden .race-btn { opacity: .55; }
 .race-bet:disabled { opacity: .45; cursor: default; }
 .race-help { font-size: 11px; }
 @media (max-width: 560px) { .race-bets { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* 🔍 랭킹 찾기 */
+.rank-search { display: flex; gap: 6px; margin: 6px 0 8px; }
+.rank-search input { flex: 1; min-width: 0; }
+.rank-found { font-size: 11px; color: var(--muted); text-align: left; margin: -2px 0 6px 44px; }

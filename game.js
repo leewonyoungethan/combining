@@ -5882,6 +5882,13 @@ async function rankFetch() {
   return all.filter(p => !p.del);   // 지운 계정은 빼기
 }
 let rankCat = 'tr', rankCache = null;
+let rankQuery = '';
+const rankMatch = (p, q) => {
+  const s = q.trim().toLowerCase().replace(/\s+/g, '');
+  if (!s) return true;
+  const nm = String(p.n || '').toLowerCase().replace(/\s+/g, ''), gn = String(p.gn || '').toLowerCase().replace(/\s+/g, '');
+  return nm.includes(s) || gn.includes(s) || frCodeOf(p.id).toLowerCase() === s.slice(0, 6);
+};
 async function openRanking(cat) {
   tutFlag('ranking', true);
   if (cat) rankCat = cat;
@@ -5894,6 +5901,7 @@ async function openRanking(cat) {
       </div>
       <div class="chips">${RANK_CATS.map(x => `<button class="chip ${x.id === rankCat ? 'on' : ''}" data-act="rankCat" data-c="${x.id}">${x.name}</button>`).join('')}</div>
       <p class="muted">${c.desc} · 최근 2년 동안 게임을 한 플레이어 순위예요</p>
+      <div class="rank-search"><input id="rankSearch" maxlength="12" placeholder="🔍 이름 · 길드 · 친구 코드로 찾기" value="${esc(rankQuery)}" autocomplete="off"><button class="btn small" data-act="rankSearch">찾기</button>${rankQuery ? '<button class="btn small ghost" data-act="rankSearchClear">✖</button>' : ''}</div>
       <div class="rank-list">${body}</div>
       <div class="row"><button class="btn ghost small" data-act="rankRefresh">🔄 새로고침</button><button class="btn ghost small" data-act="close">닫기</button></div>`);
   };
@@ -5919,8 +5927,19 @@ async function openRanking(cat) {
       <span class="rk-val">${fmt(p[rankCat])}<small>${c.unit}</small></span>
       ${p.id !== me.id ? (frById(p.id) ? '<span class="rk-fr" title="친구">👫</span>' : `<button class="rk-fr add" data-act="frAddRank" data-id="${esc(p.id)}" title="친구 추가">➕</button>`) : '<span class="rk-fr"></span>'}
     </div>`;
-  const shown = list.slice(0, 50);
-  draw(`<p class="rank-mypos">내 순위: <b>${myPos}위</b> / ${list.length}명</p>${shown.map(row).join('')}${myPos > 50 ? '<div class="rank-gap">⋯</div>' + row(list[myPos - 1], myPos - 1) : ''}`);
+  if (rankQuery.trim()) {
+    // 찾기: 순위와 함께 길드 · 마지막 접속 · 친구 코드까지 보여 준다
+    const found = list.map((p, k) => ({ p, k })).filter(({ p }) => rankMatch(p, rankQuery)).slice(0, 50);
+    const info = (p) => `<div class="rank-found">${p.gn ? `${esc(p.ge || '🛡️')} ${esc(p.gn)}${p.gl ? ' 👑' : ''} · ` : ''}🕒 ${p.id === me.id ? '지금' : frAgo(p.t) || '-'} · 🔑 ${frCodeOf(p.id)} · 📖 ${fmt(p.dex)} · ⚔️ ${fmt(p.st)}</div>`;
+    draw(found.length
+      ? `<p class="rank-mypos">🔍 "${esc(rankQuery)}" · ${found.length}명 찾았어요</p>${found.map(({ p, k }) => row(p, k) + info(p)).join('')}`
+      : `<p class="muted">🔍 "${esc(rankQuery)}"(으)로 찾은 사람이 없어요.<br>최근 2년 동안 랭킹에 한 번이라도 올라간 사람만 찾을 수 있어요 (몬스터가 1마리 이상 있어야 올라가요).</p>`);
+  } else {
+    const shown = list.slice(0, 50);
+    draw(`<p class="rank-mypos">내 순위: <b>${myPos}위</b> / ${list.length}명</p>${shown.map(row).join('')}${myPos > 50 ? '<div class="rank-gap">⋯</div>' + row(list[myPos - 1], myPos - 1) : ''}`);
+  }
+  const inp = $('#rankSearch');
+  if (inp) inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); ACTIONS.rankSearch(); } });
 }
 // ===================== 👫 친구 =====================
 // 친구 코드 = 랭킹 id 앞 6글자. 랭킹 기록(최근 2년)에서 찾아서 친구 목록(S.friends)에 넣는다.
@@ -9106,6 +9125,8 @@ const ACTIONS = {
   gwarChest: (d) => gwarChest(d.k),
   rankCat: (d) => openRanking(d.c),
   rankRefresh: () => { rankCache = null; openRanking(); },
+  rankSearch: () => { rankQuery = (($('#rankSearch') || {}).value || '').trim().slice(0, 12); openRanking(); },
+  rankSearchClear: () => { rankQuery = ''; openRanking(); },
   rankName: () => {
     const v = ($('#rankName') ? $('#rankName').value : '').trim().slice(0, 10);
     if (!v) { toast('이름을 적어 주세요'); return; }
