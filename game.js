@@ -6316,6 +6316,7 @@ async function gSend() {
   if (Date.now() - gSayAt < 3000) { toast('조금 천천히 보내 주세요 😊'); return; }
   if (t === gLastMsg && Date.now() - gSayAt < 30000) { toast('같은 말을 또 보냈어요'); return; }
   gSayAt = Date.now(); gLastMsg = t;
+  tutFlag('gchat', true);
   inp.value = '';
   await guildSay(t);
   guildChatLoad();
@@ -8337,6 +8338,11 @@ TUT.push(
 TUT.push(
   { text: '🎣 섬 왼쪽의 🎣 낚시에서 물고기를 한 마리 낚아 봐요!', done: () => tutFlag('fish') || stat('fish') > 0, go: () => { closeModal(); tab = 'island'; render(); openFishing(); } },
 );
+TUT.push(
+  { text: '💬 길드의 💬 채팅에서 메시지를 보내 봐요 (노란 숫자 = 안 읽은 길드원 수 · 모든 날 저장!)', done: () => tutFlag('gchat'),
+    go: () => { closeModal(); if (S.guild) { guildTab = 'chat'; openGuild('chat'); } else { tab = 'adventure'; render(); openGuild(); } } },
+  { text: '🌐 ☰ 메뉴의 🌐 English로 게임을 영어로 바꿀 수 있어요', done: () => tutFlag('lang'), go: () => { closeModal(); openMenu(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -8505,6 +8511,16 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=fishCast]', '#modalBox [data-act=fishHit]', '#modalBox [data-act=fishClose]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#fishBtn'];
+    case 39: // 길드 채팅
+      if (inModal) {
+        if (!S.guild) return ['#modalBox [data-act=guildJoin]:not([disabled])', '#modalBox [data-act=guildNew]', '#modalBox [data-act=close]'];
+        return ['#modalBox #gChatText', '#modalBox [data-act=guildTab][data-t=chat]', '#modalBox [data-act=close]'];
+      }
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return ['.pvp-box [data-act=guildOpen]'];
+    case 40: // 영어 모드
+      if (inModal) return ['#modalBox [data-act=lang]', '#modalBox [data-act=close]'];
+      return ['#menuBtn', '[data-act=account]'];
   }
   return null;
 }
@@ -8690,6 +8706,8 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '💬', title: '길드 채팅', text: '🛡️ 길드 창의 <b>💬 채팅</b>에서 길드원과 자유롭게 이야기해요.<br>메시지 옆 <b style="color:#ffe066">노란 숫자</b>는 아직 안 읽은 길드원 수 (읽을수록 줄어요, 카톡처럼!).<br>채팅은 <b>모든 날 저장</b>되고, 📅 날짜 줄로 나눠져 보여요.<br>전화번호·주소·링크는 막히고, 욕은 5번 물어봐요. 싫은 사람은 🙈' },
+  { icon: '🌐', title: '영어 모드', text: '☰ 메뉴 · 👤 계정 메뉴 · 로그인 화면의 <b>🌐 English</b>를 누르면 게임이 <b>영어</b>로 바뀌어요.<br>몬스터 이름까지 모두 영어! 다시 누르면 한국어로 돌아와요.' },
   { icon: '🔇', title: '무음 모드', text: '위쪽 <b>🔊</b> 버튼을 누르면 <b>🔇 무음 모드</b>! 배경음악과 효과음이 한 번에 모두 꺼져요.<br>다시 누르면 소리가 돌아와요. (☰ 메뉴 · 👤 계정 메뉴에도 있어요)' },
   { icon: '🌈', title: '새 속성 9개', text: `속성이 <b>20개</b>가 되었어요! 새 특수 속성은 두 속성 몬스터를 교배하면 나와요 (상점 알로도 살 수 있어요).<br>${ADV_RECIPES.slice(3).map(r => `${EL[ELI[r.el]].emoji}<b>${EL[ELI[r.el]].name}</b> = ${r.need.map(x => EL[ELI[x]].emoji + EL[ELI[x]].name).join('+')}`).join(' · ')}` },
   { icon: '🎣', title: '낚시', text: '섬 왼쪽의 <b>🎣 낚시</b>에서 미끼를 던져요.<br><b>❗</b>가 뜨면 움직이는 🪝가 <b style="color:#7dff8f">초록 칸</b>에 올 때 <b>낚아채기</b>! 가운데 노란 칸이면 <b>✨ 완벽</b> (보상 1.5배).<br>물고기 20종 · 💰골드 · 💎보석 · 🥚알 · 🎁보물상자! 미끼는 20분마다 1개 (최대 5개).' },
@@ -9001,7 +9019,7 @@ const ACTIONS = {
   weekClaim: (d) => weekClaim(d.id),
   weekBonus: () => weekBonus(),
   music: () => toggleMusic(),
-  lang: () => { save(); window.setLang(window.LANG === 'en' ? 'ko' : 'en'); },
+  lang: () => { tutFlag('lang', true); save(); window.setLang(window.LANG === 'en' ? 'ko' : 'en'); },
   mute: () => { toggleMute(); if ($('#modalBox .build-opt[data-act=mute]')) openAccountMenu(); },
   fullscreen: () => toggleFullscreen(),
   wbCollect: () => { collectAll(); closeModal(); if (dailyReady() && tutStep() >= 8) setTimeout(openDaily, 300); },
