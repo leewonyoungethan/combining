@@ -1346,3 +1346,7 @@ body.ui-hidden .fish-btn { opacity: .55; }
 .gchat-rule { font-size: 11px; }
 .gc-mute { border: 0; background: none; cursor: pointer; font-size: 12px; padding: 0 2px; opacity: .6; }
 .gc-mute:hover { opacity: 1; }
+
+/* 🔇 무음 모드 버튼 */
+.mute-btn { font-size: 16px; }
+.mute-btn.on { background: rgba(255, 107, 107, .35); border-color: #ff6b6b; }

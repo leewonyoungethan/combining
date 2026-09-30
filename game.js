@@ -857,7 +857,9 @@ const stageGold = (st) => st <= 50 ? 120 * Math.pow(1.25, st - 1) : 120 * Math.p
 
 // ----- 효과음 -----
 let AC = null;
-const soundOn = () => lsGet('combining-sound') !== 'off';
+// 🔇 무음 모드가 켜져 있으면 음악·효과음 모두 끈다
+function muteOn() { return lsGet('combining-mute') === 'on'; }
+const soundOn = () => !muteOn() && lsGet('combining-sound') !== 'off';
 const SFX = {
   tap:   [[660, 0.04, 'triangle', 0.05]],
   coin:  [[988, 0.07, 'square', 0.05], [1319, 0.12, 'square', 0.05, 0.07]],
@@ -942,7 +944,7 @@ document.addEventListener('pointerup', function autoFull() {
 }, true);
 
 // ----- 🎵 배경음악: 파일 없이 직접 연주한다 (섬 / 전투 두 곡) -----
-const musicOn = () => lsGet('combining-music') !== 'off';
+const musicOn = () => !muteOn() && lsGet('combining-music') !== 'off';
 // 화음: [베이스, 위에 쌓는 음들]  (MIDI 번호. 60 = 가운데 도)
 const CH = {
   Am: [33, 57, 60, 64], F: [29, 57, 60, 65], C: [36, 55, 60, 64], G: [31, 55, 59, 62], E: [28, 56, 59, 64],
@@ -1180,13 +1182,38 @@ function startMusic() {
 const wantSong = () => (B ? 'battle' : tab === 'shop' ? 'shop' : tab === 'dex' ? 'dex' : 'island');
 setInterval(() => { if (MUS.started) setMusic(wantSong()); }, 400);
 // 소리가 막혀 있으면 화면을 처음 누를 때 켠다
-['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, () => { if (AC && AC.state === 'suspended' && !document.hidden) AC.resume(); }, true));
+['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, () => { if (AC && AC.state === 'suspended' && !document.hidden && !muteOn()) AC.resume(); }, true));
 document.addEventListener('visibilitychange', () => {
   if (!AC) return;
   if (document.hidden) AC.suspend();
-  else { AC.resume(); MUS.next = Math.max(MUS.next, AC.currentTime + 0.1); }
+  else if (!muteOn()) { AC.resume(); MUS.next = Math.max(MUS.next, AC.currentTime + 0.1); }
 });
+function toggleMute() {
+  lsSet('combining-mute', muteOn() ? 'off' : 'on');
+  if (muteOn()) {
+    setMusic(null);
+    if (AC && AC.state === 'running') setTimeout(() => { if (muteOn() && AC) AC.suspend(); }, 700);
+    toast('🔇 무음 모드: 음악과 효과음을 모두 껐어요');
+  } else {
+    audioCtx();
+    if (AC && AC.state === 'suspended' && !document.hidden) AC.resume();
+    MUS.started = true;
+    setMusic(wantSong());
+    toast('🔊 무음 모드를 껐어요');
+    sfx('coin');
+  }
+  updateMuteBtn();
+  if ($('#modalBox .menu-sheet')) openMenu();
+}
+function updateMuteBtn() {
+  const b = $('#muteBtn');
+  if (!b) return;
+  b.textContent = muteOn() ? '🔇' : '🔊';
+  b.classList.toggle('on', muteOn());
+  b.title = muteOn() ? '무음 모드 켜짐 (누르면 소리 켜기)' : '무음 모드 켜기';
+}
 function toggleMusic() {
+  if (muteOn()) lsSet('combining-mute', 'off');
   lsSet('combining-music', musicOn() ? 'off' : 'on');
   if (musicOn()) { MUS.started = true; audioCtx(); if (AC && AC.state === 'suspended') AC.resume(); setMusic(wantSong()); } else setMusic(null);
   toast(musicOn() ? '🎵 배경음악을 켰어요' : '🎵 배경음악을 껐어요');
@@ -2230,7 +2257,9 @@ function updateGoal() {
 }
 
 function toggleSound() {
+  if (muteOn()) lsSet('combining-mute', 'off');
   lsSet('combining-sound', soundOn() ? 'off' : 'on');
+  updateMuteBtn();
   toast(soundOn() ? '🔊 소리를 켰어요' : '🔇 소리를 껐어요');
   sfx('tap');
   openAccountMenu();
@@ -7292,6 +7321,7 @@ function openAccountMenu() {
       <button class="build-opt" data-act="accRename" style="--hc:#ffb020"><span class="bo-ico">✏️</span><span class="bo-nm">이름 바꾸기</span></button>
       <button class="build-opt" data-act="accPinSet" style="--hc:#ff5ce1"><span class="bo-ico">🔒</span><span class="bo-nm">비밀번호 ${ACC.pin ? '바꾸기 / 없애기' : '만들기'}</span></button>
       ${isPhone() && !isStandalone() ? `<button class="build-opt" data-act="fullscreen" style="--hc:#ffb020"><span class="bo-ico">⛶</span><span class="bo-nm">전체화면 ${isFull() ? '끄기' : '켜기'}<br><small>주소창·상태바 없이 게임만 꽉 차게</small></span></button>` : ''}
+      <button class="build-opt" data-act="mute" style="--hc:#ff6b6b"><span class="bo-ico">${muteOn() ? '🔇' : '🔊'}</span><span class="bo-nm">무음 모드 ${muteOn() ? '켜짐 (누르면 소리 켜기)' : '꺼짐 (누르면 모든 소리 끄기)'}</span></button>
       <button class="build-opt" data-act="music" style="--hc:#b388ff"><span class="bo-ico">${musicOn() ? '🎵' : '🔈'}</span><span class="bo-nm">배경음악 ${musicOn() ? '켜짐 (누르면 끄기)' : '꺼짐 (누르면 켜기)'}</span></button>
       <button class="build-opt" data-act="sound" style="--hc:#7dff8f"><span class="bo-ico">${soundOn() ? '🔊' : '🔇'}</span><span class="bo-nm">소리 ${soundOn() ? '켜짐 (누르면 끄기)' : '꺼짐 (누르면 켜기)'}</span></button>
       <button class="build-opt" data-act="code" style="--hc:#a8b2c1"><span class="bo-ico">🔑</span><span class="bo-nm">비밀코드 입력</span></button>
@@ -7783,6 +7813,7 @@ function openMenu() {
       ${it('account', '👤', '계정', esc(ACC ? ACC.name : ''))}
       ${it('help', '🎓', '튜토리얼', '')}
       ${isPhone() && !isStandalone() ? it('fullscreen', '⛶', '전체화면', isFull() ? '끄기' : '켜기') : ''}
+      ${it('mute', muteOn() ? '🔇' : '🔊', '무음 모드', muteOn() ? '켜짐 (소리 없음)' : '꺼짐')}
       ${it('music', musicOn() ? '🎵' : '🔈', '음악', musicOn() ? '켜짐' : '꺼짐')}
       ${it('sound', soundOn() ? '🔊' : '🔇', '효과음', soundOn() ? '켜짐' : '꺼짐')}
     </div>
@@ -8590,6 +8621,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🔇', title: '무음 모드', text: '위쪽 <b>🔊</b> 버튼을 누르면 <b>🔇 무음 모드</b>! 배경음악과 효과음이 한 번에 모두 꺼져요.<br>다시 누르면 소리가 돌아와요. (☰ 메뉴 · 👤 계정 메뉴에도 있어요)' },
   { icon: '🌈', title: '새 속성 9개', text: `속성이 <b>20개</b>가 되었어요! 새 특수 속성은 두 속성 몬스터를 교배하면 나와요 (상점 알로도 살 수 있어요).<br>${ADV_RECIPES.slice(3).map(r => `${EL[ELI[r.el]].emoji}<b>${EL[ELI[r.el]].name}</b> = ${r.need.map(x => EL[ELI[x]].emoji + EL[ELI[x]].name).join('+')}`).join(' · ')}` },
   { icon: '🎣', title: '낚시', text: '섬 왼쪽의 <b>🎣 낚시</b>에서 미끼를 던져요.<br><b>❗</b>가 뜨면 움직이는 🪝가 <b style="color:#7dff8f">초록 칸</b>에 올 때 <b>낚아채기</b>! 가운데 노란 칸이면 <b>✨ 완벽</b> (보상 1.5배).<br>물고기 20종 · 💰골드 · 💎보석 · 🥚알 · 🎁보물상자! 미끼는 20분마다 1개 (최대 5개).' },
   { icon: '👫', title: '친구', text: '모험 탭 <b>👫 친구</b>에서 내 <b>친구 코드</b>(6글자)를 친구에게 알려 주고, 친구 코드를 넣으면 친구가 돼요.<br>🏆 랭킹에서 ➕를 눌러도 추가돼요!<br>💌 <b>하트</b>를 매일 보내면 친구가 💰골드와 💎를 받아요. ⚔️ 누르면 바로 <b>대전 초대</b>, 🤝 누르면 <b>레이드 초대</b>!' },
@@ -8640,6 +8672,7 @@ function welcomeDone() {
 
 function updateHud() {
   updateGuide();
+  updateMuteBtn();
   const dot = $('#dailyDot');
   if (dot) dot.classList.toggle('on', dailyReady());
   updateMisDot();
@@ -8899,6 +8932,7 @@ const ACTIONS = {
   weekClaim: (d) => weekClaim(d.id),
   weekBonus: () => weekBonus(),
   music: () => toggleMusic(),
+  mute: () => { toggleMute(); if ($('#modalBox .build-opt[data-act=mute]')) openAccountMenu(); },
   fullscreen: () => toggleFullscreen(),
   wbCollect: () => { collectAll(); closeModal(); if (dailyReady() && tutStep() >= 8) setTimeout(openDaily, 300); },
   wbClose: () => { closeModal(); if (dailyReady() && tutStep() >= 8) setTimeout(openDaily, 300); },
