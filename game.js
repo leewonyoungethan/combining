@@ -2046,6 +2046,8 @@ function updateFishBtn() {
   b.innerHTML = `🎣<small>낚시 ${n}</small>`;
   const rb = $('#raceBtn');
   if (rb) { rb.classList.toggle('hidden', tab !== 'island' || !!VISIT); rb.classList.toggle('ready', raceFreeOk()); }
+  const wb = $('#wheelBtn');
+  if (wb) { wb.classList.toggle('hidden', tab !== 'island' || !!VISIT); wb.classList.toggle('ready', !wheelDay().free); }
 }
 setInterval(() => { if (typeof S !== 'undefined' && S) updateFishBtn(); }, 30000);
 
@@ -2158,6 +2160,91 @@ function raceEnd(w) {
   const m = $('#raceMsg'); if (m) { m.textContent = msg; m.classList.add(win ? 'win' : 'lose'); }
   const lane = document.querySelectorAll('#modalBox .race-lane')[w]; if (lane) lane.classList.add('winner');
   const c = $('#raceCtl'); if (c) c.innerHTML = '<div class="row"><button class="btn big green" data-act="raceAgain">🏁 한 번 더!</button></div>';
+}
+
+// ===================== 🎡 행운의 룰렛 =====================
+// 하루 1번 무료로 돌리고, 💎10으로 5번까지 더 돌릴 수 있다. 8칸 중 하나가 나온다
+const WHEEL_COST = 10, WHEEL_PAID_MAX = 5;
+const WHEEL = [
+  { e: '💰', name: '골드', color: '#ffd24a', w: 22 },
+  { e: '💎', name: '보석 5', color: '#5cc8ff', w: 18 },
+  { e: '🍖', name: '먹이', color: '#ff9f5c', w: 18 },
+  { e: '📦', name: '룬 상자', color: '#a78bfa', w: 12 },
+  { e: '🤑', name: '골드 대박', color: '#ffb020', w: 8 },
+  { e: '🥚', name: '희귀 알', color: '#7dff8f', w: 10 },
+  { e: '💠', name: '보석 20', color: '#3dffd8', w: 6 },
+  { e: '🎰', name: '잭팟 💎100', color: '#ff4d6d', w: 2 },
+];
+const wheelDay = () => (S.wheel && S.wheel.day === dayKey() ? S.wheel : (S.wheel = { day: dayKey(), free: 0, paid: 0 }));
+let WSPIN = null;   // 돌아가는 중이면 { idx }
+let wheelRot = 0;
+function openWheel() {
+  tutFlag('wheel', true);
+  const d = wheelDay();
+  const n = WHEEL.length, slice = 360 / n;
+  const grad = WHEEL.map((p, i) => `${p.color} ${i * slice}deg ${(i + 1) * slice}deg`).join(', ');
+  const labels = WHEEL.map((p, i) => `<span class="wh-lab" style="transform: rotate(${i * slice + slice / 2}deg) translateY(calc(var(--wr) * -1))"><b>${p.e}</b></span>`).join('');
+  const canFree = !d.free, canPaid = d.paid < WHEEL_PAID_MAX;
+  showModal(`<div class="wheel-panel"><h3>🎡 행운의 룰렛</h3>
+    <div class="wheel-wrap"><div class="wheel-pin">▼</div>
+      <div class="wheel" id="wheel" style="background: conic-gradient(${grad}); transform: rotate(${wheelRot}deg)">${labels}<div class="wheel-hub">🎡</div></div>
+    </div>
+    <div class="wheel-msg" id="wheelMsg">${canFree ? '오늘의 무료 룰렛이 있어요! 돌려 봐요 🎉' : canPaid ? `💎 ${WHEEL_COST}로 더 돌릴 수 있어요 (오늘 ${WHEEL_PAID_MAX - d.paid}번 남음)` : '오늘은 다 돌렸어요. 내일 또 와요! 👋'}</div>
+    <div class="row" id="wheelBtns">${canFree ? '<button class="btn big green" data-act="wheelSpin">🎡 무료로 돌리기!</button>'
+      : canPaid ? `<button class="btn big" data-act="wheelSpin">🎡 돌리기 (💎 ${WHEEL_COST})</button>` : ''}</div>
+    <div class="wheel-legend">${WHEEL.map(p => `<span>${p.e} ${p.name}</span>`).join('')}</div>
+    <div class="row"><button class="btn ghost small" data-act="wheelClose">닫기</button></div></div>`);
+}
+function wheelSpin() {
+  if (WSPIN) return;
+  const d = wheelDay();
+  if (!d.free) d.free = 1;
+  else if (d.paid < WHEEL_PAID_MAX) { if (!spend(WHEEL_COST, 'gems')) return; d.paid++; }
+  else { toast('오늘은 다 돌렸어요. 내일 또 와요!'); return; }
+  save(); updateHud();
+  // 무엇이 나올지 먼저 정하고, 그 칸이 바늘(위쪽)에 오도록 돌린다
+  let r = Math.random() * WHEEL.reduce((s, p) => s + p.w, 0), idx = 0;
+  for (let i = 0; i < WHEEL.length; i++) { r -= WHEEL[i].w; if (r <= 0) { idx = i; break; } }
+  const slice = 360 / WHEEL.length;
+  const target = 360 - (idx * slice + slice / 2) + (Math.random() - 0.5) * slice * 0.6;
+  wheelRot = wheelRot - (wheelRot % 360) + 360 * 6 + target;
+  WSPIN = { idx };
+  const w = $('#wheel');
+  if (w) { w.classList.add('spinning'); w.style.transform = `rotate(${wheelRot}deg)`; }
+  const b = $('#wheelBtns'); if (b) b.innerHTML = '<button class="btn big" disabled>🎡 빙글빙글…</button>';
+  const m = $('#wheelMsg'); if (m) m.textContent = '두근두근…';
+  sfx('breed');
+  setTimeout(() => wheelPrize(idx), 4200);
+}
+function wheelPrize(idx) {
+  WSPIN = null;
+  const p = WHEEL[idx], inc = totalIncome();
+  let got = '';
+  if (p.e === '💰') { const g = Math.max(2000, Math.round(inc * 600)); earn(g); got = `💰 ${shortNum(g)}`; }
+  if (p.e === '🤑') { const g = Math.max(8000, Math.round(inc * 2400)); earn(g); got = `💰 ${shortNum(g)} 대박!`; }
+  if (p.e === '💎') { earn(5, 'gems'); got = '💎 5'; }
+  if (p.e === '💠') { earn(20, 'gems'); got = '💎 20'; }
+  if (p.e === '🎰') { earn(100, 'gems'); got = '💎 100 잭팟!!'; }
+  if (p.e === '🍖') { const f = Math.max(300, Math.round(inc * 60)); earn(f, 'food'); got = `🍖 ${shortNum(f)}`; }
+  if (p.e === '📦') { got = '💠 ' + runeText(giveRune([0.6, 0.3, 0.1])); }
+  if (p.e === '🥚') {
+    if (S.hatch.length < hatchCap()) {
+      const rk = ['rare', 'special', 'masterwork', 'hero', 'epic'][Math.floor(Math.random() * 5)];
+      const pool = CAT_LIST.filter(c => c.rarity === rk && !c.shop), c = pool[Math.floor(Math.random() * pool.length)];
+      S.hatch.push(c.id); got = `🥚 ${c.face} ${c.name} 알 (${RAR[rk].name})`;
+    } else { earn(10, 'gems'); got = '💎 10 (부화장이 가득 차서)'; }
+  }
+  statAdd('wheel', 1);
+  save(); updateHud();
+  sfx(p.e === '🎰' || p.e === '🤑' ? 'win' : 'yay');
+  toast(`🎡 ${got}`);
+  if (!$('#wheel')) return;
+  const w = $('#wheel'); w.classList.remove('spinning');
+  const m = $('#wheelMsg'); if (m) { m.innerHTML = `<span class="wheel-got">${p.e} ${esc(got)}</span>`; }
+  const d = wheelDay();
+  const b = $('#wheelBtns');
+  if (b) b.innerHTML = d.paid < WHEEL_PAID_MAX ? `<button class="btn big" data-act="wheelSpin">🎡 한 번 더 (💎 ${WHEEL_COST})</button>` : '<p class="muted">오늘은 다 돌렸어요. 내일 또 와요! 👋</p>';
+  updateFishBtn();
 }
 
 // 섬 위를 돌아다니는 펫 (섬 가장자리를 천천히 한 바퀴)
@@ -7925,6 +8012,7 @@ const ACH_MORE = [
   ['clone',    '🧬 몬스터 복제', 'stat', [1, 10, 100], [50, 150, 500]],
   ['fish',     '🎣 물고기 낚기', 'stat', [1, 10, 50, 200, 500], [10, 20, 50, 120, 300]],
   ['raceWin',  '🏁 경주 1등 맞히기', 'stat', [1, 10, 50, 200], [10, 30, 100, 300]],
+  ['wheel',    '🎡 룰렛 돌리기', 'stat', [1, 10, 50, 200], [5, 20, 60, 200]],
   ['friendGift', '💌 친구에게 하트 보내기', 'stat', [1, 10, 50, 200], [10, 30, 80, 200]],
   ['coopWin',  '🤝 협동 레이드 승리', 'stat', [1, 5, 20], [30, 80, 200]],
   ['fusepet',  '🧪 합성 펫 모으기', () => PETS.filter(p => p.fusion && petLv(p.id)).length, [1, 4, 8], [20, 80, 250]],
@@ -8531,6 +8619,9 @@ TUT.push(
   { text: '🔍 🏆 랭킹 위쪽 검색칸에서 이름 · 길드 · 친구 코드로 사람을 찾아봐요', done: () => tutFlag('rankSearch'),
     go: () => { closeModal(); tab = 'adventure'; render(); openRanking(); } },
 );
+TUT.push(
+  { text: '🎡 섬 왼쪽의 🎡 룰렛을 돌려 선물을 받아요 (하루 1번 무료!)', done: () => tutFlag('wheel') || stat('wheel') > 0, go: () => { closeModal(); tab = 'island'; render(); openWheel(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -8721,6 +8812,10 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox #rankSearch', '#modalBox [data-act=rankSearch]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=ranking]'];
+    case 44: // 룰렛
+      if (inModal) return ['#modalBox [data-act=wheelSpin]', '#modalBox [data-act=wheelClose]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#wheelBtn'];
   }
   return null;
 }
@@ -8906,6 +9001,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🎡', title: '행운의 룰렛', text: '<b>🎡 룰렛</b>(섬 왼쪽 버튼)을 하루 1번 <b>무료</b>로 돌려요! 💎10이면 5번 더.<br>💰 골드 · 🤑 골드 대박 · 💎 보석 · 🍖 먹이 · 📦 룬 · 🥚 희귀 알… 그리고 아주 가끔 <b>🎰 잭팟 💎100</b>!' },
   { icon: '🏁', title: '몬스터 경주', text: '<b>🏁 경주</b>(섬 왼쪽 버튼)에서 몬스터 5마리가 달리기 시합을 해요!<br>1등할 것 같은 몬스터를 응원하고 골드를 걸면, 맞혔을 때 <b>4.5배</b>!<br>하루 1번은 <b>🎟️ 무료 응원권</b> (맞히면 💎15). 💨부스터 · 🍌미끄러짐 · 😴낮잠… 끝까지 몰라요!' },
   { icon: '💬', title: '길드 채팅', text: '🛡️ 길드 창의 <b>💬 채팅</b>에서 길드원과 자유롭게 이야기해요.<br>메시지 옆 <b style="color:#ffe066">노란 숫자</b>는 아직 안 읽은 길드원 수 (읽을수록 줄어요, 카톡처럼!).<br>채팅은 <b>모든 날 저장</b>되고, 📅 날짜 줄로 나눠져 보여요.<br>전화번호·주소·링크는 막히고, 욕은 5번 물어봐요. 싫은 사람은 🙈' },
   { icon: '🌐', title: '영어 모드', text: '☰ 메뉴 · 👤 계정 메뉴 · 로그인 화면의 <b>🌐 English</b>를 누르면 게임이 <b>영어</b>로 바뀌어요.<br>몬스터 이름까지 모두 영어! 다시 누르면 한국어로 돌아와요.' },
@@ -9099,6 +9195,9 @@ const ACTIONS = {
   gUnmuteAll: () => { S.gMute = []; save(); guildChatLoad(); toast('🙉 숨긴 사람을 다시 보여요'); },
   fishing: () => openFishing(),
   race: () => openRace(),
+  wheel: () => openWheel(),
+  wheelSpin: () => wheelSpin(),
+  wheelClose: () => { if (WSPIN) { toast('룰렛이 멈추면 선물을 받아요!'); return; } closeModal(); },
   racePick: (d) => { if (RACE && RACE.st === 'pick') { RACE.pick = Number(d.i); raceDraw(); } },
   raceBet: (d) => { if (RACE && RACE.st === 'pick') { RACE.bet = d.b; raceDraw(); } },
   raceGo: () => raceGo(),

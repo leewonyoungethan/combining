@@ -1387,3 +1387,20 @@ body.ui-hidden .race-btn { opacity: .55; }
 .rank-search { display: flex; gap: 6px; margin: 6px 0 8px; }
 .rank-search input { flex: 1; min-width: 0; }
 .rank-found { font-size: 11px; color: var(--muted); text-align: left; margin: -2px 0 6px 44px; }
+
+/* 🎡 행운의 룰렛 */
+.wheel-btn { top: 422px; background: radial-gradient(circle at 35% 30%, #ff9ed8, #7b2c8f 85%); }
+.wheel-btn.ready { animation: ready 1.2s ease-in-out infinite; border-color: #ffe066; }
+@media (max-width: 560px) { .wheel-btn { top: 362px; } }
+body.ui-hidden .wheel-btn { opacity: .55; }
+.wheel-wrap { position: relative; width: 260px; height: 260px; margin: 10px auto 6px; max-width: 80vw; max-height: 80vw; }
+.wheel-pin { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); z-index: 3; font-size: 28px; color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, .7); }
+.wheel { --wr: 94px; position: absolute; inset: 0; border-radius: 50%; border: 6px solid #fff; box-shadow: 0 0 0 4px #ffb020, 0 8px 24px rgba(0, 0, 0, .5); }
+.wheel.spinning { transition: transform 4s cubic-bezier(.15, .75, .1, 1); }
+.wh-lab { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+.wh-lab b { position: absolute; transform: translate(-50%, -50%); font-size: 28px; }
+.wheel-hub { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: #fff; display: flex; align-items: center; justify-content: center; font-size: 28px; box-shadow: 0 2px 8px rgba(0, 0, 0, .4); }
+.wheel-msg { min-height: 26px; font-weight: 900; margin: 6px 0; }
+.wheel-got { font-size: 18px; color: #ffe066; animation: ready .6s ease-in-out 3; display: inline-block; }
+.wheel-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 10px; font-size: 11px; color: var(--muted); margin: 6px 0; }
+@media (max-width: 560px) { .wheel-wrap { width: 220px; height: 220px; } .wh-lab b { font-size: 22px; } .wheel { --wr: 78px; } }
