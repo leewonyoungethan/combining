@@ -2044,8 +2044,121 @@ function updateFishBtn() {
   const n = fishBait();
   b.classList.toggle('ready', n > 0);
   b.innerHTML = `🎣<small>낚시 ${n}</small>`;
+  const rb = $('#raceBtn');
+  if (rb) { rb.classList.toggle('hidden', tab !== 'island' || !!VISIT); rb.classList.toggle('ready', raceFreeOk()); }
 }
 setInterval(() => { if (typeof S !== 'undefined' && S) updateFishBtn(); }, 30000);
+
+// ===================== 🏁 몬스터 경주 =====================
+// 몬스터 5마리가 달리기 시합! 1등을 맞히면 건 골드의 4.5배. 하루 1번은 🎟️ 무료 응원권 (맞히면 💎)
+const RACE_N = 5, RACE_PAY = 4.5, RACE_FREE_GEMS = 15;
+const RACE_EVENTS = [
+  ['💨', '부스터 발동!', 1.9], ['🍌', '바나나 껍질에 미끄러졌어요!', 0.25], ['😴', '잠깐 낮잠…', 0.1],
+  ['🔥', '불꽃 질주!', 1.6], ['🌪️', '회오리 바람을 탔어요!', 1.7], ['🪨', '돌에 걸려 넘어졌어요!', 0.3], ['🎵', '신나는 음악에 춤을 춰요~', 0.5],
+];
+let RACE = null;
+function raceNew() {
+  const pool = CAT_LIST.filter(c => !c.shop && RANK[c.rarity] <= RANK.mythic);
+  const used = new Set(), runners = [];
+  while (runners.length < RACE_N) {
+    const c = pool[Math.floor(Math.random() * pool.length)];
+    if (used.has(c.face)) continue;
+    used.add(c.face);
+    runners.push({ type: c.id, face: c.face, name: c.name, pos: 0, v: 0, fx: null, fxT: 0 });
+  }
+  RACE = { runners, pick: null, bet: null, st: 'pick' };
+}
+const raceFreeOk = () => S.raceFree !== dayKey();
+function raceBets() {
+  const g = S.infinite ? 1e6 : S.gold;
+  return [
+    { id: 'free', label: `🎟️ 무료 응원권`, sub: raceFreeOk() ? `맞히면 💎 ${RACE_FREE_GEMS}` : '내일 또 받아요', amt: 0, ok: raceFreeOk() },
+    { id: 's', label: '💰 조금', amt: Math.max(100, Math.floor(g * 0.01)) },
+    { id: 'm', label: '💰 보통', amt: Math.max(500, Math.floor(g * 0.05)) },
+    { id: 'l', label: '💰 왕창', amt: Math.max(2000, Math.floor(g * 0.1)) },
+  ].map(b => ({ ...b, ok: b.id === 'free' ? b.ok : (S.infinite || S.gold >= b.amt) }));
+}
+function openRace() {
+  tutFlag('race', true);
+  if (!RACE || RACE.st === 'done') raceNew();
+  raceDraw();
+}
+function raceDraw() {
+  const R = RACE;
+  const lanes = R.runners.map((r, i) => `<div class="race-lane ${R.pick === i ? 'picked' : ''}" data-act="racePick" data-i="${i}">
+      <span class="rl-no">${i + 1}</span>
+      <div class="rl-track"><span class="rl-runner" id="rr${i}" style="left:${r.pos}%">${r.face}<i class="rl-fx" id="rf${i}"></i></span><span class="rl-goal">🏁</span></div>
+    </div>
+    <div class="rl-name">${R.pick === i ? '👉 ' : ''}${esc(r.name)} <small>${RAR[CAT[r.type].rarity].name}</small></div>`).join('');
+  const bets = raceBets();
+  showModal(`<div class="race-panel"><h3>🏁 몬스터 경주</h3>
+    <div class="race-msg" id="raceMsg">${R.st === 'pick' ? '누가 1등 할까요? 응원할 몬스터를 눌러요!' : R.st === 'run' ? '달린다~!' : ''}</div>
+    <div class="race-lanes">${lanes}</div>
+    <div id="raceCtl">${R.st === 'pick' ? `<div class="race-bets">${bets.map(b => `<button class="race-bet ${R.bet === b.id ? 'on' : ''}" data-act="raceBet" data-b="${b.id}" ${b.ok ? '' : 'disabled'}><b>${b.label}</b><small>${b.id === 'free' ? b.sub : '💰 ' + shortNum(b.amt) + ' → ' + shortNum(b.amt * RACE_PAY)}</small></button>`).join('')}</div>
+      <div class="row"><button class="btn big green" data-act="raceGo" ${R.pick != null && R.bet ? '' : 'disabled'}>🏁 출발!</button></div>
+      <p class="muted race-help">1등을 맞히면 건 골드의 <b>${RACE_PAY}배</b>! 달리는 중에 💨부스터 · 🍌미끄러짐 같은 일이 생겨요.</p>` : ''}</div>
+    <div class="row"><button class="btn ghost small" data-act="raceClose">닫기</button></div></div>`);
+}
+function raceGo() {
+  const R = RACE;
+  if (!R || R.st !== 'pick' || R.pick == null || !R.bet) return;
+  const b = raceBets().find(x => x.id === R.bet);
+  if (!b || !b.ok) { toast('그건 지금 걸 수 없어요'); return; }
+  if (b.id === 'free') S.raceFree = dayKey();
+  else if (!spend(b.amt)) return;
+  R.amt = b.amt; R.st = 'run'; R.t0 = performance.now(); R.last = R.t0; R.nextEv = R.t0 + 900;
+  save(); updateHud();
+  raceDraw();
+  sfx('breed');
+  R.runners.forEach(r => { r.v = 13 + Math.random() * 4; });
+  const step = () => {
+    const now = performance.now();
+    if (!RACE || RACE !== R || R.st !== 'run') return;
+    if (!$('#rr0')) { R.st = 'done'; return; }   // 창을 닫으면 멈춤 (다시 열면 새 경주)
+    const dt = Math.min(0.05, (now - R.last) / 1000); R.last = now;
+    // 가끔 이벤트
+    if (now > R.nextEv) {
+      R.nextEv = now + 600 + Math.random() * 900;
+      const r = R.runners[Math.floor(Math.random() * RACE_N)], ev = RACE_EVENTS[Math.floor(Math.random() * RACE_EVENTS.length)];
+      r.fx = ev; r.fxT = now + 1100;
+      const m = $('#raceMsg'); if (m) m.textContent = `${r.face} ${ev[0]} ${ev[1]}`;
+    }
+    let winner = null;
+    R.runners.forEach((r, i) => {
+      // 속도는 조금씩 흔들리고, 이벤트 중이면 배수
+      r.v += (Math.random() - 0.5) * 6 * dt; r.v = Math.max(9, Math.min(20, r.v));
+      const mult = r.fx && now < r.fxT ? r.fx[2] : 1;
+      if (r.fx && now >= r.fxT) r.fx = null;
+      r.pos = Math.min(100, r.pos + r.v * mult * dt);
+      const el = $('#rr' + i); if (el) el.style.left = r.pos * 0.9 + '%';
+      const fx = $('#rf' + i); if (fx) fx.textContent = r.fx ? r.fx[0] : '';
+      if (r.pos >= 100 && winner == null) winner = i;
+    });
+    if (winner != null) { raceEnd(winner); return; }
+    R.raf = setTimeout(step, 40);
+  };
+  R.raf = setTimeout(step, 40);
+}
+function raceEnd(w) {
+  const R = RACE;
+  R.st = 'done';
+  const win = w === R.pick, r = R.runners[w];
+  let msg;
+  if (win) {
+    statAdd('raceWin', 1);
+    if (R.bet === 'free') { earn(RACE_FREE_GEMS, 'gems'); msg = `🎉 맞혔어요! ${r.face} ${r.name} 1등! 💎 ${RACE_FREE_GEMS}`; }
+    else { const got = Math.round(R.amt * RACE_PAY); earn(got); msg = `🎉 맞혔어요! ${r.face} ${r.name} 1등! 💰 ${shortNum(got)}`; }
+    sfx('win');
+  } else {
+    msg = `😢 아쉬워요… 1등은 ${r.face} ${r.name}! (내가 응원한 건 ${R.runners[R.pick].face})`;
+    sfx('lose');
+  }
+  statAdd('race', 1);
+  save(); updateHud();
+  const m = $('#raceMsg'); if (m) { m.textContent = msg; m.classList.add(win ? 'win' : 'lose'); }
+  const lane = document.querySelectorAll('#modalBox .race-lane')[w]; if (lane) lane.classList.add('winner');
+  const c = $('#raceCtl'); if (c) c.innerHTML = '<div class="row"><button class="btn big green" data-act="raceAgain">🏁 한 번 더!</button></div>';
+}
 
 // 섬 위를 돌아다니는 펫 (섬 가장자리를 천천히 한 바퀴)
 function petWalkPos(t) {
@@ -7748,6 +7861,7 @@ const ACH_MORE = [
   ['raidClear', '🔥 레이드 보스 쓰러뜨리기', 'stat', [1, 5, 20, 50], [20, 60, 150, 400]],
   ['clone',    '🧬 몬스터 복제', 'stat', [1, 10, 100], [50, 150, 500]],
   ['fish',     '🎣 물고기 낚기', 'stat', [1, 10, 50, 200, 500], [10, 20, 50, 120, 300]],
+  ['raceWin',  '🏁 경주 1등 맞히기', 'stat', [1, 10, 50, 200], [10, 30, 100, 300]],
   ['friendGift', '💌 친구에게 하트 보내기', 'stat', [1, 10, 50, 200], [10, 30, 80, 200]],
   ['coopWin',  '🤝 협동 레이드 승리', 'stat', [1, 5, 20], [30, 80, 200]],
   ['fusepet',  '🧪 합성 펫 모으기', () => PETS.filter(p => p.fusion && petLv(p.id)).length, [1, 4, 8], [20, 80, 250]],
@@ -8343,6 +8457,9 @@ TUT.push(
     go: () => { closeModal(); if (S.guild) { guildTab = 'chat'; openGuild('chat'); } else { tab = 'adventure'; render(); openGuild(); } } },
   { text: '🌐 ☰ 메뉴의 🌐 English로 게임을 영어로 바꿀 수 있어요', done: () => tutFlag('lang'), go: () => { closeModal(); openMenu(); } },
 );
+TUT.push(
+  { text: '🏁 섬 왼쪽의 🏁 경주에서 1등할 몬스터를 맞혀 봐요 (하루 1번 무료!)', done: () => tutFlag('race') || stat('race') > 0, go: () => { closeModal(); tab = 'island'; render(); openRace(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -8521,6 +8638,10 @@ function tutPoint(k) {
     case 40: // 영어 모드
       if (inModal) return ['#modalBox [data-act=lang]', '#modalBox [data-act=close]'];
       return ['#menuBtn', '[data-act=account]'];
+    case 41: // 몬스터 경주
+      if (inModal) return RACE && RACE.pick == null ? ['#modalBox .race-lane'] : RACE && !RACE.bet ? ['#modalBox [data-act=raceBet]:not([disabled])'] : ['#modalBox [data-act=raceGo]', '#modalBox [data-act=raceClose]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#raceBtn'];
   }
   return null;
 }
@@ -8706,6 +8827,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🏁', title: '몬스터 경주', text: '<b>🏁 경주</b>(섬 왼쪽 버튼)에서 몬스터 5마리가 달리기 시합을 해요!<br>1등할 것 같은 몬스터를 응원하고 골드를 걸면, 맞혔을 때 <b>4.5배</b>!<br>하루 1번은 <b>🎟️ 무료 응원권</b> (맞히면 💎15). 💨부스터 · 🍌미끄러짐 · 😴낮잠… 끝까지 몰라요!' },
   { icon: '💬', title: '길드 채팅', text: '🛡️ 길드 창의 <b>💬 채팅</b>에서 길드원과 자유롭게 이야기해요.<br>메시지 옆 <b style="color:#ffe066">노란 숫자</b>는 아직 안 읽은 길드원 수 (읽을수록 줄어요, 카톡처럼!).<br>채팅은 <b>모든 날 저장</b>되고, 📅 날짜 줄로 나눠져 보여요.<br>전화번호·주소·링크는 막히고, 욕은 5번 물어봐요. 싫은 사람은 🙈' },
   { icon: '🌐', title: '영어 모드', text: '☰ 메뉴 · 👤 계정 메뉴 · 로그인 화면의 <b>🌐 English</b>를 누르면 게임이 <b>영어</b>로 바뀌어요.<br>몬스터 이름까지 모두 영어! 다시 누르면 한국어로 돌아와요.' },
   { icon: '🔇', title: '무음 모드', text: '위쪽 <b>🔊</b> 버튼을 누르면 <b>🔇 무음 모드</b>! 배경음악과 효과음이 한 번에 모두 꺼져요.<br>다시 누르면 소리가 돌아와요. (☰ 메뉴 · 👤 계정 메뉴에도 있어요)' },
@@ -8895,6 +9017,12 @@ const ACTIONS = {
   gMute: (d) => gMute(d.id),
   gUnmuteAll: () => { S.gMute = []; save(); guildChatLoad(); toast('🙉 숨긴 사람을 다시 보여요'); },
   fishing: () => openFishing(),
+  race: () => openRace(),
+  racePick: (d) => { if (RACE && RACE.st === 'pick') { RACE.pick = Number(d.i); raceDraw(); } },
+  raceBet: (d) => { if (RACE && RACE.st === 'pick') { RACE.bet = d.b; raceDraw(); } },
+  raceGo: () => raceGo(),
+  raceAgain: () => { raceNew(); raceDraw(); },
+  raceClose: () => { if (RACE && RACE.raf) clearTimeout(RACE.raf); if (RACE && RACE.st === 'run') { RACE.st = 'done'; toast('경주를 그만뒀어요 (건 것은 돌아오지 않아요)'); } closeModal(); },
   fishCast: () => fishCast(),
   fishHit: () => fishHit(),
   fishAgain: () => { FISH = null; fishCast(); },

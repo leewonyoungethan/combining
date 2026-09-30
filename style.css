@@ -1357,3 +1357,28 @@ body.ui-hidden .fish-btn { opacity: .55; }
 /* 💬 날짜 줄 */
 .gc-day { text-align: center; margin: 6px 0; }
 .gc-day span { font-size: 11px; color: var(--muted); background: rgba(255, 255, 255, .08); border-radius: 10px; padding: 2px 10px; }
+
+/* 🏁 몬스터 경주 */
+.race-btn { top: 360px; background: radial-gradient(circle at 35% 30%, #ffd24a, #b5451b 85%); }
+.race-btn.ready { animation: ready 1.2s ease-in-out infinite; border-color: #ffe066; }
+@media (max-width: 560px) { .race-btn { top: 308px; } }
+body.ui-hidden .race-btn { opacity: .55; }
+.race-msg { min-height: 22px; font-weight: 900; margin: 4px 0 8px; }
+.race-msg.win { color: #7dff8f; font-size: 16px; } .race-msg.lose { color: #ff8e8e; }
+.race-lanes { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.race-lane { display: grid; grid-template-columns: 22px 1fr; align-items: center; gap: 6px; cursor: pointer; }
+.rl-no { font-weight: 900; color: var(--muted); }
+.rl-track { position: relative; height: 40px; border-radius: 12px; background: repeating-linear-gradient(90deg, #3c7d3a 0 24px, #357235 24px 48px); border: 2px solid transparent; overflow: hidden; }
+.race-lane.picked .rl-track { border-color: #ffe066; box-shadow: 0 0 10px rgba(255, 224, 102, .6); }
+.race-lane.winner .rl-track { border-color: #7dff8f; box-shadow: 0 0 14px rgba(125, 255, 143, .8); }
+.rl-runner { position: absolute; top: 50%; transform: translateY(-50%) scaleX(-1); font-size: 28px; transition: left .05s linear; }
+.rl-fx { position: absolute; top: -12px; left: 18px; font-style: normal; font-size: 16px; transform: scaleX(-1); }
+.rl-goal { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 22px; }
+.rl-name { font-size: 11px; text-align: left; margin: 0 0 4px 28px; color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.race-bets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 6px 0; }
+.race-bet { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 2px; border-radius: 12px; border: 2px solid rgba(255, 255, 255, .25); background: rgba(255, 255, 255, .07); color: var(--text); font: inherit; cursor: pointer; }
+.race-bet b { font-size: 12px; } .race-bet small { font-size: 10px; color: var(--muted); }
+.race-bet.on { border-color: #ffe066; background: rgba(255, 224, 102, .2); }
+.race-bet:disabled { opacity: .45; cursor: default; }
+.race-help { font-size: 11px; }
+@media (max-width: 560px) { .race-bets { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
