@@ -5759,7 +5759,7 @@ function pvpTrophy(win) {
   return out;
 }
 
-// ----- 전 세계 랭킹 (ntfy.sh에 점수를 올리고 읽는다. 12시간 동안 남아서 "최근 12시간 동안 접속한 사람" 순위) -----
+// ----- 전 세계 랭킹 (ntfy.sh에 점수를 올리고 읽는다. 서버는 12시간만 보관하지만 기기 저장 + 다시 올리기로 최대 2년) -----
 // 내 컴퓨터에서 시험할 때(localhost)는 진짜 랭킹을 건드리지 않게 따로 쓴다
 const RANK_TOPIC = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) ? 'monhap-rank-dev-q7x2k9' : 'monhap-rank-v1-q7x2k9';
 // 랭킹에서 숨길 기록 (시험하다가 잘못 올라간 것)
@@ -5814,28 +5814,72 @@ function rankDelete(id) {
   guildCache = null;
   try { fetch(RANK_URL, { method: 'POST', body: JSON.stringify({ v: 1, id, del: 1, n: '' }) }).catch(() => {}); } catch (e) { /* 인터넷 없음 */ }
 }
+// 기록 하나를 안전한 모양으로
+function rankNorm(d, t) {
+  if (!d || d.v !== 1 || typeof d.id !== 'string' || RANK_HIDE.has(d.id)) return null;
+  const num = (x, hi) => Math.max(0, Math.min(hi, Math.floor(Number(x) || 0)));
+  return { id: d.id.slice(0, 20), n: safeName(String(d.n || '플레이어').slice(0, 10)), f: String(d.f || '🥚').slice(0, 4),
+    tr: num(d.tr, 99999), dex: num(d.dex, CAT_LIST.length), st: num(d.st, 9999), pw: num(d.pw, 1e8), t: Number(t) || 0, tt: num(d.tt, TITLES.length - 1),
+    g: typeof d.g === 'string' ? d.g.slice(0, 12) : '', gn: d.gn ? safeName(String(d.gn).slice(0, 12), '길드') : '', ge: String(d.ge || '🛡️').slice(0, 4), gl: d.gl ? 1 : 0,
+    dt: Array.isArray(d.dt) ? d.dt.slice(0, 3).filter(x => x && CAT[x.type]) : [], del: d.del ? 1 : 0 };
+}
+const RANK_KEEP = 2 * 365 * 86400;          // 최대 2년
+const RANK_STORE = 'combining-rankstore-' + RANK_TOPIC;
+const RANK_RELAY_OLD = 9 * 3600;            // 서버에 올라간 지 9시간이 넘으면 다시 올린다
+let rankRelayAt = 0;
+// 다시 올릴 때의 모양 (서버에 올라온 시간 대신 원래 시간 t를 같이)
+const rankPack = (p) => ({ v: 1, id: p.id, n: p.n, f: p.f, tr: p.tr, dex: p.dex, st: p.st, pw: p.pw, tt: p.tt, g: p.g, gn: p.gn, ge: p.ge, gl: p.gl, dt: p.dt, del: p.del, t: Math.floor(p.t) });
 async function rankFetch() {
   const r = await fetch(RANK_URL + '/json?poll=1&since=12h');
   if (!r.ok) throw new Error('http ' + r.status);
   const txt = await r.text();
-  const best = {};
+  const best = {}, carrier = {};
+  const put = (p, at) => {
+    if (!p) return;
+    if (!best[p.id] || best[p.id].t <= p.t) best[p.id] = p;
+    if (best[p.id] === p || best[p.id].t === p.t) carrier[p.id] = Math.max(carrier[p.id] || 0, at);
+  };
   txt.split('\n').forEach(line => {
     if (!line.trim()) return;
     try {
       const ev = JSON.parse(line);
       if (ev.event !== 'message') return;
       const d = JSON.parse(ev.message);
-      if (!d || d.v !== 1 || typeof d.id !== 'string' || RANK_HIDE.has(d.id)) return;
-      const num = (x, hi) => Math.max(0, Math.min(hi, Math.floor(Number(x) || 0)));
-      const p = { id: d.id.slice(0, 20), n: safeName(String(d.n || '플레이어').slice(0, 10)), f: String(d.f || '🥚').slice(0, 4),
-        tr: num(d.tr, 99999), dex: num(d.dex, CAT_LIST.length), st: num(d.st, 9999), pw: num(d.pw, 1e8), t: ev.time, tt: num(d.tt, TITLES.length - 1),
-        g: typeof d.g === 'string' ? d.g.slice(0, 12) : '', gn: d.gn ? safeName(String(d.gn).slice(0, 12), '길드') : '', ge: String(d.ge || '🛡️').slice(0, 4), gl: d.gl ? 1 : 0,
-        dt: Array.isArray(d.dt) ? d.dt.slice(0, 3).filter(x => x && CAT[x.type]) : [] };
-      p.del = d.del ? 1 : 0;
-      if (!best[p.id] || best[p.id].t <= p.t) best[p.id] = p;   // 한 사람은 가장 최근 기록만
+      // 다시 올린 묶음
+      if (d && d.v === 1 && Array.isArray(d.bundle)) { d.bundle.slice(0, 20).forEach(x => put(rankNorm(x, Math.min(Number(x && x.t) || 0, ev.time)), ev.time)); return; }
+      put(rankNorm(d, ev.time), ev.time);
     } catch (e) { /* 잘못된 줄은 건너뛴다 */ }
   });
-  return Object.values(best).filter(p => !p.del);   // 지운 계정은 빼기
+  // 기기에 저장된 기록과 합치기 (2년 넘은 기록은 버린다)
+  const now = Date.now() / 1000;
+  let store = {};
+  try { store = JSON.parse(lsGet(RANK_STORE) || '{}') || {}; } catch (e) { store = {}; }
+  Object.values(store).forEach(x => { const p = rankNorm({ ...x, v: 1 }, x.t); if (p && (!best[p.id] || best[p.id].t < p.t)) best[p.id] = p; });
+  Object.keys(best).forEach(id => { if (best[id].t < now - RANK_KEEP) delete best[id]; });
+  const all = Object.values(best).sort((a, b) => b.t - a.t).slice(0, 3000);
+  const keep = {};
+  all.forEach(p => { keep[p.id] = rankPack(p); });
+  lsSet(RANK_STORE, JSON.stringify(keep));
+  // 곧 지워질(또는 이미 지워진) 기록은 묶어서 다시 올린다 (다른 사람도 볼 수 있게)
+  if (Date.now() - rankRelayAt > 120000) {
+    const need = all.filter(p => (carrier[p.id] || 0) < now - RANK_RELAY_OLD);
+    if (need.length) {
+      rankRelayAt = Date.now();
+      // 사람마다 조금씩 나눠서 올리도록 앞쪽 몇 묶음만 (섞어서)
+      need.sort(() => Math.random() - 0.5);
+      let pack = [], size = 0, posts = 0;
+      const flush = () => { if (!pack.length) return; posts++; try { fetch(RANK_URL, { method: 'POST', body: JSON.stringify({ v: 1, bundle: pack }) }).catch(() => {}); } catch (e) { /* 인터넷 없음 */ } pack = []; size = 0; };
+      for (const p of need) {
+        if (posts >= 6) break;
+        const j = rankPack(p), len = JSON.stringify(j).length;
+        if (size + len > 3500) flush();
+        if (posts >= 6) break;
+        pack.push(j); size += len;
+      }
+      if (posts < 6) flush();
+    }
+  }
+  return all.filter(p => !p.del);   // 지운 계정은 빼기
 }
 let rankCat = 'tr', rankCache = null;
 async function openRanking(cat) {
@@ -5849,7 +5893,7 @@ async function openRanking(cat) {
         <div class="rm-name">내 이름 <input id="rankName" maxlength="10" value="${esc(S.nick || (ACC && ACC.name) || '')}"><button class="btn small" data-act="rankName">저장</button></div>
       </div>
       <div class="chips">${RANK_CATS.map(x => `<button class="chip ${x.id === rankCat ? 'on' : ''}" data-act="rankCat" data-c="${x.id}">${x.name}</button>`).join('')}</div>
-      <p class="muted">${c.desc} · 최근 12시간 동안 게임을 한 플레이어 순위예요</p>
+      <p class="muted">${c.desc} · 최근 2년 동안 게임을 한 플레이어 순위예요</p>
       <div class="rank-list">${body}</div>
       <div class="row"><button class="btn ghost small" data-act="rankRefresh">🔄 새로고침</button><button class="btn ghost small" data-act="close">닫기</button></div>`);
   };
@@ -5879,7 +5923,7 @@ async function openRanking(cat) {
   draw(`<p class="rank-mypos">내 순위: <b>${myPos}위</b> / ${list.length}명</p>${shown.map(row).join('')}${myPos > 50 ? '<div class="rank-gap">⋯</div>' + row(list[myPos - 1], myPos - 1) : ''}`);
 }
 // ===================== 👫 친구 =====================
-// 친구 코드 = 랭킹 id 앞 6글자. 랭킹 기록(최근 12시간)에서 찾아서 친구 목록(S.friends)에 넣는다.
+// 친구 코드 = 랭킹 id 앞 6글자. 랭킹 기록(최근 2년)에서 찾아서 친구 목록(S.friends)에 넣는다.
 // 사람마다 ntfy "우편함" 주제가 하나씩 있어서 친구 요청 · 💌 하트 선물 · ⚔️ 대전 초대를 보낸다.
 const FR_MAX = 30, FR_GIFT_MAX = 10;
 const FR_BOX = (id) => 'https://ntfy.sh/monhap-fr-' + (RANK_TOPIC.includes('-dev-') ? 'dev-' : 'v1-') + id;
@@ -5922,7 +5966,7 @@ async function frAddByCode() {
     const list = await rankFetch();
     rankCache = { t: Date.now(), list };
     const p = list.find(x => frCodeOf(x.id) === code.slice(0, 6));
-    if (!p) toast('😢 그 코드의 친구를 찾지 못했어요. 친구가 최근 12시간 안에 게임을 했는지 확인해 주세요');
+    if (!p) toast('😢 그 코드의 친구를 찾지 못했어요. 코드가 맞는지 확인해 주세요 (친구가 한 번은 랭킹을 열어야 해요)');
     else if (frAdd(p)) openFriends();
   } catch (e) { toast('인터넷 연결을 확인해 주세요'); }
   frBusy = false;
@@ -6150,7 +6194,7 @@ async function openGuild(t) {
         <span class="rk-pos">${p.gl ? '👑' : '🛡️'}</span><span class="rk-face">${esc(p.f)}</span>
         <span class="rk-name">${esc(p.n)}${p.id === me.id ? ' <small>(나)</small>' : ''}${p.gl ? ' <small>길드장</small>' : ''}<br>${tierBadge(p.tr)}</span>
         <span class="rk-val">🏆${fmt(p.tr)}<br><small>📖${fmt(p.dex)}</small></span></div>`).join('')}</div>
-      <p class="muted">최근 12시간 동안 게임을 한 길드원만 보여요</p>`;
+      <p class="muted">최근 2년 동안 게임을 한 길드원이 보여요</p>`;
   } else if (guildTab === 'chat') {
     body = `<div class="gchat" id="gChat"><p class="muted">⏳ 불러오는 중…</p></div>
       <div class="gchat-input"><input id="gChatText" maxlength="${GCHAT_MAX}" placeholder="메시지를 적어요 (${GCHAT_MAX}자까지)" autocomplete="off"><button class="btn green" data-act="gSend">보내기</button></div>
@@ -6180,7 +6224,7 @@ function guildBrowse(guilds) {
   showModal(`<h3>🛡️ 길드</h3>
     <p class="muted">길드에 들어가면 길드원들과 함께 <b>길드 레벨</b>을 올려요. 레벨마다 <b>서식지 골드 +${GUILD_PCT}%</b>! 길드 채팅도 할 수 있어요.</p>
     <div class="row"><button class="btn big green" data-act="guildNew">✨ 길드 만들기 (💰 ${fmt(GUILD_COST)})</button></div>
-    <h3 class="sub">🔎 길드 찾기 <small class="muted">최근 12시간 동안 활동한 길드</small></h3>
+    <h3 class="sub">🔎 길드 찾기 <small class="muted">최근 2년 동안 활동한 길드</small></h3>
     <div class="rank-list">${guilds.length ? guilds.slice(0, 50).map(g => `<div class="rank-row">
         <span class="rk-face">${esc(g.emblem)}</span>
         <span class="rk-name" style="grid-column: span 2">${esc(g.name)}<br><small>Lv.${g.lv} · 👥 ${g.members.length}/${GUILD_MAX}명 · ${fmt(g.pts)}점</small></span>
@@ -6489,7 +6533,7 @@ async function guildChatLoad() {
     seen(me, newest);   // 지금 보고 있으니 나는 다 읽었다
     // 길드원: 최근 12시간 동안 접속한 길드원 + 채팅에 나온 사람
     const mine = guildCache && guildCache.guilds && guildCache.guilds.find(g => g.id === S.guild.id);
-    const members = new Set([me, ...(mine ? mine.members.map(p => p.id) : []), ...Object.keys(readTo)]);
+    const members = new Set([me, ...(mine ? mine.members.filter(p => p.t > Date.now() / 1000 - 3 * 86400).map(p => p.id) : []), ...Object.keys(readTo)]);
     const unread = (d) => { if (d.t < Date.now() / 1000 - 12 * 3600) return 0; let n = 0; members.forEach(id => { if (id !== d.id && (readTo[id] || 0) < d.t) n++; }); return n; };
     // 내 읽음 표시 올리기 (새 메시지가 있을 때만)
     if (newest > (S.gReadSent || 0) && Date.now() - gReadAt > 4000) {
