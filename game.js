@@ -6327,15 +6327,33 @@ function gMute(id) {
   else { S.gMute.push(id); toast('🙈 이 사람의 메시지를 숨겼어요. 채팅 아래 🙉로 다시 볼 수 있어요'); }
   save(); guildChatLoad();
 }
-let gChatTimer = null;
+let gChatTimer = null, gReadAt = 0;
 async function guildChatLoad() {
   clearTimeout(gChatTimer);
   const box = $('#gChat');
   if (!box || !S.guild) return;
   try {
     const txt = await (await fetch(GUILD_TOPIC(S.guild.id) + '/json?poll=1&since=12h')).text();
-    const msgs = txt.split('\n').filter(Boolean).map(l => { try { const e = JSON.parse(l); const d = JSON.parse(e.message); return { ...d, t: e.time }; } catch (e) { return null; } })
-      .filter(d => d && d.v === 1 && typeof d.m === 'string')
+    const evs = txt.split('\n').filter(Boolean).map(l => { try { const e = JSON.parse(l); const d = JSON.parse(e.message); return { ...d, t: e.time }; } catch (e) { return null; } })
+      .filter(d => d && d.v === 1 && typeof d.id === 'string');
+    const me = S.rankId;
+    // 누가 어디까지 읽었나: 읽음 표시 + 자기가 보낸 메시지는 읽은 걸로
+    const readTo = {};
+    const seen = (id, t) => { if (id && t > (readTo[id] || 0)) readTo[id] = t; };
+    evs.forEach(d => { if (d.rd) seen(d.id, Number(d.rd) || 0); else if (typeof d.m === 'string') seen(d.id, d.t); });
+    const chatMsgs = evs.filter(d => typeof d.m === 'string');
+    const newest = chatMsgs.reduce((x, d) => Math.max(x, d.t), 0);
+    seen(me, newest);   // 지금 보고 있으니 나는 다 읽었다
+    // 길드원: 최근 12시간 동안 접속한 길드원 + 채팅에 나온 사람
+    const mine = guildCache && guildCache.guilds && guildCache.guilds.find(g => g.id === S.guild.id);
+    const members = new Set([me, ...(mine ? mine.members.map(p => p.id) : []), ...Object.keys(readTo)]);
+    const unread = (d) => { let n = 0; members.forEach(id => { if (id !== d.id && (readTo[id] || 0) < d.t) n++; }); return n; };
+    // 내 읽음 표시 올리기 (새 메시지가 있을 때만)
+    if (newest > (S.gReadSent || 0) && Date.now() - gReadAt > 4000) {
+      gReadAt = Date.now(); S.gReadSent = newest; save();
+      try { fetch(GUILD_TOPIC(S.guild.id), { method: 'POST', body: JSON.stringify({ v: 1, id: me, rd: newest }) }).catch(() => {}); } catch (e) { /* 인터넷 없음 */ }
+    }
+    const msgs = chatMsgs
       // 정해진 말과 시스템 알림만 보여 준다 (다른 글은 무시)
       .filter(d => GUILD_CHAT.includes(d.m) || (d.sys && /^(🎉|👋|🚪) .{1,20}님이 (길드를 만들었어요!|길드에 들어왔어요!|길드를 떠났어요)$/.test(d.m) && !badName(d.m))
         || (!d.sys && d.m.length <= GCHAT_MAX))
@@ -6344,10 +6362,9 @@ async function guildChatLoad() {
       .slice(-60);
     const b = $('#gChat');
     if (!b) return;
-    const me = S.rankId;
     b.innerHTML = msgs.length ? msgs.map(d => d.sys
       ? `<div class="gc-sys">${esc(d.m)}</div>`
-      : `<div class="gc-msg ${d.id === me ? 'mine' : ''}"><span class="gc-face">${esc(String(d.f || '🥚').slice(0, 4))}</span><div><b>${esc(safeName(String(d.n || '').slice(0, 10)))}${d.id !== me && typeof d.id === 'string' ? ` <button class="gc-mute" data-act="gMute" data-id="${esc(d.id)}" title="이 사람 숨기기">🙈</button>` : ''}</b><span${d.sys || GUILD_CHAT.includes(d.m) ? '' : ' translate="no"'}>${esc(d.m)}</span></div><small>${new Date(d.t * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</small></div>`).join('')
+      : `<div class="gc-msg ${d.id === me ? 'mine' : ''}"><span class="gc-face">${esc(String(d.f || '🥚').slice(0, 4))}</span><div><b>${esc(safeName(String(d.n || '').slice(0, 10)))}${d.id !== me && typeof d.id === 'string' ? ` <button class="gc-mute" data-act="gMute" data-id="${esc(d.id)}" title="이 사람 숨기기">🙈</button>` : ''}</b><span${d.sys || GUILD_CHAT.includes(d.m) ? '' : ' translate="no"'}>${esc(d.m)}</span></div><small>${unread(d) ? `<i class="gc-unread">${unread(d)}</i>` : ''}${new Date(d.t * 1000).toLocaleTimeString(window.LANG === 'en' ? 'en-US' : 'ko-KR', { hour: '2-digit', minute: '2-digit' })}</small></div>`).join('')
       : '<p class="muted">아직 메시지가 없어요. 첫 인사를 해 봐요! 👋</p>';
     if ((S.gMute || []).length) b.innerHTML += `<div class="gc-sys"><button class="chip" data-act="gUnmuteAll">🙉 숨긴 사람 ${S.gMute.length}명 다시 보기</button></div>`;
     b.scrollTop = b.scrollHeight;
@@ -8650,7 +8667,7 @@ const WELCOME = [
   { icon: '🏛️', title: '골드·보석 크게 쓰기', text: '상점의 <b>🏛️ 왕국 발전</b>: 골드로 끝없이 레벨 업 (골드·먹이·전투·교배 비용·매일 보석)<br><b>🗽 랜드마크</b>: 섬에 세우는 거대 건물, 모든 섬 골드 UP (최대 +170%)<br><b>💎 보석 상점</b>: 🤖 자동 수집 로봇, ⚡ 골드 2배 부스터, 👑 전설 알 상자' },
   { icon: '👥', title: '대전과 친구', text: '모험 탭 <b>👥 대전 · 친구</b> 칸에서<br>🌍 <b>랜덤 대전</b>으로 모르는 사람과 바로 싸우고, ⚔️ 방 코드로 <b>친구 대전</b>, 🎁 <b>선물</b>, 👀 <b>친구 섬 구경</b>도 해요.<br>선물·섬 코드는 <b>4자리 숫자</b>(예: 0427)예요.' },
   { icon: '🏆', title: '랭킹과 트로피', text: '🌍 랜덤 대전에서 이기면 <b>🏆 +30</b>, 지면 −15.<br>🥉브론즈 → 🥈실버 → 🥇골드 → 💠플래티넘 → 💎다이아 → 👑마스터 → 🏆챔피언!<br>모험 탭 <b>🏆 랭킹</b>에서 트로피·도감·모험·전투력 <b>전 세계 순위</b>를 봐요.' },
-  { icon: '🛡️', title: '길드', text: '모험 탭 <b>🛡️ 길드</b>에서 길드에 들어가거나 직접 만들어요 (💰5,000).<br>길드원이 트로피·도감을 모을수록 <b>길드 레벨</b>이 올라가고, 레벨마다 <b>서식지 골드 +2%</b>!<br>💬 길드 채팅에서 자유롭게 이야기해요! (전화번호 · 주소 · 링크는 자동으로 막히고, 욕은 5번 물어봐요 · 🙈로 숨기기)' },
+  { icon: '🛡️', title: '길드', text: '모험 탭 <b>🛡️ 길드</b>에서 길드에 들어가거나 직접 만들어요 (💰5,000).<br>길드원이 트로피·도감을 모을수록 <b>길드 레벨</b>이 올라가고, 레벨마다 <b>서식지 골드 +2%</b>!<br>💬 길드 채팅에서 자유롭게 이야기해요! 메시지 옆 <b style="color:#ffe066">노란 숫자</b>는 아직 안 읽은 길드원 수예요 (읽을수록 줄어요). (전화번호 · 주소 · 링크는 자동으로 막히고, 욕은 5번 물어봐요 · 🙈로 숨기기)' },
   { icon: '⚔️', title: '길드전', text: '매일 비슷한 길드와 짝이 돼요. 길드원마다 하루 <b>3번</b> 상대 길드원의 방어 팀을 공격해요.<br>이기면 ⭐1, 두 마리 살아남으면 ⭐2, 모두 살면 ⭐3!<br>길드 별이 ⭐10·25·50개가 되면 <b>🎁 길드전 상자</b>를 받아요. 내 모험 팀은 자동으로 <b>방어 팀</b>이 돼요.' },
   { icon: '📋', title: '미션과 도전 과제', text: '위쪽 <b>📋</b>에서 매일 <b>미션 3개</b>를 깨면 💎 보석! 셋 다 깨면 보너스 💎30.<br>🏆 <b>도전 과제</b>(도감·스테이지·등급·트로피)도 한 번씩 큰 보상을 줘요.<br>전투에서 <b>🤖 자동</b>을 켜면 알아서 싸워요.' },
   { icon: '👤', title: '계정과 오프라인', text: '오른쪽 위 <b>👤</b>에서 <b>계정</b>을 여러 개 만들 수 있어요. 계정마다 <b>자기 섬</b>이 따로 있고, 🔒 비밀번호도 걸 수 있어요.<br>다른 기기로는 <b>📤 옮기기 코드</b>로 섬을 옮겨요.<br>한 번 접속하면 <b>인터넷 없이도</b> 켜지고, 홈 화면에 앱처럼 설치할 수 있어요.<br>👤 메뉴에서 <b>🎵 음악 · 🔊 소리</b>를 켜고 끄고, 폰에서는 <b>⛶ 전체화면</b>도 돼요.<br>🙅 이름에는 욕설·나쁜 말·전화번호 같은 개인정보를 쓸 수 없어요 (다른 사람에게 보이니까요!).' },

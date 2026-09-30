@@ -1350,3 +1350,6 @@ body.ui-hidden .fish-btn { opacity: .55; }
 /* 🔇 무음 모드 버튼 */
 .mute-btn { font-size: 16px; }
 .mute-btn.on { background: rgba(255, 107, 107, .35); border-color: #ff6b6b; }
+
+/* 💬 안 읽은 사람 수 (카톡처럼) */
+.gc-unread { font-style: normal; font-weight: 900; color: #ffe066; margin-right: 4px; font-size: 11px; }
