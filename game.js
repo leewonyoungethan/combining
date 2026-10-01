@@ -5852,6 +5852,30 @@ const RANK_TOPIC = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostnam
 // 랭킹에서 숨길 기록 (시험하다가 잘못 올라간 것)
 const RANK_HIDE = new Set(['7d7sb06fon1l', 'ut7q8bq5onn3', 'i8pxkadifqn4']);
 const RANK_URL = 'https://ntfy.sh/' + RANK_TOPIC;
+// ntfy.sh는 인터넷 연결(IP)마다 하루 250개까지만 올릴 수 있다. 다 쓰면 429 → 잠시 쉬고,
+// 자동으로 올리는 것(랭킹 점수 · 다시 올리기 · 읽음 표시)은 하루 120번까지만 쓴다 (채팅 · 친구 요청 몫을 남겨 두려고)
+const NTFY_BG_DAY = 120;
+const ntfyDay = () => { try { const d = JSON.parse(lsGet('combining-ntfy') || '{}'); return d.day === dayKey() ? d : { day: dayKey(), n: 0, until: d.until || 0 }; } catch (e) { return { day: dayKey(), n: 0, until: 0 }; } };
+const ntfyBlocked = () => Date.now() < (ntfyDay().until || 0);
+const ntfyBgOk = (n = 1) => !ntfyBlocked() && ntfyDay().n + n <= NTFY_BG_DAY;
+let ntfyWarned = 0;
+async function ntfyPost(url, obj, bg) {
+  if (ntfyBlocked()) return false;
+  if (bg && !ntfyBgOk()) return false;
+  try {
+    const r = await fetch(url, { method: 'POST', body: JSON.stringify(obj) });
+    const d = ntfyDay();
+    if (r.status === 429) {
+      d.until = Date.now() + 30 * 60 * 1000;   // 30분 쉬기
+      lsSet('combining-ntfy', JSON.stringify(d));
+      if (Date.now() - ntfyWarned > 10 * 60 * 1000) { ntfyWarned = Date.now(); toast('🌐 온라인 서버를 오늘 너무 많이 썼어요. 잠시 뒤에 다시 돼요 (게임은 그대로 할 수 있어요)'); }
+      return false;
+    }
+    if (bg) d.n++;
+    lsSet('combining-ntfy', JSON.stringify(d));
+    return r.ok;
+  } catch (e) { return false; }
+}
 const RANK_CATS = [
   { id: 'tr',  name: '🏆 트로피',  unit: '', desc: '🌍 랜덤 대전에서 이기면 올라가요' },
   { id: 'dex', name: '📖 도감',    unit: '마리', desc: '모은 몬스터 종류' },
@@ -5878,20 +5902,17 @@ function defenseTeam() {
   return team.map(m => { const st = stats(m); return { type: m.type, lv: m.lv, hp: st.hp, atk: st.atk, spd: st.spd }; });
 }
 let rankBusy = false;
-// 점수가 바뀌었거나 3시간이 지났으면 올린다 (1분에 한 번까지)
+// 점수가 바뀌었으면 올린다 (랭킹을 열 때는 3분, 평소엔 15분에 한 번까지 · 안 바뀌어도 6시간마다)
 async function rankSubmit(force) {
   // 몬스터가 한 마리도 없는 빈 계정은 올리지 않는다
   if (VISIT || !ACC || rankBusy || !navigator.onLine || !S.monsters.length) return;
   const d = myRankData(), key = JSON.stringify([d.n, d.f, d.tr, d.dex, d.st, d.pw, d.tt, d.g || '', (d.dt || []).map(x => x.type + x.lv).join()]);
   const last = S.rankLast || {};
   const age = Date.now() - (last.t || 0);
-  if (age < 60000) return;
-  if (!force && last.key === key && age < 3 * 3600 * 1000) return;
+  if (age < (force ? 3 : 15) * 60000) return;
+  if (last.key === key && age < 6 * 3600 * 1000) return;
   rankBusy = true;
-  try {
-    const r = await fetch(RANK_URL, { method: 'POST', body: JSON.stringify(d) });
-    if (r.ok) { S.rankLast = { key, t: Date.now() }; save(); }
-  } catch (e) { /* 인터넷 없음 */ }
+  if (await ntfyPost(RANK_URL, d, true)) { S.rankLast = { key, t: Date.now() }; save(); }
   rankBusy = false;
 }
 // 지운 계정: 같은 id로 "지웠어요" 기록을 올리면 읽는 쪽에서 뺀다
@@ -5899,7 +5920,7 @@ function rankDelete(id) {
   if (!id) return;
   if (rankCache) rankCache.list = rankCache.list.filter(p => p.id !== id);
   guildCache = null;
-  try { fetch(RANK_URL, { method: 'POST', body: JSON.stringify({ v: 1, id, del: 1, n: '' }) }).catch(() => {}); } catch (e) { /* 인터넷 없음 */ }
+  ntfyPost(RANK_URL, { v: 1, id, del: 1, n: '' });
 }
 // 기록 하나를 안전한 모양으로
 function rankNorm(d, t) {
@@ -5912,7 +5933,7 @@ function rankNorm(d, t) {
 }
 const RANK_KEEP = 2 * 365 * 86400;          // 최대 2년
 const RANK_STORE = 'combining-rankstore-' + RANK_TOPIC;
-const RANK_RELAY_OLD = 9 * 3600;            // 서버에 올라간 지 9시간이 넘으면 다시 올린다
+const RANK_RELAY_OLD = 10 * 3600;           // 서버에 올라간 지 10시간이 넘으면 다시 올린다
 let rankRelayAt = 0;
 // 다시 올릴 때의 모양 (서버에 올라온 시간 대신 원래 시간 t를 같이)
 const rankPack = (p) => ({ v: 1, id: p.id, n: p.n, f: p.f, tr: p.tr, dex: p.dex, st: p.st, pw: p.pw, tt: p.tt, g: p.g, gn: p.gn, ge: p.ge, gl: p.gl, dt: p.dt, del: p.del, t: Math.floor(p.t) });
@@ -5948,22 +5969,24 @@ async function rankFetch() {
   all.forEach(p => { keep[p.id] = rankPack(p); });
   lsSet(RANK_STORE, JSON.stringify(keep));
   // 곧 지워질(또는 이미 지워진) 기록은 묶어서 다시 올린다 (다른 사람도 볼 수 있게)
-  if (Date.now() - rankRelayAt > 120000) {
+  let relayAt = 0;
+  try { relayAt = Number(lsGet('combining-rankrelay')) || 0; } catch (e) { relayAt = 0; }
+  if (Date.now() - Math.max(rankRelayAt, relayAt) > 3 * 3600 * 1000 && Math.random() < 0.5 && ntfyBgOk(2)) {
     const need = all.filter(p => (carrier[p.id] || 0) < now - RANK_RELAY_OLD);
     if (need.length) {
-      rankRelayAt = Date.now();
+      rankRelayAt = Date.now(); lsSet('combining-rankrelay', String(rankRelayAt));
       // 사람마다 조금씩 나눠서 올리도록 앞쪽 몇 묶음만 (섞어서)
       need.sort(() => Math.random() - 0.5);
       let pack = [], size = 0, posts = 0;
-      const flush = () => { if (!pack.length) return; posts++; try { fetch(RANK_URL, { method: 'POST', body: JSON.stringify({ v: 1, bundle: pack }) }).catch(() => {}); } catch (e) { /* 인터넷 없음 */ } pack = []; size = 0; };
+      const flush = () => { if (!pack.length) return; posts++; ntfyPost(RANK_URL, { v: 1, bundle: pack }, true); pack = []; size = 0; };
       for (const p of need) {
-        if (posts >= 6) break;
+        if (posts >= 2) break;
         const j = rankPack(p), len = JSON.stringify(j).length;
         if (size + len > 3500) flush();
-        if (posts >= 6) break;
+        if (posts >= 2) break;
         pack.push(j); size += len;
       }
-      if (posts < 6) flush();
+      if (posts < 2) flush();
     }
   }
   return all.filter(p => !p.del);   // 지운 계정은 빼기
@@ -6045,7 +6068,7 @@ function frClean(p) {
     tr: num(p.tr, 99999), dex: num(p.dex, CAT_LIST.length), st: num(p.st, 9999), pw: num(p.pw, 1e8), tt: num(p.tt, TITLES.length - 1), t: Number(p.t) || 0 };
 }
 function frPost(id, msg) {
-  try { return fetch(FR_BOX(id), { method: 'POST', body: JSON.stringify({ v: 1, ...msg, from: frMe() }) }).catch(() => {}); } catch (e) { return Promise.resolve(); }
+  return ntfyPost(FR_BOX(id), { v: 1, ...msg, from: frMe() });
 }
 function frAdd(p, silent) {
   S.friends = S.friends || [];
@@ -6508,7 +6531,7 @@ function gwarResult(win) {
   const gold = 200 + stars * 400, gems = stars * 2;
   earn(gold); if (gems) earn(gems, 'gems');
   if (stars && S.guild) {
-    fetch(GWAR_URL(), { method: 'POST', body: JSON.stringify({ v: 1, g: S.guild.id, gn: S.guild.name, ge: S.guild.emblem, id: S.rankId, n: String(S.nick || (ACC && ACC.name) || '').slice(0, 10), st: stars, tgt: B.gwar.def.id, vs: B.gwar.opp.id }) }).catch(() => {});
+    ntfyPost(GWAR_URL(), { v: 1, g: S.guild.id, gn: S.guild.name, ge: S.guild.emblem, id: S.rankId, n: String(S.nick || (ACC && ACC.name) || '').slice(0, 10), st: stars, tgt: B.gwar.def.id, vs: B.gwar.opp.id });
   }
   save();
   return [stars ? '⭐'.repeat(stars) + ' 길드전 별 ' + stars + '개!' : '⭐ 0개', `💰 ${fmt(gold)}`, ...(gems ? [`💎 ${gems}`] : [])];
@@ -6534,7 +6557,7 @@ async function gwarChest(k) {
 async function guildSay(text, system) {
   if (!S.guild) return;
   const d = { v: 1, id: S.rankId, n: String(S.nick || (ACC && ACC.name) || '플레이어').slice(0, 10), f: myRankData().f, m: text, sys: system ? 1 : 0 };
-  try { await fetch(GUILD_TOPIC(S.guild.id), { method: 'POST', body: JSON.stringify(d) }); } catch (e) { toast('메시지를 보내지 못했어요'); }
+  if (!(await ntfyPost(GUILD_TOPIC(S.guild.id), d))) toast('메시지를 보내지 못했어요');
 }
 let gSayAt = 0;
 async function gSay(k) {
@@ -6592,7 +6615,7 @@ function gMute(id) {
   save(); guildChatLoad();
 }
 let gChatTimer = null, gReadAt = 0, gArcAt = 0;
-const GLOG_MAX = 400, GARC_BATCH = 12, GARC_POSTS = 4, GARC_OLD = 9 * 3600;
+const GLOG_MAX = 400, GARC_BATCH = 14, GARC_POSTS = 2, GARC_OLD = 10 * 3600;
 const gLogKey = () => `combining-gchat:${ACC ? ACC.id : ''}:${S.guild ? S.guild.id : ''}`;
 const gKey = (d) => d.id + '|' + d.t + '|' + d.m;
 const gDay = (t) => new Date(t * 1000).toLocaleDateString(window.LANG === 'en' ? 'en-US' : 'ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
@@ -6625,13 +6648,13 @@ async function guildChatLoad() {
     const chatMsgs = [...merged.values()].sort((a, b) => a.t - b.t).slice(-GLOG_MAX);
     lsSet(gLogKey(), JSON.stringify(chatMsgs));
     // 곧 지워지거나 이미 지워진 메시지는 묶어서 다시 올려 둔다 (다른 길드원도 볼 수 있게)
-    if (Date.now() - gArcAt > 60000) {
+    if (Date.now() - gArcAt > 30 * 60000 && ntfyBgOk(2)) {
       const need = chatMsgs.filter(d => (carrier[gKey(d)] || 0) < nowS - GARC_OLD).slice(-GARC_BATCH * GARC_POSTS);
       if (need.length) {
         gArcAt = Date.now();
         for (let i = 0; i < need.length; i += GARC_BATCH) {
           const arc = need.slice(i, i + GARC_BATCH).map(d => ({ id: d.id, n: d.n, f: d.f, m: d.m, sys: d.sys, t: d.t }));
-          try { fetch(GUILD_TOPIC(S.guild.id), { method: 'POST', body: JSON.stringify({ v: 1, id: me, arc }) }).catch(() => {}); } catch (e) { /* 인터넷 없음 */ }
+          ntfyPost(GUILD_TOPIC(S.guild.id), { v: 1, id: me, arc }, true);
         }
       }
     }
@@ -6642,9 +6665,9 @@ async function guildChatLoad() {
     const members = new Set([me, ...(mine ? mine.members.filter(p => p.t > Date.now() / 1000 - 3 * 86400).map(p => p.id) : []), ...Object.keys(readTo)]);
     const unread = (d) => { if (d.t < Date.now() / 1000 - 12 * 3600) return 0; let n = 0; members.forEach(id => { if (id !== d.id && (readTo[id] || 0) < d.t) n++; }); return n; };
     // 내 읽음 표시 올리기 (새 메시지가 있을 때만)
-    if (newest > (S.gReadSent || 0) && Date.now() - gReadAt > 4000) {
+    if (newest > (S.gReadSent || 0) && Date.now() - gReadAt > 60000) {
       gReadAt = Date.now(); S.gReadSent = newest; save();
-      try { fetch(GUILD_TOPIC(S.guild.id), { method: 'POST', body: JSON.stringify({ v: 1, id: me, rd: newest }) }).catch(() => {}); } catch (e) { /* 인터넷 없음 */ }
+      ntfyPost(GUILD_TOPIC(S.guild.id), { v: 1, id: me, rd: newest }, true);
     }
     const msgs = chatMsgs
       // 정해진 말과 시스템 알림만 보여 준다 (다른 글은 무시)
