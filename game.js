@@ -2046,6 +2046,8 @@ function updateFishBtn() {
   b.innerHTML = `🎣<small>낚시 ${n}</small>`;
   const rb = $('#raceBtn');
   if (rb) { rb.classList.toggle('hidden', tab !== 'island' || !!VISIT); rb.classList.toggle('ready', raceFreeOk()); }
+  const mb = $('#memBtn');
+  if (mb) { mb.classList.toggle('hidden', tab !== 'island' || !!VISIT); mb.classList.toggle('ready', memDay().plays < MEM_FREE); }
   const wb = $('#wheelBtn');
   if (wb) { wb.classList.toggle('hidden', tab !== 'island' || !!VISIT); wb.classList.toggle('ready', !wheelDay().free); }
 }
@@ -2245,6 +2247,96 @@ function wheelPrize(idx) {
   const b = $('#wheelBtns');
   if (b) b.innerHTML = d.paid < WHEEL_PAID_MAX ? `<button class="btn big" data-act="wheelSpin">🎡 한 번 더 (💎 ${WHEEL_COST})</button>` : '<p class="muted">오늘은 다 돌렸어요. 내일 또 와요! 👋</p>';
   updateFishBtn();
+}
+
+// ===================== 🃏 몬스터 짝 맞추기 =====================
+// 뒤집힌 카드 16장(8쌍)에서 같은 몬스터 두 장을 찾는다. 적게 뒤집을수록 ⭐이 많고 보상이 커진다.
+// 하루 3판 무료, 그 뒤로는 💎 5
+const MEM_FREE = 3, MEM_COST = 5, MEM_PAIRS = 8;
+const memDay = () => (S.mem && S.mem.day === dayKey() ? S.mem : (S.mem = { day: dayKey(), plays: 0, best: (S.mem && S.mem.best) || null }));
+let MEM = null;   // { cards:[{face, open, done}], first, lock, moves, t0, found }
+function memStars(moves) { return moves <= 11 ? 3 : moves <= 15 ? 2 : 1; }
+function openMemory() {
+  tutFlag('memory', true);
+  if (MEM && !MEM.over) { memDraw(); return; }
+  const d = memDay(), free = d.plays < MEM_FREE;
+  showModal(`<div class="mem-panel"><h3>🃏 몬스터 짝 맞추기</h3>
+    <div class="mem-intro"><span>🃏🃏</span><p>카드를 두 장씩 뒤집어서 <b>같은 몬스터</b>를 찾아요!<br>적게 뒤집을수록 ⭐이 많아져요 (11번 이하 ⭐⭐⭐)</p></div>
+    ${S.mem && S.mem.best ? `<p class="muted">🏅 최고 기록: ${S.mem.best.moves}번 · ${S.mem.best.sec}초</p>` : ''}
+    <div class="row"><button class="btn big green" data-act="memStart">${free ? `🃏 시작! (무료 ${MEM_FREE - d.plays}판 남음)` : `🃏 시작 (💎 ${MEM_COST})`}</button></div>
+    <div class="row"><button class="btn ghost small" data-act="memClose">닫기</button></div></div>`);
+}
+function memStart() {
+  const d = memDay();
+  if (d.plays >= MEM_FREE && !spend(MEM_COST, 'gems')) return;
+  d.plays++; save(); updateHud();
+  // 서로 다른 몬스터 8마리
+  const faces = [], seen = new Set();
+  while (faces.length < MEM_PAIRS) {
+    const c = CAT_LIST[Math.floor(Math.random() * CAT_LIST.length)];
+    if (seen.has(c.face)) continue;
+    seen.add(c.face); faces.push({ face: c.face, name: c.name });
+  }
+  const cards = [...faces, ...faces].map((f, i) => ({ ...f, k: i, open: false, done: false }));
+  for (let i = cards.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cards[i], cards[j]] = [cards[j], cards[i]]; }
+  MEM = { cards, first: null, lock: false, moves: 0, t0: Date.now(), found: 0, over: false };
+  sfx('breed');
+  memDraw();
+}
+function memDraw() {
+  const M = MEM;
+  showModal(`<div class="mem-panel"><h3>🃏 몬스터 짝 맞추기</h3>
+    <div class="mem-stat"><span>🔄 <b id="memMoves">${M.moves}</b>번</span><span>✅ <b id="memFound">${M.found}</b>/${MEM_PAIRS}</span><span>⭐ <b id="memStars">${'⭐'.repeat(memStars(M.moves + 1 > M.moves ? M.moves : M.moves))}</b></span></div>
+    <div class="mem-grid">${M.cards.map((c, i) => `<button class="mem-card ${c.open || c.done ? 'open' : ''} ${c.done ? 'done' : ''}" data-act="memFlip" data-i="${i}" id="mc${i}"><span class="mc-back">❓</span><span class="mc-front">${c.face}</span></button>`).join('')}</div>
+    <div class="mem-msg" id="memMsg">같은 몬스터 두 장을 찾아요!</div>
+    <div class="row"><button class="btn ghost small" data-act="memClose">닫기</button></div></div>`);
+}
+function memFlip(i) {
+  const M = MEM;
+  if (!M || M.over || M.lock) return;
+  const c = M.cards[i];
+  if (!c || c.open || c.done) return;
+  c.open = true;
+  const el = $('#mc' + i); if (el) el.classList.add('open');
+  sfx('tap');
+  if (M.first == null) { M.first = i; return; }
+  const a = M.cards[M.first];
+  M.moves++;
+  const mv = $('#memMoves'); if (mv) mv.textContent = M.moves;
+  const st = $('#memStars'); if (st) st.textContent = '⭐'.repeat(memStars(M.moves));
+  if (a.face === c.face) {
+    a.done = c.done = true; M.found++; M.first = null;
+    [M.cards.indexOf(a), i].forEach(k => { const e = $('#mc' + k); if (e) e.classList.add('done'); });
+    const f = $('#memFound'); if (f) f.textContent = M.found;
+    const m = $('#memMsg'); if (m) m.textContent = `✨ ${c.face} ${c.name} 짝 찾기 성공!`;
+    sfx('coin');
+    if (M.found >= MEM_PAIRS) memWin();
+  } else {
+    M.lock = true;
+    const ai = M.first; M.first = null;
+    setTimeout(() => {
+      a.open = c.open = false;
+      [ai, i].forEach(k => { const e = $('#mc' + k); if (e) e.classList.remove('open'); });
+      M.lock = false;
+    }, 750);
+  }
+}
+function memWin() {
+  const M = MEM; M.over = true;
+  const sec = Math.round((Date.now() - M.t0) / 1000), stars = memStars(M.moves);
+  const gold = Math.max(1000, Math.round(totalIncome() * 300)) * stars, gems = stars * 2;
+  earn(gold); earn(gems, 'gems');
+  statAdd('memWin', 1);
+  const d = memDay();
+  const best = S.mem.best;
+  const rec = !best || M.moves < best.moves || (M.moves === best.moves && sec < best.sec);
+  if (rec) S.mem.best = { moves: M.moves, sec };
+  save(); updateHud();
+  sfx(stars === 3 ? 'win' : 'yay');
+  const m = $('#memMsg');
+  if (m) m.innerHTML = `<span class="mem-win">🎉 다 찾았어요! ${'⭐'.repeat(stars)}<br>${M.moves}번 · ${sec}초${rec ? ' · 🏅 최고 기록!' : ''}<br>💰 ${shortNum(gold)} + 💎 ${gems}</span>`;
+  const row = document.querySelector('#modalBox .mem-panel .row');
+  if (row) row.innerHTML = `<button class="btn green" data-act="memAgain">🃏 한 판 더${d.plays >= MEM_FREE ? ` (💎 ${MEM_COST})` : ` (무료 ${MEM_FREE - d.plays}판)`}</button><button class="btn ghost small" data-act="memClose">닫기</button>`;
 }
 
 // 섬 위를 돌아다니는 펫 (섬 가장자리를 천천히 한 바퀴)
@@ -8039,6 +8131,7 @@ const ACH_MORE = [
   ['fish',     '🎣 물고기 낚기', 'stat', [1, 10, 50, 200, 500], [10, 20, 50, 120, 300]],
   ['raceWin',  '🏁 경주 1등 맞히기', 'stat', [1, 10, 50, 200], [10, 30, 100, 300]],
   ['wheel',    '🎡 룰렛 돌리기', 'stat', [1, 10, 50, 200], [5, 20, 60, 200]],
+  ['memWin',   '🃏 짝 맞추기 끝내기', 'stat', [1, 10, 50, 200], [10, 30, 80, 250]],
   ['friendGift', '💌 친구에게 하트 보내기', 'stat', [1, 10, 50, 200], [10, 30, 80, 200]],
   ['coopWin',  '🤝 협동 레이드 승리', 'stat', [1, 5, 20], [30, 80, 200]],
   ['fusepet',  '🧪 합성 펫 모으기', () => PETS.filter(p => p.fusion && petLv(p.id)).length, [1, 4, 8], [20, 80, 250]],
@@ -8648,6 +8741,9 @@ TUT.push(
 TUT.push(
   { text: '🎡 섬 왼쪽의 🎡 룰렛을 돌려 선물을 받아요 (하루 1번 무료!)', done: () => tutFlag('wheel') || stat('wheel') > 0, go: () => { closeModal(); tab = 'island'; render(); openWheel(); } },
 );
+TUT.push(
+  { text: '🃏 섬 왼쪽의 🃏 짝 맞추기에서 같은 몬스터 카드 두 장을 찾아봐요 (하루 3판 무료!)', done: () => tutFlag('memory') || stat('memWin') > 0, go: () => { closeModal(); tab = 'island'; render(); openMemory(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -8842,6 +8938,10 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=wheelSpin]', '#modalBox [data-act=wheelClose]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#wheelBtn'];
+    case 45: // 짝 맞추기
+      if (inModal) return ['#modalBox [data-act=memStart]', '#modalBox .mem-card:not(.open)', '#modalBox [data-act=memClose]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#memBtn'];
   }
   return null;
 }
@@ -9027,6 +9127,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🃏', title: '몬스터 짝 맞추기', text: '<b>🃏 짝 맞추기</b>(섬 왼쪽 버튼)에서 뒤집힌 카드 16장 중 <b>같은 몬스터 두 장</b>을 찾아요!<br>적게 뒤집을수록 ⭐이 많아요 (11번 이하면 ⭐⭐⭐). 보상은 ⭐만큼 💰골드와 💎!<br>하루 3판 무료, 그다음엔 💎5. 🏅 최고 기록에 도전해 봐요!' },
   { icon: '🎡', title: '행운의 룰렛', text: '<b>🎡 룰렛</b>(섬 왼쪽 버튼)을 하루 1번 <b>무료</b>로 돌려요! 💎10이면 5번 더.<br>💰 골드 · 🤑 골드 대박 · 💎 보석 · 🍖 먹이 · 📦 룬 · 🥚 희귀 알… 그리고 아주 가끔 <b>🎰 잭팟 💎100</b>!' },
   { icon: '🏁', title: '몬스터 경주', text: '<b>🏁 경주</b>(섬 왼쪽 버튼)에서 몬스터 5마리가 달리기 시합을 해요!<br>1등할 것 같은 몬스터를 응원하고 골드를 걸면, 맞혔을 때 <b>4.5배</b>!<br>하루 1번은 <b>🎟️ 무료 응원권</b> (맞히면 💎15). 💨부스터 · 🍌미끄러짐 · 😴낮잠… 끝까지 몰라요!' },
   { icon: '💬', title: '길드 채팅', text: '🛡️ 길드 창의 <b>💬 채팅</b>에서 길드원과 자유롭게 이야기해요.<br>메시지 옆 <b style="color:#ffe066">노란 숫자</b>는 아직 안 읽은 길드원 수 (읽을수록 줄어요, 카톡처럼!).<br>채팅은 <b>모든 날 저장</b>되고, 📅 날짜 줄로 나눠져 보여요.<br>전화번호·주소·링크는 막히고, 욕은 5번 물어봐요. 싫은 사람은 🙈' },
@@ -9222,6 +9323,11 @@ const ACTIONS = {
   fishing: () => openFishing(),
   race: () => openRace(),
   wheel: () => openWheel(),
+  memory: () => openMemory(),
+  memStart: () => memStart(),
+  memAgain: () => { MEM = null; memStart(); },
+  memFlip: (d) => memFlip(Number(d.i)),
+  memClose: () => { closeModal(); updateFishBtn(); },
   wheelSpin: () => wheelSpin(),
   wheelClose: () => { if (WSPIN) { toast('룰렛이 멈추면 선물을 받아요!'); return; } closeModal(); },
   racePick: (d) => { if (RACE && RACE.st === 'pick') { RACE.pick = Number(d.i); raceDraw(); } },

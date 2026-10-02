@@ -1404,3 +1404,22 @@ body.ui-hidden .wheel-btn { opacity: .55; }
 .wheel-got { font-size: 18px; color: #ffe066; animation: ready .6s ease-in-out 3; display: inline-block; }
 .wheel-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 10px; font-size: 11px; color: var(--muted); margin: 6px 0; }
 @media (max-width: 560px) { .wheel-wrap { width: 220px; height: 220px; } .wh-lab b { font-size: 22px; } .wheel { --wr: 78px; } }
+
+/* 🃏 몬스터 짝 맞추기 */
+.mem-btn { top: 484px; background: radial-gradient(circle at 35% 30%, #7dd3fc, #1d4ed8 85%); }
+.mem-btn small { font-size: 8px; }
+.mem-btn.ready { animation: ready 1.2s ease-in-out infinite; border-color: #ffe066; }
+@media (max-width: 560px) { .mem-btn { top: 416px; } }
+body.ui-hidden .mem-btn { opacity: .55; }
+.mem-intro { display: flex; align-items: center; gap: 12px; justify-content: center; margin: 8px 0; }
+.mem-intro span { font-size: 40px; }
+.mem-intro p { margin: 0; text-align: left; font-size: 13px; }
+.mem-stat { display: flex; justify-content: space-around; font-size: 14px; margin: 4px 0 8px; }
+.mem-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; max-width: 340px; margin: 0 auto; }
+.mem-card { position: relative; aspect-ratio: 1; border-radius: 14px; border: 2px solid rgba(255, 255, 255, .3); background: linear-gradient(135deg, #6f8cff, #3a2294); font-size: 30px; cursor: pointer; transition: transform .25s, background .25s; color: #fff; padding: 0; }
+.mem-card .mc-front { display: none; }
+.mem-card.open { background: #fff8e6; transform: rotateY(180deg) scaleX(-1); }
+.mem-card.open .mc-back { display: none; } .mem-card.open .mc-front { display: inline; }
+.mem-card.done { background: #d1fae5; border-color: #34d399; box-shadow: 0 0 10px rgba(52, 211, 153, .7); cursor: default; }
+.mem-msg { min-height: 24px; font-weight: 900; margin: 10px 0 4px; font-size: 14px; }
+.mem-win { color: #ffe066; font-size: 15px; display: inline-block; animation: ready .6s ease-in-out 3; }
