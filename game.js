@@ -7981,7 +7981,10 @@ function misToday() {
     let n = [...k].reduce((s, ch) => s * 31 + ch.charCodeAt(0) >>> 0, 7);
     const pool = MISSIONS.filter(m => m.id !== 'gwar' || S.guild).map(m => m.id), ids = [];
     if (!S.mis) ids.push('collect', 'breed', 'feed');
-    while (ids.length < 3) { const id = pool[n % pool.length]; n = (n * 1103515245 + 12345) >>> 0; if (!ids.includes(id)) ids.push(id); }
+    // Math.imul: 큰 수를 곱해도 정확한 32비트 계산 (예전엔 숫자가 커서 같은 미션만 계속 나와 게임이 멈췄다)
+    for (let guard = 0; ids.length < 3 && guard < 200; guard++) { const id = pool[n % pool.length]; n = (Math.imul(n, 1103515245) + 12345) >>> 0; if (!ids.includes(id)) ids.push(id); }
+    // 그래도 모자라면 차례대로 채운다 (절대 멈추지 않게)
+    for (const id of pool) { if (ids.length >= 3) break; if (!ids.includes(id)) ids.push(id); }
     S.mis = { day: k, ids, prog: {}, got: [], bonus: false };
   }
   return S.mis;
