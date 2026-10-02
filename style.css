@@ -1423,3 +1423,63 @@ body.ui-hidden .mem-btn { opacity: .55; }
 .mem-card.done { background: #d1fae5; border-color: #34d399; box-shadow: 0 0 10px rgba(52, 211, 153, .7); cursor: default; }
 .mem-msg { min-height: 24px; font-weight: 900; margin: 10px 0 4px; font-size: 14px; }
 .mem-win { color: #ffe066; font-size: 15px; display: inline-block; animation: ready .6s ease-in-out 3; }
+
+/* 🎮 미니게임 모음 */
+.game-btn { top: 298px; background: radial-gradient(circle at 35% 30%, #ff9ed8, #6a2c8f 85%); }
+.game-btn small { font-size: 9px; }
+.game-btn.ready { animation: ready 1.2s ease-in-out infinite; border-color: #ffe066; }
+@media (max-width: 560px) { .game-btn { top: 254px; } }
+body.ui-hidden .game-btn { opacity: .55; }
+.mg-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 8px 0; max-height: 62vh; overflow-y: auto; }
+@media (max-width: 560px) { .mg-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.mg-card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px 8px; border-radius: 14px; border: 2px solid rgba(255, 255, 255, .2); background: rgba(255, 255, 255, .07); color: var(--text); font: inherit; cursor: pointer; }
+.mg-card:hover { background: rgba(255, 255, 255, .14); }
+.mg-card.ready { border-color: #ffe066; }
+.mg-card.ready::after { content: ''; position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: #ff4d6d; }
+.mg-dot-demo { color: #ff4d6d; }
+.mg-e { font-size: 30px; }
+.mg-card b { font-size: 12px; } .mg-card small { font-size: 9.5px; color: var(--muted); line-height: 1.2; }
+.mg-free { font-style: normal; font-size: 10px; color: #7dff8f; font-weight: 900; }
+.mg-best { font-style: normal; font-size: 9px; }
+.mg-intro { display: flex; align-items: center; gap: 12px; margin: 8px 0; text-align: left; }
+.mg-intro span { font-size: 44px; } .mg-intro p { margin: 0; font-size: 13px; }
+.mg-stat { display: flex; justify-content: space-around; font-size: 14px; margin: 4px 0 8px; }
+.mg-body { min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+.mg-msg { min-height: 22px; font-weight: 900; margin: 8px 0 4px; font-size: 14px; }
+.mg-result { color: #ffe066; font-size: 15px; display: inline-block; animation: ready .6s ease-in-out 3; }
+.wh-grid { display: grid; grid-template-columns: repeat(3, 80px); gap: 10px; }
+.wh-hole { width: 80px; height: 80px; border-radius: 50%; border: 0; background: radial-gradient(circle at 50% 70%, #2a1a0a 40%, #6b4423 72%, #3c7d3a 74%); font-size: 40px; cursor: pointer; }
+.wh-mon { display: inline-block; animation: whUp .15s ease-out; } .wh-hit { font-size: 34px; }
+@keyframes whUp { from { transform: translateY(20px); opacity: 0; } to { transform: none; opacity: 1; } }
+.rx-pad { width: 240px; height: 160px; border-radius: 24px; border: 0; font-size: 26px; font-weight: 900; color: #fff; cursor: pointer; }
+.rx-pad.wait { background: #c0392b; } .rx-pad.go { background: #27ae60; }
+.nm-grid { display: grid; grid-template-columns: repeat(4, 60px); gap: 8px; }
+.nm-cell { height: 60px; border-radius: 12px; border: 2px solid rgba(255, 255, 255, .3); background: #3a2f8a; color: #fff; font-size: 22px; font-weight: 900; cursor: pointer; }
+.nm-cell.done { background: #1f6f43; opacity: .45; }
+.cl-word { font-size: 52px; font-weight: 900; min-height: 70px; }
+.cl-btns { display: grid; grid-template-columns: repeat(2, 120px); gap: 10px; }
+.cl-btns .btn { font-weight: 900; }
+.sm-grid { display: grid; grid-template-columns: repeat(2, 100px); gap: 12px; }
+.sm-key { height: 100px; border-radius: 20px; border: 3px solid var(--kc); background: rgba(0, 0, 0, .3); font-size: 44px; cursor: pointer; transition: background .1s, transform .1s; }
+.sm-key.lit { background: var(--kc); transform: scale(1.08); box-shadow: 0 0 22px var(--kc); }
+.mt-q { font-size: 40px; font-weight: 900; } .mt-btns { display: flex; gap: 10px; } .mt-btns .btn { min-width: 70px; font-size: 22px; }
+.bl-sky { position: relative; width: 100%; max-width: 340px; height: 280px; border-radius: 16px; overflow: hidden; background: linear-gradient(#8ed1ff, #dff3ff); }
+.bl-b { position: absolute; bottom: -50px; border: 0; background: none; font-size: 38px; cursor: pointer; animation: blRise 3s linear forwards; padding: 0; }
+.bl-b.pop { animation: none; }
+@keyframes blRise { from { bottom: -50px; } to { bottom: 300px; } }
+.rp-show { font-size: 30px; min-height: 90px; } .rp-btns { display: flex; gap: 12px; } .rp-btns .btn { font-size: 34px; }
+.od-grid { display: grid; gap: 4px; width: 100%; max-width: 320px; }
+.od-c { aspect-ratio: 1; border: 0; border-radius: 8px; background: rgba(255, 255, 255, .1); font-size: 22px; cursor: pointer; padding: 0; }
+.hl-card { font-size: 64px; font-weight: 900; min-height: 90px; } .hl-old { font-size: 30px; color: var(--muted); }
+.hl-btns { display: flex; gap: 12px; }
+.qz-q { font-size: 18px; min-height: 50px; } .qz-btns { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 260px; }
+.bx-row { display: flex; gap: 14px; } .bx-box { width: 86px; height: 86px; border-radius: 16px; border: 3px solid #ffb020; background: rgba(255, 176, 32, .15); font-size: 44px; cursor: pointer; }
+.bx-box.picked { box-shadow: 0 0 16px #ffe066; } .bx-box:disabled { cursor: default; }
+@media (max-width: 560px) { .wh-grid { grid-template-columns: repeat(3, 70px); } .wh-hole { width: 70px; height: 70px; } .nm-grid { grid-template-columns: repeat(4, 54px); } .nm-cell { height: 54px; } }
+
+/* 📏 돈 단위표 */
+.unit-table { margin: 8px 0; text-align: left; }
+.unit-table summary { cursor: pointer; font-weight: 900; }
+.ut-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 4px; max-height: 34vh; overflow-y: auto; margin-top: 6px; }
+.ut-grid span { display: flex; flex-direction: column; align-items: center; padding: 4px 2px; border-radius: 8px; background: rgba(255, 255, 255, .07); }
+.ut-grid b { color: #ffe066; font-size: 13px; } .ut-grid small { font-size: 10px; color: var(--muted); }

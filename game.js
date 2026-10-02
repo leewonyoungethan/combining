@@ -2038,6 +2038,9 @@ function fishBuy() {
   openFishing();
 }
 function updateFishBtn() {
+  // 🎮 미니게임 버튼 (낚시 · 경주 · 룰렛 · 짝 맞추기 + 새 게임 12개가 모두 여기에)
+  const gb = $('#gameBtn');
+  if (gb) { gb.classList.toggle('hidden', tab !== 'island' || !!VISIT); gb.classList.toggle('ready', mgAnyReady()); }
   const b = $('#fishBtn');
   if (!b) return;
   b.classList.toggle('hidden', tab !== 'island' || !!VISIT);
@@ -2339,6 +2342,407 @@ function memWin() {
   if (row) row.innerHTML = `<button class="btn green" data-act="memAgain">🃏 한 판 더${d.plays >= MEM_FREE ? ` (💎 ${MEM_COST})` : ` (무료 ${MEM_FREE - d.plays}판)`}</button><button class="btn ghost small" data-act="memClose">닫기</button>`;
 }
 
+// ===================== 🎮 미니게임 모음 (16가지) =====================
+// 새 게임 12개는 게임마다 하루 3판 무료, 그다음엔 💎3. ⭐(0~3)만큼 💰골드와 💎를 받는다
+const MG_FREE = 3, MG_COST = 3;
+const MG_LIST = [
+  { id: 'fish',    e: '🎣', name: '낚시',         sub: '바늘이 초록 칸에 올 때 낚아채기', old: true, open: () => openFishing() },
+  { id: 'race',    e: '🏁', name: '몬스터 경주',   sub: '1등할 몬스터 맞히기',            old: true, open: () => openRace() },
+  { id: 'wheel',   e: '🎡', name: '행운의 룰렛',   sub: '빙글빙글 돌려서 선물 받기',       old: true, open: () => openWheel() },
+  { id: 'memory',  e: '🃏', name: '짝 맞추기',     sub: '같은 몬스터 카드 두 장 찾기',     old: true, open: () => openMemory() },
+  { id: 'whack',   e: '🔨', name: '두더지 잡기',   sub: '튀어나온 몬스터를 콕! (💣은 조심)' },
+  { id: 'react',   e: '⚡', name: '반응 속도',     sub: '초록불이 켜지면 바로 누르기' },
+  { id: 'numbers', e: '🔢', name: '숫자 순서',     sub: '1부터 16까지 순서대로 빨리' },
+  { id: 'color',   e: '🎨', name: '색깔 맞추기',   sub: '글자 말고 글자 색깔을 골라요' },
+  { id: 'simon',   e: '🧠', name: '순서 기억',     sub: '빛난 순서를 그대로 따라 하기' },
+  { id: 'math',    e: '➕', name: '빠른 계산',     sub: '20초 동안 계산 문제 풀기' },
+  { id: 'balloon', e: '🎈', name: '풍선 터뜨리기', sub: '날아오르는 풍선을 콕콕' },
+  { id: 'rps',     e: '✊', name: '가위바위보',    sub: '몬스터와 3판 먼저 이기기' },
+  { id: 'odd',     e: '🔍', name: '다른 그림 찾기', sub: '하나만 다른 그림 찾기' },
+  { id: 'hilo',    e: '🎲', name: '높을까 낮을까', sub: '다음 숫자가 높을지 낮을지' },
+  { id: 'quiz',    e: '📘', name: '속성 퀴즈',     sub: '어느 속성이 더 강할까?' },
+  { id: 'boxes',   e: '🎁', name: '보물 상자',     sub: '💣을 피해 상자 열기 (그만둘 수도!)' },
+];
+const mgDef = (id) => MG_LIST.find(g => g.id === id);
+const mgDay = () => (S.mg && S.mg.day === dayKey() ? S.mg : (S.mg = { day: dayKey(), n: {} }));
+const mgFreeLeft = (id) => Math.max(0, MG_FREE - (mgDay().n[id] || 0));
+// 예전 게임들도 "오늘 무료가 남았나" 표시
+function mgOldReady(id) {
+  if (id === 'fish') return fishBait() > 0;
+  if (id === 'race') return raceFreeOk();
+  if (id === 'wheel') return !wheelDay().free;
+  if (id === 'memory') return memDay().plays < MEM_FREE;
+  return false;
+}
+const mgReady = (g) => (g.old ? mgOldReady(g.id) : mgFreeLeft(g.id) > 0);
+const mgAnyReady = () => MG_LIST.some(mgReady);
+let MG = null;   // 지금 하는 게임 { id, timers: [], ... }
+function mgStop() { if (MG) { (MG.timers || []).forEach(t => { clearInterval(t); clearTimeout(t); }); MG.over = true; } MG = null; }
+const mgT = (fn, ms) => { const t = setTimeout(fn, ms); if (MG) MG.timers.push(t); return t; };
+const mgI = (fn, ms) => { const t = setInterval(fn, ms); if (MG) MG.timers.push(t); return t; };
+function openGames() {
+  tutFlag('games', true);
+  mgStop();
+  showModal(`<div class="mg-hub"><h3>🎮 미니게임</h3>
+    <p class="muted">16가지 미니게임! 새 게임은 하루 3판씩 무료예요. <span class="mg-dot-demo">●</span> = 오늘 무료로 할 수 있어요</p>
+    <div class="mg-grid">${MG_LIST.map(g => `<button class="mg-card ${mgReady(g) ? 'ready' : ''}" data-act="mgOpen" data-id="${g.id}">
+        <span class="mg-e">${g.e}</span><b>${g.name}</b><small>${g.sub}</small>
+        ${g.old ? '' : `<i class="mg-free">${mgFreeLeft(g.id) ? `무료 ${mgFreeLeft(g.id)}` : `💎${MG_COST}`}</i>`}
+        ${S.mgBest && S.mgBest[g.id] ? `<i class="mg-best">${'⭐'.repeat(S.mgBest[g.id].stars)}</i>` : ''}
+      </button>`).join('')}</div>
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
+function mgOpen(id) {
+  const g = mgDef(id);
+  if (!g) return;
+  mgStop();
+  if (g.old) { g.open(); return; }
+  const best = S.mgBest && S.mgBest[id];
+  showModal(`<div class="mg-panel"><h3>${g.e} ${g.name}</h3>
+    <div class="mg-intro"><span>${g.e}</span><p>${MG_HELP[id]}</p></div>
+    ${best ? `<p class="muted">🏅 최고 기록: ${'⭐'.repeat(best.stars)} · ${best.text}</p>` : ''}
+    <div class="row"><button class="btn big green" data-act="mgStart" data-id="${id}">${mgFreeLeft(id) ? `▶ 시작! (무료 ${mgFreeLeft(id)}판)` : `▶ 시작 (💎 ${MG_COST})`}</button></div>
+    <div class="row"><button class="btn ghost small" data-act="games">← 미니게임 목록</button></div></div>`);
+}
+const MG_HELP = {
+  whack: '20초 동안 구멍에서 튀어나오는 <b>몬스터</b>를 눌러요! <b>💣</b>을 누르면 점수가 줄어요.<br>15점 이상 ⭐⭐⭐',
+  react: '빨간불이 <b>초록불</b>로 바뀌면 바로 눌러요! 3번 해서 평균을 재요. 너무 빨리 누르면 벌점!<br>평균 0.35초 이하 ⭐⭐⭐',
+  numbers: '1부터 16까지 <b>순서대로</b> 빨리 눌러요. 틀리면 1초 벌점!<br>15초 안에 끝내면 ⭐⭐⭐',
+  color: '글자가 뜻하는 색이 아니라 <b>글자의 색깔</b>을 골라요! (예: 파란색으로 쓴 "빨강" → 파랑)<br>20초 동안 14점 이상 ⭐⭐⭐',
+  simon: '속성 버튼이 빛나는 <b>순서</b>를 잘 보고 그대로 눌러요. 맞히면 하나씩 길어져요!<br>8개까지 성공하면 ⭐⭐⭐',
+  math: '20초 동안 계산 문제를 풀어요. 답을 3개 중에서 골라요!<br>12문제 이상 ⭐⭐⭐',
+  balloon: '20초 동안 날아오르는 <b>🎈 풍선</b>을 터뜨려요! <b>🎁</b>는 3점!<br>20점 이상 ⭐⭐⭐',
+  rps: '몬스터와 <b>가위바위보</b>! 3판을 먼저 이기면 승리.<br>3:0으로 이기면 ⭐⭐⭐',
+  odd: '똑같은 그림들 사이에서 <b>하나만 다른 그림</b>을 찾아요. 점점 많아져요! 25초 동안 도전.<br>12개 이상 ⭐⭐⭐',
+  hilo: '다음 숫자가 지금보다 <b>높을지 낮을지</b> 맞혀요. 틀리면 끝!<br>7번 연속 맞히면 ⭐⭐⭐',
+  quiz: '<b>속성 상성</b> 문제 8개! "이 속성은 무엇에게 강할까?"<br>7개 이상 맞히면 ⭐⭐⭐',
+  boxes: '상자 3개 중 하나에는 <b>💣</b>이 있어요. 보물을 찾을수록 보상이 커지지만, 💣을 열면 다 잃어요!<br>언제든 <b>그만</b>하고 받을 수 있어요. 5단계까지 가면 ⭐⭐⭐',
+};
+function mgStart(id) {
+  const g = mgDef(id);
+  if (!g || g.old) return;
+  const d = mgDay();
+  if (mgFreeLeft(id) <= 0 && !spend(MG_COST, 'gems')) return;
+  d.n[id] = (d.n[id] || 0) + 1;
+  save(); updateHud();
+  mgStop();
+  MG = { id, timers: [], over: false, score: 0 };
+  sfx('breed');
+  MG_GAMES[id]();
+}
+// 공통 틀: 위쪽 정보줄 · 가운데 놀이판 · 아래 메시지
+function mgShell(id, stat, body) {
+  const g = mgDef(id);
+  showModal(`<div class="mg-panel mg-${id}"><h3>${g.e} ${g.name}</h3>
+    <div class="mg-stat" id="mgStat">${stat}</div>
+    <div class="mg-body" id="mgBody">${body}</div>
+    <div class="mg-msg" id="mgMsg"></div>
+    <div class="row" id="mgBtns"><button class="btn ghost small" data-act="mgQuit">그만하기</button></div></div>`);
+}
+const mgSet = (sel, html) => { const e = $(sel); if (e) e.innerHTML = html; };
+// 끝: ⭐ 수만큼 보상
+function mgFinish(stars, text) {
+  if (!MG || MG.over) return;
+  const id = MG.id, g = mgDef(id);
+  (MG.timers || []).forEach(t => { clearInterval(t); clearTimeout(t); });
+  MG.over = true;
+  const unit = Math.max(500, Math.round(totalIncome() * 150));
+  const gold = stars ? unit * stars : Math.round(unit / 4), gems = stars;
+  earn(gold); if (gems) earn(gems, 'gems');
+  statAdd('mgPlay', 1);
+  S.mgBest = S.mgBest || {};
+  const best = S.mgBest[id];
+  const rec = !best || stars > best.stars;
+  if (rec) S.mgBest[id] = { stars, text };
+  save(); updateHud();
+  sfx(stars >= 3 ? 'win' : stars ? 'yay' : 'lose');
+  mgSet('#mgMsg', `<span class="mg-result">${stars ? '🎉' : '😢'} ${text}<br>${stars ? '⭐'.repeat(stars) : '⭐ 0'}${rec && stars ? ' · 🏅 최고 기록!' : ''}<br>💰 ${shortNum(gold)}${gems ? ` + 💎 ${gems}` : ''}</span>`);
+  mgSet('#mgBtns', `<button class="btn green" data-act="mgStart" data-id="${id}">${g.e} 한 판 더${mgFreeLeft(id) ? ` (무료 ${mgFreeLeft(id)})` : ` (💎 ${MG_COST})`}</button><button class="btn ghost small" data-act="games">← 목록</button>`);
+}
+const starsBy = (v, t3, t2, t1) => (v >= t3 ? 3 : v >= t2 ? 2 : v >= t1 ? 1 : 0);
+const rndMonFace = () => CAT_LIST[Math.floor(Math.random() * CAT_LIST.length)].face;
+// 남은 시간 막대
+function mgTimer(sec, onEnd) {
+  MG.left = sec;
+  const draw = () => mgSet('#mgTime', `⏱️ ${MG.left}초`);
+  draw();
+  mgI(() => { if (!MG || MG.over) return; MG.left--; draw(); if (MG.left <= 0) onEnd(); }, 1000);
+}
+
+const MG_GAMES = {
+  // 🔨 두더지 잡기
+  whack() {
+    mgShell('whack', `<span id="mgTime"></span><span>점수 <b id="mgScore">0</b></span>`,
+      `<div class="wh-grid">${[...Array(9)].map((_, i) => `<button class="wh-hole" data-act="mgHit" data-i="${i}" id="wh${i}"></button>`).join('')}</div>`);
+    MG.holes = Array(9).fill(null);
+    const pop = () => {
+      if (!MG || MG.over) return;
+      const free = MG.holes.map((h, i) => (h ? -1 : i)).filter(i => i >= 0);
+      if (!free.length) return;
+      const i = free[Math.floor(Math.random() * free.length)];
+      const bomb = Math.random() < 0.18;
+      MG.holes[i] = { bomb, face: bomb ? '💣' : rndMonFace() };
+      mgSet('#wh' + i, `<span class="wh-mon">${MG.holes[i].face}</span>`);
+      mgT(() => { if (MG && MG.holes && MG.holes[i]) { MG.holes[i] = null; mgSet('#wh' + i, ''); } }, 800 + Math.random() * 400);
+    };
+    mgI(pop, 550);
+    mgTimer(20, () => mgFinish(starsBy(MG.score, 15, 10, 5), `${MG.score}점`));
+  },
+  // ⚡ 반응 속도
+  react() {
+    mgShell('react', `<span>라운드 <b id="mgRound">1</b>/3</span><span id="mgAvg"></span>`, `<button class="rx-pad wait" id="rxPad" data-act="mgHit">준비…</button>`);
+    MG.times = [];
+    const round = () => {
+      if (!MG || MG.over) return;
+      MG.go = false; MG.goAt = 0;
+      const p = $('#rxPad'); if (p) { p.className = 'rx-pad wait'; p.textContent = '🔴 기다려요…'; }
+      mgT(() => { if (!MG || MG.over) return; MG.go = true; MG.goAt = performance.now(); const q = $('#rxPad'); if (q) { q.className = 'rx-pad go'; q.textContent = '🟢 지금!'; } }, 1000 + Math.random() * 2500);
+    };
+    MG.next = round;
+    round();
+  },
+  // 🔢 숫자 순서
+  numbers() {
+    const nums = shuffle([...Array(16)].map((_, i) => i + 1));
+    mgShell('numbers', `<span>다음: <b id="mgNext">1</b></span><span id="mgTime">⏱️ 0.0초</span>`,
+      `<div class="nm-grid">${nums.map(n => `<button class="nm-cell" data-act="mgHit" data-n="${n}" id="nm${n}">${n}</button>`).join('')}</div>`);
+    MG.need = 1; MG.t0 = performance.now(); MG.pen = 0;
+    mgI(() => { if (MG && !MG.over) mgSet('#mgTime', `⏱️ ${((performance.now() - MG.t0) / 1000 + MG.pen).toFixed(1)}초`); }, 100);
+  },
+  // 🎨 색깔 맞추기
+  color() {
+    MG.cols = [['빨강', '#ff4d4d'], ['파랑', '#3da5ff'], ['초록', '#4cd964'], ['노랑', '#ffd93d']];
+    mgShell('color', `<span id="mgTime"></span><span>점수 <b id="mgScore">0</b></span>`,
+      `<div class="cl-word" id="clWord"></div><div class="cl-btns">${MG.cols.map((c, i) => `<button class="btn" data-act="mgHit" data-i="${i}" style="background:${c[1]};color:#111">${c[0]}</button>`).join('')}</div>`);
+    MG.q = () => { MG.word = Math.floor(Math.random() * 4); do { MG.ink = Math.floor(Math.random() * 4); } while (MG.ink === MG.word && Math.random() < 0.8); mgSet('#clWord', `<span style="color:${MG.cols[MG.ink][1]}">${MG.cols[MG.word][0]}</span>`); };
+    MG.q();
+    mgTimer(20, () => mgFinish(starsBy(MG.score, 14, 9, 5), `${MG.score}점`));
+  },
+  // 🧠 순서 기억
+  simon() {
+    MG.keys = [['🔥', '#ff6b3d'], ['💧', '#3da5ff'], ['⚡', '#ffd93d'], ['🌿', '#4cd964']];
+    mgShell('simon', `<span>길이 <b id="mgLen">3</b></span><span id="smState">잘 봐요!</span>`,
+      `<div class="sm-grid">${MG.keys.map((k, i) => `<button class="sm-key" data-act="mgHit" data-i="${i}" id="sm${i}" style="--kc:${k[1]}">${k[0]}</button>`).join('')}</div>`);
+    MG.seq = [0, 1, 2].map(() => Math.floor(Math.random() * 4));
+    MG.best = 0;
+    MG.show = () => {
+      MG.input = false; MG.pos = 0;
+      mgSet('#smState', '👀 잘 봐요!'); mgSet('#mgLen', MG.seq.length);
+      MG.seq.forEach((k, n) => {
+        mgT(() => { const e = $('#sm' + k); if (e) e.classList.add('lit'); sfx('tap'); }, 600 + n * 650);
+        mgT(() => { const e = $('#sm' + k); if (e) e.classList.remove('lit'); }, 600 + n * 650 + 420);
+      });
+      mgT(() => { if (MG && !MG.over) { MG.input = true; mgSet('#smState', '👆 따라 눌러요!'); } }, 600 + MG.seq.length * 650);
+    };
+    MG.show();
+  },
+  // ➕ 빠른 계산
+  math() {
+    mgShell('math', `<span id="mgTime"></span><span>맞힘 <b id="mgScore">0</b></span>`, `<div class="mt-q" id="mtQ"></div><div class="mt-btns" id="mtBtns"></div>`);
+    MG.q = () => {
+      const op = ['+', '-', '×'][Math.floor(Math.random() * 3)];
+      let a = 2 + Math.floor(Math.random() * 18), b = 2 + Math.floor(Math.random() * 12);
+      if (op === '×') { a = 2 + Math.floor(Math.random() * 8); b = 2 + Math.floor(Math.random() * 8); }
+      if (op === '-' && b > a) [a, b] = [b, a];
+      MG.ans = op === '+' ? a + b : op === '-' ? a - b : a * b;
+      const opts = new Set([MG.ans]);
+      for (let k = 0; opts.size < 3 && k < 50; k++) { const v = MG.ans + (Math.floor(Math.random() * 9) - 4); if (v >= 0) opts.add(v); }
+      while (opts.size < 3) opts.add(MG.ans + opts.size * 5);
+      mgSet('#mtQ', `${a} ${op} ${b} = ?`);
+      mgSet('#mtBtns', shuffle([...opts]).map(v => `<button class="btn" data-act="mgHit" data-v="${v}">${v}</button>`).join(''));
+    };
+    MG.q();
+    mgTimer(20, () => mgFinish(starsBy(MG.score, 12, 8, 4), `${MG.score}문제`));
+  },
+  // 🎈 풍선 터뜨리기
+  balloon() {
+    mgShell('balloon', `<span id="mgTime"></span><span>점수 <b id="mgScore">0</b></span>`, `<div class="bl-sky" id="blSky"></div>`);
+    MG.nb = 0;
+    const spawn = () => {
+      const sky = $('#blSky'); if (!sky || !MG || MG.over) return;
+      const gift = Math.random() < 0.12, id = 'bl' + (MG.nb++);
+      const b = document.createElement('button');
+      b.className = 'bl-b'; b.id = id; b.dataset.act = 'mgHit'; b.dataset.g = gift ? '1' : '';
+      b.textContent = gift ? '🎁' : '🎈';
+      b.style.left = (5 + Math.random() * 80) + '%';
+      b.style.animationDuration = (2.4 + Math.random() * 1.6) + 's';
+      b.addEventListener('animationend', () => b.remove());
+      sky.appendChild(b);
+    };
+    mgI(spawn, 450);
+    mgTimer(20, () => mgFinish(starsBy(MG.score, 20, 13, 6), `${MG.score}점`));
+  },
+  // ✊ 가위바위보
+  rps() {
+    MG.foe = rndMonFace(); MG.me = 0; MG.them = 0;
+    mgShell('rps', `<span>🙋 <b id="rpMe">0</b> : <b id="rpThem">0</b> ${MG.foe}</span>`,
+      `<div class="rp-show" id="rpShow">${MG.foe} 덤벼라!</div><div class="rp-btns">${['✊', '✋', '✌️'].map((h, i) => `<button class="btn big" data-act="mgHit" data-i="${i}">${h}</button>`).join('')}</div>`);
+  },
+  // 🔍 다른 그림 찾기
+  odd() {
+    MG.pairs = [['🐶', '🐱'], ['🍎', '🍅'], ['😀', '😃'], ['🐟', '🐠'], ['🌕', '🌖'], ['🔵', '🟣'], ['🐸', '🐢'], ['🍩', '🍪'], ['⭐', '🌟'], ['🐻', '🐼'], ['🌲', '🌳'], ['🚗', '🚙']];
+    mgShell('odd', `<span id="mgTime"></span><span>찾음 <b id="mgScore">0</b></span>`, `<div class="od-grid" id="odGrid"></div>`);
+    MG.q = () => {
+      const n = Math.min(7, 3 + Math.floor(MG.score / 2)), p = MG.pairs[Math.floor(Math.random() * MG.pairs.length)], sw = Math.random() < 0.5;
+      const a = sw ? p[1] : p[0], b = sw ? p[0] : p[1];
+      MG.odd = Math.floor(Math.random() * n * n);
+      const g = $('#odGrid'); if (!g) return;
+      g.style.gridTemplateColumns = `repeat(${n}, minmax(0, 1fr))`;
+      g.innerHTML = [...Array(n * n)].map((_, i) => `<button class="od-c" data-act="mgHit" data-i="${i}">${i === MG.odd ? b : a}</button>`).join('');
+    };
+    MG.q();
+    mgTimer(25, () => mgFinish(starsBy(MG.score, 12, 8, 4), `${MG.score}개 찾음`));
+  },
+  // 🎲 높을까 낮을까
+  hilo() {
+    MG.cur = 1 + Math.floor(Math.random() * 13); MG.streak = 0;
+    mgShell('hilo', `<span>연속 <b id="mgScore">0</b>번</span>`,
+      `<div class="hl-card" id="hlCard">${MG.cur}</div><div class="hl-btns"><button class="btn big" data-act="mgHit" data-h="1">⬆️ 높다</button><button class="btn big" data-act="mgHit" data-h="0">⬇️ 낮다</button></div>`);
+    mgSet('#mgMsg', '1~13 중 하나가 나와요. 같은 숫자가 나오면 통과!');
+  },
+  // 📘 속성 퀴즈
+  quiz() {
+    MG.qn = 0; MG.score = 0;
+    mgShell('quiz', `<span>문제 <b id="qzN">1</b>/8</span><span>맞힘 <b id="mgScore">0</b></span>`, `<div class="qz-q" id="qzQ"></div><div class="qz-btns" id="qzBtns"></div>`);
+    MG.q = () => {
+      const pool = EL.filter(e => BEATS[e.id] && BEATS[e.id].length);
+      const e = pool[Math.floor(Math.random() * pool.length)];
+      const right = BEATS[e.id][Math.floor(Math.random() * BEATS[e.id].length)];
+      const wrong = shuffle(EL.filter(x => x.id !== e.id && !BEATS[e.id].includes(x.id))).slice(0, 2).map(x => x.id);
+      MG.ans = right;
+      mgSet('#qzN', MG.qn + 1);
+      mgSet('#qzQ', `${e.emoji} <b>${e.name}</b> 속성은 누구에게 <b>강할까</b>?`);
+      mgSet('#qzBtns', shuffle([right, ...wrong]).map(id => `<button class="btn" data-act="mgHit" data-e="${id}">${EL[ELI[id]].emoji} ${EL[ELI[id]].name}</button>`).join(''));
+    };
+    MG.q();
+  },
+  // 🎁 보물 상자
+  boxes() {
+    MG.lv = 0;
+    mgShell('boxes', `<span>단계 <b id="bxLv">1</b>/5</span><span id="bxPot"></span>`, `<div class="bx-row" id="bxRow"></div>`);
+    MG.q = () => {
+      MG.bomb = Math.floor(Math.random() * 3);
+      mgSet('#bxLv', MG.lv + 1); mgSet('#bxPot', MG.lv ? `모은 보물 ${'💰'.repeat(MG.lv)}` : '');
+      mgSet('#bxRow', [0, 1, 2].map(i => `<button class="bx-box" data-act="mgHit" data-i="${i}">🎁</button>`).join(''));
+      mgSet('#mgMsg', MG.lv ? '계속 열까요? 아니면 그만하고 받을까요?' : '💣이 없는 상자를 골라요!');
+      if (MG.lv) mgSet('#mgBtns', '<button class="btn green" data-act="mgCash">💰 그만하고 받기</button>');
+    };
+    MG.q();
+  },
+};
+// 눌렀을 때 (게임마다)
+function mgHit(d, el) {
+  const M = MG;
+  if (!M || M.over) return;
+  const id = M.id;
+  if (id === 'whack') {
+    const i = Number(d.i), h = M.holes[i];
+    if (!h) return;
+    M.holes[i] = null;
+    M.score += h.bomb ? -2 : 1;
+    M.score = Math.max(0, M.score);
+    mgSet('#wh' + i, `<span class="wh-hit">${h.bomb ? '💥' : '✨'}</span>`);
+    mgT(() => { if (MG && MG.holes && !MG.holes[i]) mgSet('#wh' + i, ''); }, 250);
+    mgSet('#mgScore', M.score); sfx(h.bomb ? 'err' : 'coin');
+  } else if (id === 'react') {
+    const p = $('#rxPad');
+    if (!M.go) {   // 너무 빨리
+      M.times.push(1000);
+      mgSet('#mgMsg', '😵 너무 빨랐어요! (1초 벌점)'); sfx('err');
+    } else {
+      const ms = Math.round(performance.now() - M.goAt);
+      M.times.push(ms);
+      mgSet('#mgMsg', `⚡ ${ms}ms!`); sfx('coin');
+    }
+    M.go = false;
+    if (p) { p.className = 'rx-pad wait'; p.textContent = '…'; }
+    (M.timers || []).forEach(t => clearTimeout(t)); M.timers = [];
+    const avg = Math.round(M.times.reduce((s, x) => s + x, 0) / M.times.length);
+    mgSet('#mgAvg', `평균 ${avg}ms`);
+    if (M.times.length >= 3) { mgFinish(avg <= 350 ? 3 : avg <= 500 ? 2 : avg <= 800 ? 1 : 0, `평균 ${avg}ms`); return; }
+    mgSet('#mgRound', M.times.length + 1);
+    mgT(() => M.next(), 900);
+  } else if (id === 'numbers') {
+    const n = Number(d.n);
+    if (n !== M.need) { M.pen += 1; mgSet('#mgMsg', '❌ 1초 벌점!'); sfx('err'); return; }
+    const e = $('#nm' + n); if (e) e.classList.add('done');
+    M.need++; mgSet('#mgNext', Math.min(16, M.need)); mgSet('#mgMsg', '');
+    if (M.need > 16) { const sec = (performance.now() - M.t0) / 1000 + M.pen; mgFinish(sec <= 15 ? 3 : sec <= 25 ? 2 : 1, `${sec.toFixed(1)}초`); }
+  } else if (id === 'color') {
+    const ok = Number(d.i) === M.ink;
+    M.score = Math.max(0, M.score + (ok ? 1 : -1));
+    mgSet('#mgScore', M.score); mgSet('#mgMsg', ok ? '⭕' : '❌'); sfx(ok ? 'coin' : 'err');
+    M.q();
+  } else if (id === 'simon') {
+    if (!M.input) return;
+    const i = Number(d.i), e = $('#sm' + i);
+    if (e) { e.classList.add('lit'); setTimeout(() => e.classList.remove('lit'), 180); }
+    if (i !== M.seq[M.pos]) { mgFinish(starsBy(M.best, 8, 6, 4), `${M.best}개까지 성공`); return; }
+    M.pos++; sfx('tap');
+    if (M.pos >= M.seq.length) {
+      M.best = M.seq.length; M.input = false;
+      mgSet('#smState', '⭕ 성공!'); sfx('coin');
+      if (M.seq.length >= 12) { mgFinish(3, `${M.best}개까지 성공`); return; }
+      M.seq.push(Math.floor(Math.random() * 4));
+      mgT(() => M.show(), 700);
+    }
+  } else if (id === 'math') {
+    const ok = Number(d.v) === M.ans;
+    if (ok) M.score++;
+    mgSet('#mgScore', M.score); mgSet('#mgMsg', ok ? '⭕' : `❌ 답은 ${M.ans}`); sfx(ok ? 'coin' : 'err');
+    M.q();
+  } else if (id === 'balloon') {
+    const b = el;
+    if (!b || b.classList.contains('pop')) return;
+    M.score += d.g ? 3 : 1;
+    b.classList.add('pop'); b.textContent = '💥';
+    setTimeout(() => b.remove(), 200);
+    mgSet('#mgScore', M.score); sfx('coin');
+  } else if (id === 'rps') {
+    const me = Number(d.i), foe = Math.floor(Math.random() * 3), H = ['✊', '✋', '✌️'];
+    const r = (me - foe + 3) % 3;   // 1 = 내가 이김, 2 = 짐
+    if (r === 1) M.me++; else if (r === 2) M.them++;
+    mgSet('#rpMe', M.me); mgSet('#rpThem', M.them);
+    mgSet('#rpShow', `${H[me]} vs ${H[foe]} ${M.foe}<br>${r === 0 ? '🤝 비겼어요' : r === 1 ? '🎉 이겼어요!' : '😝 졌어요'}`);
+    sfx(r === 1 ? 'coin' : r === 2 ? 'err' : 'tap');
+    if (M.me >= 3) mgFinish(M.them === 0 ? 3 : M.them === 1 ? 2 : 1, `${M.me} : ${M.them} 승리!`);
+    else if (M.them >= 3) mgFinish(0, `${M.me} : ${M.them} 패배…`);
+  } else if (id === 'odd') {
+    if (Number(d.i) === M.odd) { M.score++; mgSet('#mgScore', M.score); sfx('coin'); M.q(); }
+    else { M.left = Math.max(0, M.left - 2); mgSet('#mgMsg', '❌ 2초 줄었어요!'); sfx('err'); }
+  } else if (id === 'hilo') {
+    const nx = 1 + Math.floor(Math.random() * 13), hi = d.h === '1';
+    const ok = nx === M.cur || (hi ? nx > M.cur : nx < M.cur);
+    mgSet('#hlCard', `<span class="hl-old">${M.cur}</span> → ${nx}`);
+    M.cur = nx;
+    if (!ok) { mgFinish(starsBy(M.streak, 7, 5, 3), `${M.streak}번 연속`); return; }
+    M.streak++; mgSet('#mgScore', M.streak); sfx('coin');
+    if (M.streak >= 10) { mgFinish(3, `${M.streak}번 연속!`); return; }
+    mgT(() => mgSet('#hlCard', M.cur), 700);
+  } else if (id === 'quiz') {
+    const ok = d.e === M.ans;
+    if (ok) M.score++;
+    mgSet('#mgScore', M.score);
+    mgSet('#mgMsg', ok ? '⭕ 정답!' : `❌ 정답은 ${EL[ELI[M.ans]].emoji} ${EL[ELI[M.ans]].name}`); sfx(ok ? 'coin' : 'err');
+    M.qn++;
+    if (M.qn >= 8) { mgFinish(starsBy(M.score, 7, 5, 3), `${M.score}/8 정답`); return; }
+    M.q();
+  } else if (id === 'boxes') {
+    const i = Number(d.i);
+    const row = document.querySelectorAll('#bxRow .bx-box');
+    row.forEach((b, k) => { b.textContent = k === M.bomb ? '💣' : '💰'; b.disabled = true; if (k === i) b.classList.add('picked'); });
+    if (i === M.bomb) { sfx('lose'); mgT(() => mgFinish(0, `💥 ${M.lv + 1}단계에서 💣을 열었어요`), 700); return; }
+    M.lv++; sfx('coin');
+    if (M.lv >= 5) { mgT(() => mgFinish(3, '5단계 모두 통과!'), 600); return; }
+    mgT(() => M.q(), 800);
+  }
+}
+function mgCash() {
+  const M = MG;
+  if (!M || M.over || M.id !== 'boxes' || !M.lv) return;
+  mgFinish(M.lv >= 3 ? 2 : 1, `${M.lv}단계에서 그만!`);
+}
+
 // 섬 위를 돌아다니는 펫 (섬 가장자리를 천천히 한 바퀴)
 function petWalkPos(t) {
   const a = t * 0.12;
@@ -2357,6 +2761,11 @@ const RES_INFO = {
     use: ['⬆️ 몬스터 레벨 올리기 → <b>Lv.4가 되면 교배</b>할 수 있어요', '레벨이 높을수록 골드를 더 벌고 전투에서 더 세져요'],
     btns: '<button class="btn green" data-act="resGo" data-to="mons">🐾 몬스터 키우기</button>' },
 };
+function unitTableHTML() {
+  return `<details class="unit-table"><summary>📏 돈 단위 보기 (K → Ce, ${NUM_UNITS.length}가지)</summary>
+    <p class="muted">1000배마다 단위가 바뀌어요. 예) 1K = 1,000 · 1M = 1,000K</p>
+    <div class="ut-grid">${NUM_UNITS.slice().reverse().map(([u, s], i) => `<span><b>${s}</b><small>10<sup>${3 * (i + 1)}</sup></small></span>`).join('')}</div></details>`;
+}
 function openResInfo(r) {
   tutFlag('res', true);
   const x = RES_INFO[r];
@@ -2366,6 +2775,7 @@ function openResInfo(r) {
     <h3>${x.name} <small class="muted">${S.infinite ? '무한' : fmt(now)}</small></h3>
     <h4>✅ 얻는 법</h4><ul>${x.get.map(t => `<li>${t}</li>`).join('')}</ul>
     <h4>🛍️ 쓰는 곳</h4><ul>${x.use.map(t => `<li>${t}</li>`).join('')}</ul>
+    ${r === 'gold' ? unitTableHTML() : ''}
     <div class="row">${x.btns}<button class="btn ghost" data-act="close">닫기</button></div></div>`);
 }
 // ----- 🎯 다음 목표: 튜토리얼이 끝나면 섬 위쪽에 가장 가까운 목표를 보여 준다 -----
@@ -2590,13 +3000,23 @@ let sel = [];
 
 const fmt = (n) => Math.floor(n).toLocaleString('ko-KR');
 // 짧은 숫자: 9,999까지는 그대로, 만 넘으면 12.5K · 3.4M · 1.2B · 5T (100 넘으면 소수점 없이: 125K)
-const NUM_UNITS = ['K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc', 'UDc', 'DDc', 'TDc', 'QaDc', 'QiDc', 'SxDc', 'SpDc', 'OcDc', 'NoDc',
-  'Vg', 'UVg', 'DVg', 'TVg', 'QaVg', 'QiVg', 'SxVg', 'SpVg', 'OcVg', 'NoVg', 'Tg', 'UTg', 'DTg'].map((s, k) => [Math.pow(10, 3 * (k + 1)), s]).reverse();
+// 1000배마다 새 단위: K M B T Qa Qi Sx Sp Oc No → Dc(10^33) · UDc · DDc … → Vg(10^63) → Tg(10^93) → Qag → Qig → Sxg → Spg → Ocg → Nog → Ce(10^303)
+const NUM_UNITS = (() => {
+  const first = ['K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No'];
+  const ones = ['', 'U', 'D', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No'];
+  const tens = ['', 'Dc', 'Vg', 'Tg', 'Qag', 'Qig', 'Sxg', 'Spg', 'Ocg', 'Nog'];
+  const out = [];
+  for (let n = 1; n <= 101; n++) {
+    const s = n <= 10 ? first[n - 1] : n === 101 ? 'Ce' : ones[(n - 1) % 10] + tens[Math.floor((n - 1) / 10)];
+    out.push([Math.pow(10, 3 * n), s]);
+  }
+  return out.reverse();
+})();
 const shortNum = (n) => {
   n = Math.floor(n);
   if (Math.abs(n) < 1e4) return fmt(n);
   if (!isFinite(n)) return '∞';
-  if (Math.abs(n) >= 1e102) { const e = Math.floor(Math.log10(Math.abs(n))); return (Math.floor(n / Math.pow(10, e) * 10) / 10) + 'e' + e; }
+  if (Math.abs(n) >= 1e306) { const e = Math.floor(Math.log10(Math.abs(n))); return (Math.floor(n / Math.pow(10, e) * 10) / 10) + 'e' + e; }
   for (const [u, s] of NUM_UNITS) {
     if (Math.abs(n) >= u) {
       const v = n / u;
@@ -2642,6 +3062,7 @@ function showModal(html) {
 function closeModal() {
   if (typeof SHARE !== 'undefined' && SHARE) stopShare();
   if (typeof FISH !== 'undefined' && FISH) fishStop();
+  if (typeof MG !== 'undefined' && MG) mgStop();
   $('#modal').classList.add('hidden');
   $('#modalBox').innerHTML = '';
   modalStack = null;
@@ -8132,6 +8553,7 @@ const ACH_MORE = [
   ['raceWin',  '🏁 경주 1등 맞히기', 'stat', [1, 10, 50, 200], [10, 30, 100, 300]],
   ['wheel',    '🎡 룰렛 돌리기', 'stat', [1, 10, 50, 200], [5, 20, 60, 200]],
   ['memWin',   '🃏 짝 맞추기 끝내기', 'stat', [1, 10, 50, 200], [10, 30, 80, 250]],
+  ['mgPlay',   '🎮 미니게임 하기', 'stat', [1, 20, 100, 500], [10, 40, 120, 400]],
   ['friendGift', '💌 친구에게 하트 보내기', 'stat', [1, 10, 50, 200], [10, 30, 80, 200]],
   ['coopWin',  '🤝 협동 레이드 승리', 'stat', [1, 5, 20], [30, 80, 200]],
   ['fusepet',  '🧪 합성 펫 모으기', () => PETS.filter(p => p.fusion && petLv(p.id)).length, [1, 4, 8], [20, 80, 250]],
@@ -8720,7 +9142,7 @@ TUT.push(
     go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
 );
 TUT.push(
-  { text: '🎣 섬 왼쪽의 🎣 낚시에서 물고기를 한 마리 낚아 봐요!', done: () => tutFlag('fish') || stat('fish') > 0, go: () => { closeModal(); tab = 'island'; render(); openFishing(); } },
+  { text: '🎣 섬 왼쪽 🎮 미니게임의 🎣 낚시에서 물고기를 한 마리 낚아 봐요!', done: () => tutFlag('fish') || stat('fish') > 0, go: () => { closeModal(); tab = 'island'; render(); openFishing(); } },
 );
 TUT.push(
   { text: '💬 길드의 💬 채팅에서 메시지를 보내 봐요 (노란 숫자 = 안 읽은 길드원 수 · 모든 날 저장!)', done: () => tutFlag('gchat'),
@@ -8728,7 +9150,7 @@ TUT.push(
   { text: '🌐 ☰ 메뉴의 🌐 English로 게임을 영어로 바꿀 수 있어요', done: () => tutFlag('lang'), go: () => { closeModal(); openMenu(); } },
 );
 TUT.push(
-  { text: '🏁 섬 왼쪽의 🏁 경주에서 1등할 몬스터를 맞혀 봐요 (하루 1번 무료!)', done: () => tutFlag('race') || stat('race') > 0, go: () => { closeModal(); tab = 'island'; render(); openRace(); } },
+  { text: '🏁 🎮 미니게임의 🏁 경주에서 1등할 몬스터를 맞혀 봐요 (하루 1번 무료!)', done: () => tutFlag('race') || stat('race') > 0, go: () => { closeModal(); tab = 'island'; render(); openRace(); } },
 );
 TUT.push(
   { text: '📦 🏆 랭킹을 한 번 열어 봐요. 랭킹 · 길드 기록이 내 기기에 저장돼서 2년 동안 남아요!', done: () => !!lsGet(RANK_STORE),
@@ -8739,10 +9161,13 @@ TUT.push(
     go: () => { closeModal(); tab = 'adventure'; render(); openRanking(); } },
 );
 TUT.push(
-  { text: '🎡 섬 왼쪽의 🎡 룰렛을 돌려 선물을 받아요 (하루 1번 무료!)', done: () => tutFlag('wheel') || stat('wheel') > 0, go: () => { closeModal(); tab = 'island'; render(); openWheel(); } },
+  { text: '🎡 🎮 미니게임의 🎡 룰렛을 돌려 선물을 받아요 (하루 1번 무료!)', done: () => tutFlag('wheel') || stat('wheel') > 0, go: () => { closeModal(); tab = 'island'; render(); openWheel(); } },
 );
 TUT.push(
-  { text: '🃏 섬 왼쪽의 🃏 짝 맞추기에서 같은 몬스터 카드 두 장을 찾아봐요 (하루 3판 무료!)', done: () => tutFlag('memory') || stat('memWin') > 0, go: () => { closeModal(); tab = 'island'; render(); openMemory(); } },
+  { text: '🃏 🎮 미니게임의 🃏 짝 맞추기에서 같은 몬스터 카드 두 장을 찾아봐요 (하루 3판 무료!)', done: () => tutFlag('memory') || stat('memWin') > 0, go: () => { closeModal(); tab = 'island'; render(); openMemory(); } },
+);
+TUT.push(
+  { text: '🎮 섬 왼쪽의 🎮 미니게임에서 게임을 하나 해 봐요 (16가지 · 하루 3판씩 무료!)', done: () => stat('mgPlay') > 0, go: () => { closeModal(); tab = 'island'; render(); openGames(); } },
 );
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
@@ -8909,9 +9334,9 @@ function tutPoint(k) {
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=friends]'];
     case 12: // 낚시
-      if (inModal) return ['#modalBox [data-act=fishCast]', '#modalBox [data-act=fishHit]', '#modalBox [data-act=fishClose]'];
+      if (inModal) return ['#modalBox .mg-card[data-id=fish]', '#modalBox [data-act=fishCast]', '#modalBox [data-act=fishHit]', '#modalBox [data-act=fishClose]'];
       if (tab !== 'island') return [bottomBtn('island')];
-      return ['#fishBtn'];
+      return ['#gameBtn'];
     case 39: // 길드 채팅
       if (inModal) {
         if (!S.guild) return ['#modalBox [data-act=guildJoin]:not([disabled])', '#modalBox [data-act=guildNew]', '#modalBox [data-act=close]'];
@@ -8923,9 +9348,10 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=lang]', '#modalBox [data-act=close]'];
       return ['#menuBtn', '[data-act=account]'];
     case 41: // 몬스터 경주
+      if (inModal && $('#modalBox .mg-hub')) return ['#modalBox .mg-card[data-id=race]'];
       if (inModal) return RACE && RACE.pick == null ? ['#modalBox .race-lane'] : RACE && !RACE.bet ? ['#modalBox [data-act=raceBet]:not([disabled])'] : ['#modalBox [data-act=raceGo]', '#modalBox [data-act=raceClose]'];
       if (tab !== 'island') return [bottomBtn('island')];
-      return ['#raceBtn'];
+      return ['#gameBtn'];
     case 42: // 기록 2년 보관 (랭킹 열기)
       if (inModal) return ['#modalBox [data-act=rankCat]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
@@ -8935,13 +9361,17 @@ function tutPoint(k) {
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=ranking]'];
     case 44: // 룰렛
-      if (inModal) return ['#modalBox [data-act=wheelSpin]', '#modalBox [data-act=wheelClose]'];
+      if (inModal) return ['#modalBox .mg-card[data-id=wheel]', '#modalBox [data-act=wheelSpin]', '#modalBox [data-act=wheelClose]'];
       if (tab !== 'island') return [bottomBtn('island')];
-      return ['#wheelBtn'];
+      return ['#gameBtn'];
     case 45: // 짝 맞추기
-      if (inModal) return ['#modalBox [data-act=memStart]', '#modalBox .mem-card:not(.open)', '#modalBox [data-act=memClose]'];
+      if (inModal) return ['#modalBox .mg-card[data-id=memory]', '#modalBox [data-act=memStart]', '#modalBox .mem-card:not(.open)', '#modalBox [data-act=memClose]'];
       if (tab !== 'island') return [bottomBtn('island')];
-      return ['#memBtn'];
+      return ['#gameBtn'];
+    case 46: // 미니게임 모음
+      if (inModal) return ['#modalBox .mg-card.ready', '#modalBox .mg-card', '#modalBox [data-act=mgStart]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#gameBtn'];
   }
   return null;
 }
@@ -9127,6 +9557,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🎮', title: '미니게임 16가지', text: '섬 왼쪽의 <b>🎮 미니게임</b> 버튼에 게임이 16가지!<br>🎣 낚시 · 🏁 경주 · 🎡 룰렛 · 🃏 짝 맞추기 · 🔨 두더지 잡기 · ⚡ 반응 속도 · 🔢 숫자 순서 · 🎨 색깔 맞추기 · 🧠 순서 기억 · ➕ 빠른 계산 · 🎈 풍선 터뜨리기 · ✊ 가위바위보 · 🔍 다른 그림 찾기 · 🎲 높을까 낮을까 · 📘 속성 퀴즈 · 🎁 보물 상자<br>새 게임은 하루 3판씩 무료! 잘할수록 ⭐이 많고 💰💎 보상도 커져요.' },
   { icon: '🃏', title: '몬스터 짝 맞추기', text: '<b>🃏 짝 맞추기</b>(섬 왼쪽 버튼)에서 뒤집힌 카드 16장 중 <b>같은 몬스터 두 장</b>을 찾아요!<br>적게 뒤집을수록 ⭐이 많아요 (11번 이하면 ⭐⭐⭐). 보상은 ⭐만큼 💰골드와 💎!<br>하루 3판 무료, 그다음엔 💎5. 🏅 최고 기록에 도전해 봐요!' },
   { icon: '🎡', title: '행운의 룰렛', text: '<b>🎡 룰렛</b>(섬 왼쪽 버튼)을 하루 1번 <b>무료</b>로 돌려요! 💎10이면 5번 더.<br>💰 골드 · 🤑 골드 대박 · 💎 보석 · 🍖 먹이 · 📦 룬 · 🥚 희귀 알… 그리고 아주 가끔 <b>🎰 잭팟 💎100</b>!' },
   { icon: '🏁', title: '몬스터 경주', text: '<b>🏁 경주</b>(섬 왼쪽 버튼)에서 몬스터 5마리가 달리기 시합을 해요!<br>1등할 것 같은 몬스터를 응원하고 골드를 걸면, 맞혔을 때 <b>4.5배</b>!<br>하루 1번은 <b>🎟️ 무료 응원권</b> (맞히면 💎15). 💨부스터 · 🍌미끄러짐 · 😴낮잠… 끝까지 몰라요!' },
@@ -9323,23 +9754,29 @@ const ACTIONS = {
   fishing: () => openFishing(),
   race: () => openRace(),
   wheel: () => openWheel(),
+  games: () => { mgStop(); openGames(); },
+  mgOpen: (d) => mgOpen(d.id),
+  mgStart: (d) => mgStart(d.id),
+  mgHit: (d, el) => mgHit(d, el),
+  mgCash: () => mgCash(),
+  mgQuit: () => { if (MG && !MG.over) { mgStop(); toast('게임을 그만뒀어요'); } openGames(); },
   memory: () => openMemory(),
   memStart: () => memStart(),
   memAgain: () => { MEM = null; memStart(); },
   memFlip: (d) => memFlip(Number(d.i)),
-  memClose: () => { closeModal(); updateFishBtn(); },
+  memClose: () => { closeModal(); updateFishBtn(); openGames(); },
   wheelSpin: () => wheelSpin(),
-  wheelClose: () => { if (WSPIN) { toast('룰렛이 멈추면 선물을 받아요!'); return; } closeModal(); },
+  wheelClose: () => { if (WSPIN) { toast('룰렛이 멈추면 선물을 받아요!'); return; } closeModal(); openGames(); },
   racePick: (d) => { if (RACE && RACE.st === 'pick') { RACE.pick = Number(d.i); raceDraw(); } },
   raceBet: (d) => { if (RACE && RACE.st === 'pick') { RACE.bet = d.b; raceDraw(); } },
   raceGo: () => raceGo(),
   raceAgain: () => { raceNew(); raceDraw(); },
-  raceClose: () => { if (RACE && RACE.raf) clearTimeout(RACE.raf); if (RACE && RACE.st === 'run') { RACE.st = 'done'; toast('경주를 그만뒀어요 (건 것은 돌아오지 않아요)'); } closeModal(); },
+  raceClose: () => { if (RACE && RACE.raf) clearTimeout(RACE.raf); if (RACE && RACE.st === 'run') { RACE.st = 'done'; toast('경주를 그만뒀어요 (건 것은 돌아오지 않아요)'); } closeModal(); openGames(); },
   fishCast: () => fishCast(),
   fishHit: () => fishHit(),
   fishAgain: () => { FISH = null; fishCast(); },
   fishBuy: () => fishBuy(),
-  fishClose: () => { fishStop(); closeModal(); },
+  fishClose: () => { fishStop(); closeModal(); openGames(); },
   friends: () => openFriends(true),
   frAdd: () => frAddByCode(),
   frAddRank: (d) => { const p = rankCache && rankCache.list.find(x => x.id === d.id); if (p && frAdd(p)) openRanking(); },
@@ -9493,7 +9930,7 @@ document.addEventListener('click', (e) => {
   if (!t || t.disabled) return;
   if (VISIT && !VISIT_OK.has(t.dataset.act)) { toast('👀 구경 중이에요. 🏠 내 섬으로 돌아간 뒤에 해 주세요'); return; }
   const fn = ACTIONS[t.dataset.act];
-  if (fn) fn(t.dataset);
+  if (fn) fn(t.dataset, t);
 });
 
 // ----- 🎬 오프닝 영상 -----
