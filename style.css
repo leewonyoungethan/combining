@@ -1483,3 +1483,17 @@ body.ui-hidden .game-btn { opacity: .55; }
 .ut-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 4px; max-height: 34vh; overflow-y: auto; margin-top: 6px; }
 .ut-grid span { display: flex; flex-direction: column; align-items: center; padding: 4px 2px; border-radius: 8px; background: rgba(255, 255, 255, .07); }
 .ut-grid b { color: #ffe066; font-size: 13px; } .ut-grid small { font-size: 10px; color: var(--muted); }
+
+/* 📅 오늘 할 일 */
+.todo-btn { top: 360px; background: radial-gradient(circle at 35% 30%, #7dff8f, #1f6f43 85%); }
+.todo-btn.ready { animation: ready 1.2s ease-in-out infinite; border-color: #ffe066; }
+@media (max-width: 560px) { .todo-btn { top: 308px; } }
+body.ui-hidden .todo-btn { opacity: .55; }
+.todo-n { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: #ff4d6d; color: #fff; font-size: 11px; font-style: normal; font-weight: 900; line-height: 18px; }
+.todo-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; max-height: 52vh; overflow-y: auto; }
+.todo-row { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: rgba(255, 255, 255, .07); text-align: left; }
+.todo-row.done { opacity: .55; }
+.td-e { font-size: 24px; text-align: center; }
+.td-name { font-size: 13px; font-weight: 700; } .td-name small { color: #ffe066; margin-left: 4px; }
+.td-ok { font-size: 12px; color: #7dff8f; font-weight: 900; }
+.todo-bonus { margin: 8px 0; font-weight: 900; }

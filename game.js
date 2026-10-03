@@ -2039,6 +2039,7 @@ function fishBuy() {
 }
 function updateFishBtn() {
   // 🎮 미니게임 버튼 (낚시 · 경주 · 룰렛 · 짝 맞추기 + 새 게임 12개가 모두 여기에)
+  updateTodoBtn();
   const gb = $('#gameBtn');
   if (gb) { gb.classList.toggle('hidden', tab !== 'island' || !!VISIT); gb.classList.toggle('ready', mgAnyReady()); }
   const b = $('#fishBtn');
@@ -2741,6 +2742,66 @@ function mgCash() {
   const M = MG;
   if (!M || M.over || M.id !== 'boxes' || !M.lv) return;
   mgFinish(M.lv >= 3 ? 2 : 1, `${M.lv}단계에서 그만!`);
+}
+
+// ===================== 📅 오늘 할 일 =====================
+// 매일 받을 수 있는 것들이 여기저기 흩어져 있어서 한곳에 모았다. 다 하면 보너스 💎
+const TODO_BONUS = 10;
+function todoList() {
+  const L = [];
+  L.push({ id: 'daily', e: '🎁', name: '일일 보상 받기', done: !dailyReady(), go: () => openDaily() });
+  const m = misToday();
+  L.push({ id: 'mis', e: '📋', name: '오늘의 미션 3개', prog: `${Math.min(3, m.got.length)}/3`, done: m.got.length >= 3, go: () => openMissions() });
+  L.push({ id: 'wheel', e: '🎡', name: '무료 룰렛 돌리기', done: !!wheelDay().free, go: () => openWheel() });
+  L.push({ id: 'race', e: '🏁', name: '경주 무료 응원권 쓰기', done: !raceFreeOk(), go: () => openRace() });
+  const played = Object.values(mgDay().n).reduce((s, x) => s + x, 0);
+  L.push({ id: 'games', e: '🎮', name: '미니게임 3판 하기', prog: `${Math.min(3, played)}/3`, done: played >= 3, go: () => openGames() });
+  if (S.monsters.length) {
+    const r = raidToday();
+    L.push({ id: 'raid', e: '🔥', name: '오늘의 레이드 도전', prog: r.hp <= 0 ? '🏆' : `${RAID_TRIES - r.tries}/${RAID_TRIES}`, done: r.tries <= 0 || r.hp <= 0, go: () => { closeModal(); tab = 'adventure'; render(); } });
+  }
+  if (S.guild) {
+    const w = gwarToday();
+    L.push({ id: 'gwar', e: '⚔️', name: '길드전 공격', prog: `${GWAR_ATTACKS - w.left}/${GWAR_ATTACKS}`, done: w.left <= 0, go: () => openGuild('war') });
+  }
+  if ((S.friends || []).length) {
+    const need = Math.min(3, S.friends.length), sent = frGiftToday().sent.length;
+    L.push({ id: 'hearts', e: '💌', name: `친구에게 하트 ${need}개 보내기`, prog: `${Math.min(need, sent)}/${need}`, done: sent >= need, go: () => openFriends(true) });
+  }
+  if (dailyGemAmt() > 0) L.push({ id: 'kdgem', e: '💎', name: '오늘의 보석 받기 (상점 🏛️ 왕국)', done: S.kdGemDay === dayKey(), go: () => { closeModal(); goShop('shopKingdom'); } });
+  return L;
+}
+const todoLeft = () => { try { return todoList().filter(t => !t.done).length; } catch (e) { return 0; } };
+function openTodo() {
+  tutFlag('todo', true);
+  const L = todoList(), left = L.filter(t => !t.done).length, got = S.todoBonus === dayKey();
+  showModal(`<div class="todo-panel"><h3>📅 오늘 할 일</h3>
+    <p class="muted">매일 받을 수 있는 것들을 모았어요. 다 하면 보너스 💎 ${TODO_BONUS}!</p>
+    <div class="todo-list">${L.map(t => `<div class="todo-row ${t.done ? 'done' : ''}">
+        <span class="td-e">${t.done ? '✅' : t.e}</span>
+        <span class="td-name">${t.name}${t.prog ? ` <small>${t.prog}</small>` : ''}</span>
+        ${t.done ? '<span class="td-ok">완료</span>' : `<button class="btn small green" data-act="todoGo" data-id="${t.id}">가기 →</button>`}
+      </div>`).join('')}</div>
+    <div class="todo-bonus">${got ? '🎉 오늘 보너스를 받았어요! 내일 또 만나요' : left ? `🎯 ${left}개 남았어요 · 다 하면 💎 ${TODO_BONUS}`
+      : `<button class="btn big green" data-act="todoBonus">🎉 다 했어요! 💎 ${TODO_BONUS} 받기</button>`}</div>
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
+function todoGo(id) { const t = todoList().find(x => x.id === id); if (t) t.go(); }
+function todoBonus() {
+  if (S.todoBonus === dayKey() || todoLeft() > 0) return;
+  S.todoBonus = dayKey();
+  earn(TODO_BONUS, 'gems'); statAdd('todoAll', 1);
+  sfx('win'); save(); updateHud();
+  toast(`🎉 오늘 할 일 완료! 💎 ${TODO_BONUS}`);
+  openTodo(); updateTodoBtn();
+}
+function updateTodoBtn() {
+  const b = $('#todoBtn');
+  if (!b) return;
+  b.classList.toggle('hidden', tab !== 'island' || !!VISIT);
+  const n = todoLeft(), bonus = !n && S.todoBonus !== dayKey();
+  b.classList.toggle('ready', n > 0 || bonus);
+  b.innerHTML = `📅<small>할 일</small>${n || bonus ? `<i class="todo-n">${bonus ? '🎁' : n}</i>` : ''}`;
 }
 
 // 섬 위를 돌아다니는 펫 (섬 가장자리를 천천히 한 바퀴)
@@ -8554,6 +8615,7 @@ const ACH_MORE = [
   ['wheel',    '🎡 룰렛 돌리기', 'stat', [1, 10, 50, 200], [5, 20, 60, 200]],
   ['memWin',   '🃏 짝 맞추기 끝내기', 'stat', [1, 10, 50, 200], [10, 30, 80, 250]],
   ['mgPlay',   '🎮 미니게임 하기', 'stat', [1, 20, 100, 500], [10, 40, 120, 400]],
+  ['todoAll',  '📅 오늘 할 일 다 하기', 'stat', [1, 7, 30, 100], [10, 30, 100, 300]],
   ['friendGift', '💌 친구에게 하트 보내기', 'stat', [1, 10, 50, 200], [10, 30, 80, 200]],
   ['coopWin',  '🤝 협동 레이드 승리', 'stat', [1, 5, 20], [30, 80, 200]],
   ['fusepet',  '🧪 합성 펫 모으기', () => PETS.filter(p => p.fusion && petLv(p.id)).length, [1, 4, 8], [20, 80, 250]],
@@ -9169,6 +9231,9 @@ TUT.push(
 TUT.push(
   { text: '🎮 섬 왼쪽의 🎮 미니게임에서 게임을 하나 해 봐요 (16가지 · 하루 3판씩 무료!)', done: () => stat('mgPlay') > 0, go: () => { closeModal(); tab = 'island'; render(); openGames(); } },
 );
+TUT.push(
+  { text: '📅 섬 왼쪽의 📅 할 일에서 오늘 받을 수 있는 것들을 한눈에 봐요 (다 하면 💎10!)', done: () => tutFlag('todo'), go: () => { closeModal(); tab = 'island'; render(); openTodo(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -9372,6 +9437,10 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox .mg-card.ready', '#modalBox .mg-card', '#modalBox [data-act=mgStart]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#gameBtn'];
+    case 47: // 오늘 할 일
+      if (inModal) return ['#modalBox [data-act=todoGo]', '#modalBox [data-act=todoBonus]', '#modalBox [data-act=close]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#todoBtn'];
   }
   return null;
 }
@@ -9557,6 +9626,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '📅', title: '오늘 할 일', text: '섬 왼쪽의 <b>📅 할 일</b>에 매일 받을 것들이 모여 있어요!<br>🎁 일일 보상 · 📋 미션 · 🎡 룰렛 · 🏁 경주 응원권 · 🎮 미니게임 · 🔥 레이드 · ⚔️ 길드전 · 💌 하트 …<br>남은 개수가 버튼에 숫자로 보이고, <b>가기 →</b>를 누르면 바로 가요. 다 하면 <b>💎 10</b> 보너스!' },
   { icon: '🎮', title: '미니게임 16가지', text: '섬 왼쪽의 <b>🎮 미니게임</b> 버튼에 게임이 16가지!<br>🎣 낚시 · 🏁 경주 · 🎡 룰렛 · 🃏 짝 맞추기 · 🔨 두더지 잡기 · ⚡ 반응 속도 · 🔢 숫자 순서 · 🎨 색깔 맞추기 · 🧠 순서 기억 · ➕ 빠른 계산 · 🎈 풍선 터뜨리기 · ✊ 가위바위보 · 🔍 다른 그림 찾기 · 🎲 높을까 낮을까 · 📘 속성 퀴즈 · 🎁 보물 상자<br>새 게임은 하루 3판씩 무료! 잘할수록 ⭐이 많고 💰💎 보상도 커져요.' },
   { icon: '🃏', title: '몬스터 짝 맞추기', text: '<b>🃏 짝 맞추기</b>(섬 왼쪽 버튼)에서 뒤집힌 카드 16장 중 <b>같은 몬스터 두 장</b>을 찾아요!<br>적게 뒤집을수록 ⭐이 많아요 (11번 이하면 ⭐⭐⭐). 보상은 ⭐만큼 💰골드와 💎!<br>하루 3판 무료, 그다음엔 💎5. 🏅 최고 기록에 도전해 봐요!' },
   { icon: '🎡', title: '행운의 룰렛', text: '<b>🎡 룰렛</b>(섬 왼쪽 버튼)을 하루 1번 <b>무료</b>로 돌려요! 💎10이면 5번 더.<br>💰 골드 · 🤑 골드 대박 · 💎 보석 · 🍖 먹이 · 📦 룬 · 🥚 희귀 알… 그리고 아주 가끔 <b>🎰 잭팟 💎100</b>!' },
@@ -9755,6 +9825,9 @@ const ACTIONS = {
   race: () => openRace(),
   wheel: () => openWheel(),
   games: () => { mgStop(); openGames(); },
+  todo: () => openTodo(),
+  todoGo: (d) => todoGo(d.id),
+  todoBonus: () => todoBonus(),
   mgOpen: (d) => mgOpen(d.id),
   mgStart: (d) => mgStart(d.id),
   mgHit: (d, el) => mgHit(d, el),
