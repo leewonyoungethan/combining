@@ -1250,6 +1250,7 @@ const KINGDOM = [
 const kdLv = (id) => (S.kd && S.kd[id]) || 0;
 const kdCost = (k) => Math.round(k.base * Math.pow(k.mult, kdLv(k.id)));
 function kdUp(id) {
+  tutFlag('kingdom', true);
   const k = KINGDOM.find(x => x.id === id);
   if (!k || kdLv(id) >= k.max) return;
   if (!spend(kdCost(k))) return;
@@ -3029,7 +3030,9 @@ function updateGoal() {
   const c = $('#goalChip');
   if (!c) return;
   const g = $('#guide');
-  const show = tab === 'island' && !B && !VISIT && !S.hideUI && S.tutCoreDone && (!g || g.classList.contains('hidden') || (tutFocus != null && TUT[tutFocus] && TUT[tutFocus].text.startsWith('🎯')));
+  // 튜토리얼이 길어져서: 처음 13단계를 끝냈거나, 지금 단계가 🎯 다음 목표 단계면 보여 준다
+  const cur = TUT[tutStep()], goalStep = !!(cur && cur.text.startsWith('🎯'));
+  const show = tab === 'island' && !B && !VISIT && !S.hideUI && (S.tutCoreDone || tutStep() >= 13) && (!g || g.classList.contains('hidden') || goalStep || (tutFocus != null && TUT[tutFocus] && TUT[tutFocus].text.startsWith('🎯')));
   const goal = show ? nextGoal() : null;
   c.classList.toggle('hidden', !goal);
   if (!goal) return;
@@ -6918,6 +6921,7 @@ async function openGuild(t) {
     ${body}
     <div class="row"><button class="btn ghost small" data-act="guildRefresh">🔄 새로고침</button><button class="btn ghost small danger" data-act="guildLeave">🚪 길드 나가기</button><button class="btn ghost small" data-act="close">닫기</button></div>`);
   if (guildTab === 'chat') {
+    tutFlag('gchat', true);
     guildChatLoad();
     const inp = $('#gChatText');
     if (inp) inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); gSend(); } });
@@ -8238,6 +8242,7 @@ async function accImportOk() {
   enterAccount(a);
 }
 function openAccountMenu() {
+  tutFlag('menuSeen', true);
   tutFlag('account', true);
   showModal(`<h3>👤 ${esc(ACC.name)}</h3><div class="ach-title small" data-act="achOpen">${titleName(titleIdx())} · 🏅 ${fmt(achPoints())}</div>
     <p class="muted">${accSummary(ACC)}</p>
@@ -8313,7 +8318,7 @@ function afterEnter() {
   // 튜토리얼 앞부분(첫 교배 전)에는 창을 띄우지 않고 🎁 빨간 점으로만 알려 준다
   if (dailyReady() && (S.tutOff || tutStep() >= 8)) { openDaily(); return; }
   const ev = evtNow();
-  if (S.tutCoreDone && S.evtSeen !== ev.key) openEvent();
+  if ((S.tutCoreDone || tutStep() >= 13) && S.evtSeen !== ev.key) openEvent();
   else if (S.evtSeen !== ev.key) toast(`🎉 이벤트: ${ev.e} ${ev.name} (${ev.desc})`);
 }
 
@@ -8735,6 +8740,7 @@ function updateMisDot() {
 }
 // ☰ 메뉴 (폰): 작은 버튼 대신 큰 글자 버튼으로
 function openMenu() {
+  tutFlag('menuSeen', true);
   const it = (act, ico, name, sub, extra = '') => `<button class="menu-item" data-act="${act}" ${extra}><span>${ico}</span><b>${name}</b>${sub ? `<small>${sub}</small>` : ''}</button>`;
   let dots = {};
   try { dots = { q: qReady() || weekReady(), m: misClaimable(), a: ACH.some(achReady) }; } catch (e) { /* 준비 전 */ }
@@ -9150,7 +9156,7 @@ TUT.push(
   { text: '📋 위쪽 📋 버튼에서 오늘의 미션을 보고 💎 보석을 받아요', done: () => tutFlag('missions'), go: () => { closeModal(); openMissions(); } },
   { text: '🛡️ 모험 탭의 🛡️ 길드에 들어가거나 만들어 봐요 (골드 보너스!)', done: () => tutFlag('guild') || !!S.guild,
     go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
-  { text: '⚔️ 길드의 ⚔️ 길드전 탭에서 상대 길드원을 한 번 공격해 봐요 (이기면 ⭐!)', done: () => tutFlag('gwar'),
+  { text: '⚔️ 길드의 ⚔️ 길드전 탭에서 상대 길드원을 한 번 공격해 봐요 (이기면 ⭐!)', done: () => tutFlag('gwar') || (!S.guild && tutFlag('guild')),
     go: () => { closeModal(); openGuild(S.guild ? 'war' : undefined); } },
   { text: '🏆 모험 탭의 🏆 랭킹에서 전 세계 순위를 봐요 (랜덤 대전에서 이기면 트로피!)', done: () => tutFlag('ranking'),
     go: () => { closeModal(); tab = 'adventure'; render(); setTimeout(() => { const el = document.querySelector('.pvp-box'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } },
@@ -9167,7 +9173,7 @@ TUT.push(
 );
 TUT.push(
   { text: '🔁 모험에서 🔁 연속 전투를 해 봐요 (이기면 다음 스테이지로 계속!)', done: () => tutFlag('loop'), go: () => { closeModal(); tab = 'adventure'; render(); } },
-  { text: '🏛️ 상점의 🏛️ 왕국 발전을 한 번 올려 봐요 (골드로 영원히 강해져요)', done: () => KINGDOM.some(k => kdLv(k.id) > 0), go: () => goShop('shopKingdom') },
+  { text: '🏛️ 상점의 🏛️ 왕국 발전을 한 번 올려 봐요 (골드로 영원히 강해져요)', done: () => KINGDOM.some(k => kdLv(k.id) > 0) || tutFlag('kingdom'), go: () => goShop('shopKingdom') },
   { text: '💎 상점의 🗽 랜드마크와 💎 보석 상점을 둘러봐요 (로봇·부스터·전설 알)', done: () => tutFlag('bigshop'), go: () => goShop('shopWonder') },
 );
 TUT.push(
@@ -9207,9 +9213,9 @@ TUT.push(
   { text: '🎣 섬 왼쪽 🎮 미니게임의 🎣 낚시에서 물고기를 한 마리 낚아 봐요!', done: () => tutFlag('fish') || stat('fish') > 0, go: () => { closeModal(); tab = 'island'; render(); openFishing(); } },
 );
 TUT.push(
-  { text: '💬 길드의 💬 채팅에서 메시지를 보내 봐요 (노란 숫자 = 안 읽은 길드원 수 · 모든 날 저장!)', done: () => tutFlag('gchat'),
+  { text: '💬 길드의 💬 채팅에서 메시지를 보내 봐요 (노란 숫자 = 안 읽은 길드원 수 · 모든 날 저장!)', done: () => tutFlag('gchat') || (!S.guild && tutFlag('guild')),
     go: () => { closeModal(); if (S.guild) { guildTab = 'chat'; openGuild('chat'); } else { tab = 'adventure'; render(); openGuild(); } } },
-  { text: '🌐 ☰ 메뉴의 🌐 English로 게임을 영어로 바꿀 수 있어요', done: () => tutFlag('lang'), go: () => { closeModal(); openMenu(); } },
+  { text: '🌐 ☰ 메뉴의 🌐 English로 게임을 영어로 바꿀 수 있어요', done: () => tutFlag('lang') || tutFlag('menuSeen'), go: () => { closeModal(); openMenu(); } },
 );
 TUT.push(
   { text: '🏁 🎮 미니게임의 🏁 경주에서 1등할 몬스터를 맞혀 봐요 (하루 1번 무료!)', done: () => tutFlag('race') || stat('race') > 0, go: () => { closeModal(); tab = 'island'; render(); openRace(); } },
@@ -9298,7 +9304,7 @@ function tutPoint(k) {
       return need('dex') || ['#view [data-act=dexMon]'];
     case 15: // 섬 꾸미기
       if (inModal) return ['#modalBox [data-act=build][data-what^="deco:"]', '#modalBox [data-act=decoPick]', '#modalBox [data-act=close]'];
-      return need('shop') || ['[data-act=buyDeco]'];
+      return need('shop') || ['[data-act=buyDeco]:not(.wonder-card):not([disabled])'];
     case 16: // 보스전
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
@@ -9409,8 +9415,8 @@ function tutPoint(k) {
       }
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=guildOpen]'];
-    case 40: // 영어 모드
-      if (inModal) return ['#modalBox [data-act=lang]', '#modalBox [data-act=close]'];
+    case 40: // 영어 모드 (메뉴만 보면 완료 · 손가락이 언어 버튼을 누르게 하지 않는다)
+      if (inModal) return ['#modalBox [data-act=close]'];
       return ['#menuBtn', '[data-act=account]'];
     case 41: // 몬스터 경주
       if (inModal && $('#modalBox .mg-hub')) return ['#modalBox .mg-card[data-id=race]'];
@@ -9422,7 +9428,7 @@ function tutPoint(k) {
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=ranking]'];
     case 43: // 랭킹 사람 찾기
-      if (inModal) return ['#modalBox #rankSearch', '#modalBox [data-act=rankSearch]', '#modalBox [data-act=close]'];
+      if (inModal) return ['#modalBox [data-act=rankSearch]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['.pvp-box [data-act=ranking]'];
     case 44: // 룰렛
@@ -9434,7 +9440,7 @@ function tutPoint(k) {
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#gameBtn'];
     case 46: // 미니게임 모음
-      if (inModal) return ['#modalBox .mg-card.ready', '#modalBox .mg-card', '#modalBox [data-act=mgStart]'];
+      if (inModal) return ['#modalBox [data-act=mgStart]', '#modalBox .mg-card[data-id=whack]', '#modalBox [data-act=games]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#gameBtn'];
     case 47: // 오늘 할 일
@@ -9541,7 +9547,7 @@ function openTutorial() {
         <span class="tut-text">${t.text}</span>
         <button class="btn small ${k === cur ? 'green' : 'ghost'}" data-act="tutFocus" data-k="${k}">👉 ${k === cur ? '지금 하기' : '다시 보기'}</button>
       </div>`).join('')}</div>
-    <h3 class="sub">💡 더 알아보기 <small class="muted">하고 싶을 때만 눌러요</small></h3>
+    ${TUT.length > TUT_CORE ? '<h3 class="sub">💡 더 알아보기 <small class="muted">하고 싶을 때만 눌러요</small></h3>' : ''}
     <div class="tut-list">${TUT.slice(TUT_CORE).map((t, n) => { const k = n + TUT_CORE, done = t.done(); return `<div class="tut-row ${done ? 'done' : ''}">
         <span class="tut-num">${done ? '✅' : '💡'}</span>
         <span class="tut-text">${t.text}</span>
@@ -9571,8 +9577,8 @@ function tutStep() {
   while (S.tutStep < TUT.length && TUT[S.tutStep].done()) S.tutStep++;
   return S.tutStep;
 }
-// 말풍선으로 안내하는 건 기본 13단계뿐. 그 뒤(일일 보상·도감·길드…)는 🎓 창의 "더 알아보기"에서 원할 때만
-const TUT_CORE = 13;
+// 모든 단계를 말풍선으로 안내한다 (예전엔 13단계만, 나머지는 "더 알아보기")
+const TUT_CORE = TUT.length;
 const tutGuided = (k) => tutFocus != null || k < TUT_CORE;
 function updateGuide() {
   const g = $('#guide');
@@ -9586,11 +9592,11 @@ function updateGuide() {
   const k = tutShown();
   if (cur >= TUT_CORE && !S.tutCoreDone) {
     S.tutCoreDone = true;
-    earn(30, 'gems');
+    earn(100, 'gems');
     save();
     updateHud();
     sfx('yay');
-    toast('🎉 튜토리얼 완료! 선물로 💎 30. 이제 위쪽 🎯 다음 목표를 따라가 봐요 (💰💎🍖를 누르면 쓰는 법이 나와요)');
+    toast('🎉 튜토리얼을 모두 끝냈어요! 선물로 💎 100. 이제 위쪽 🎯 다음 목표를 따라가 봐요 (💰💎🍖를 누르면 쓰는 법이 나와요)');
   }
   const show = !B && !S.tutOff && !(S.hideUI && tab === 'island') && k < TUT.length && tutGuided(k);
   g.classList.toggle('hidden', !show);
@@ -9945,7 +9951,7 @@ const ACTIONS = {
   refreshDeals: () => refreshDeals(),
   buyPotion: (d) => buyPotion(d.id),
   buyExchange: () => buyExchange(),
-  shopJump: (d) => { if (d.id === 'shopCosmos') tutFlag('cosmos', true); if (d.id === 'shopCloner') tutFlag('cloner', true); if (d.id === 'shopDeals') tutFlag('deals', true); if (d.id === 'shopPotion' || d.id === 'shopExch') tutFlag('potion', true); updateGuide(); const el = document.getElementById(d.id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); } },
+  shopJump: (d) => { if (d.id === 'shopKingdom') tutFlag('kingdom', true); if (d.id === 'shopCosmos') tutFlag('cosmos', true); if (d.id === 'shopCloner') tutFlag('cloner', true); if (d.id === 'shopDeals') tutFlag('deals', true); if (d.id === 'shopPotion' || d.id === 'shopExch') tutFlag('potion', true); updateGuide(); const el = document.getElementById(d.id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); } },
   bigshopSeen: () => { if (!tutFlag('bigshop')) { tutFlag('bigshop', true); toast('🗽 랜드마크는 모든 섬 골드를, 💎 보석 상점은 로봇·부스터·전설 알을 팔아요!'); updateGuide(); } },
   kdGem: () => kdGemClaim(),
   buyBoost: () => buyBoost(),
