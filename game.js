@@ -6007,17 +6007,28 @@ function logB(msg) {
   if (B.log.length > 30) B.log.shift();
 }
 // 배속: 보통 전투 1·2·4배, 🔁 연속 전투는 10·25·50·100배까지
-const SPEEDS_LOOP = [1, 2, 4, 10, 25, 50, 100], SPEEDS = [1, 2, 4];
+const SPEEDS_LOOP = [1, 2, 4, 10, 25, 50, 100, 250, 500, 1000], SPEEDS = [1, 2, 4];
+// 250배속부터는 타이머(최소 4ms)를 기다리지 않고 바로 다음 차례로 (화면이 멈추지 않게 한 번씩 숨은 쉬면서)
+const FAST_Q = [], FAST_CH = new MessageChannel();
+FAST_CH.port1.onmessage = () => { const f = FAST_Q.shift(); if (f) f(); };
+function soon(fn) { FAST_Q.push(fn); FAST_CH.port2.postMessage(0); }
+// clearTimeout(B.timer)로 "바로 진행" 예약도 취소되게
+const _clearTimeout = window.clearTimeout.bind(window);
+window.clearTimeout = (t) => { if (t && typeof t === 'object' && 'dead' in t) t.dead = true; else _clearTimeout(t); };
 function bSpeed() {
   const s = S.bSpeed || (S.fastBattle ? 4 : 1);
   return LOOP ? s : Math.min(4, s);
 }
-function later(fn, ms = 800) { B.timer = setTimeout(fn, ms / bSpeed()); }
+function later(fn, ms = 800) {
+  const sp = bSpeed();
+  if (sp >= 250) { const b = B, job = { dead: false }; B.timer = job; soon(() => { if (!job.dead && B === b) fn(); }); return; }
+  B.timer = setTimeout(fn, ms / sp);
+}
 
 // ----- 애니메이션 도우미 -----
 // 25배속부터는 움직이는 장면을 건너뛴다 (너무 빨라서 안 보이니까)
 const dur = (ms) => (B ? (bSpeed() >= 25 ? 0 : ms / bSpeed()) : ms);
-const wait = (ms) => new Promise(r => setTimeout(r, dur(ms)));
+const wait = (ms) => new Promise(r => { const d = dur(ms); if (d <= 0 && bSpeed() >= 250) soon(r); else setTimeout(r, d); });
 const unitEl = (u) => document.getElementById('u-' + u.id);
 function centerOf(u) {
   const el = unitEl(u), arena = $('#arena');
@@ -6395,7 +6406,7 @@ function endBattle(win) {
   if (win) mission('win');
   save();
   if (LOOP && !B.pvp && !B.gwar && !B.raid && B.bossIdx == null) {
-    if (win) { const b = B; setTimeout(() => { if (B === b && LOOP) loopNext(); }, Math.max(60, 1600 / bSpeed())); }
+    if (win) { const b = B; const go = () => { if (B === b && LOOP) loopNext(); }; if (bSpeed() >= 250) soon(go); else setTimeout(go, Math.max(60, 1600 / bSpeed())); }
     else { LOOP.wins = LOOP.wins; setTimeout(() => stopLoop('패배'), 300); }
   }
   drawBattle();
