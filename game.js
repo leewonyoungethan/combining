@@ -2403,7 +2403,7 @@ function mgOpen(id) {
   showModal(`<div class="mg-panel"><h3>${g.e} ${g.name}</h3>
     <div class="mg-intro"><span>${g.e}</span><p>${MG_HELP[id]}</p></div>
     ${best ? `<p class="muted">🏅 최고 기록: ${'⭐'.repeat(best.stars)} · ${best.text}</p>` : ''}
-    <div class="row"><button class="btn big green" data-act="mgStart" data-id="${id}">${mgFreeLeft(id) ? `▶ 시작! (무료 ${mgFreeLeft(id)}판)` : `▶ 시작 (💎 ${MG_COST})`}</button></div>
+    <div class="row"><button class="btn big green" data-act="mgStart" data-id="${id}">${mgFreeLeft(id) ? `▶ 시작! (무료 ${mgFreeLeft(id)}판)` : S.mgTix ? `▶ 시작 (🎟️ 티켓 · ${S.mgTix}장)` : `▶ 시작 (💎 ${MG_COST})`}</button></div>
     <div class="row"><button class="btn ghost small" data-act="games">← 미니게임 목록</button></div></div>`);
 }
 const MG_HELP = {
@@ -2424,7 +2424,10 @@ function mgStart(id) {
   const g = mgDef(id);
   if (!g || g.old) return;
   const d = mgDay();
-  if (mgFreeLeft(id) <= 0 && !spend(MG_COST, 'gems')) return;
+  if (mgFreeLeft(id) <= 0) {
+    if ((S.mgTix || 0) > 0) { S.mgTix--; toast(`🎟️ 티켓을 썼어요 (${S.mgTix}장 남음)`); }
+    else if (!spend(MG_COST, 'gems')) return;
+  }
   d.n[id] = (d.n[id] || 0) + 1;
   save(); updateHud();
   mgStop();
@@ -5373,6 +5376,129 @@ function monGroupsHTML() {
 }
 
 // ===================== 화면: 상점 =====================
+// ===================== 🛒 상점 칸(탭) + 새 물건 =====================
+const SHOP_TABS = [
+  { id: 'build', name: '🏠 건물',      secs: ['shopHab', 'shopDeco'] },
+  { id: 'egg',   name: '🥚 알',        secs: ['shopEgg', 'shopEgg2', 'shopBox', 'shopLegend'] },
+  { id: 'deal',  name: '🎁 특가·상자', secs: ['shopDeals', 'shopMystery'] },
+  { id: 'item',  name: '🧪 아이템',    secs: ['shopPotion', 'shopExtra', 'shopItems', 'shopExch', 'shopRunes'] },
+  { id: 'power', name: '🏛️ 강해지기',  secs: ['shopKingdom', 'shopWonder', 'shopCosmos', 'shopCloner'] },
+  { id: 'gem',   name: '💎 보석',      secs: ['shopGem'] },
+];
+let shopTab = 'build';
+const shopTabOf = (secId) => (SHOP_TABS.find(t => t.secs.includes(secId)) || SHOP_TABS[0]).id;
+// 칸을 보면 "둘러봤다" (튜토리얼)
+const SHOP_TAB_FLAGS = { deal: ['deals'], item: ['potion'], power: ['kingdom', 'cosmos', 'cloner'], gem: ['bigshop'] };
+function shopTabsHTML() {
+  return `<div class="shop-nav shop-tabs">${SHOP_TABS.map(t => `<button class="chip ${shopTab === t.id ? 'on' : ''}" data-act="shopJump" data-tab="${t.id}" data-id="${t.secs[0]}">${t.name}</button>`).join('')}</div>`;
+}
+// 다 그린 상점 화면에서 지금 칸에 속하지 않는 부분은 숨긴다
+function shopApplyTab() {
+  const t = SHOP_TABS.find(x => x.id === shopTab) || SHOP_TABS[0];
+  let sec = null;
+  [...view.children].forEach(el => {
+    if (el.classList.contains('sec-head') || el.classList.contains('shop-nav')) return;
+    if (el.tagName === 'H3' && el.id) sec = el.id;
+    el.style.display = sec && !t.secs.includes(sec) ? 'none' : '';
+  });
+  (SHOP_TAB_FLAGS[t.id] || []).forEach(f => tutFlag(f, true));
+}
+
+// ----- 🎁 미스터리 상자 -----
+const mysteryGoldCost = () => Math.max(5000, Math.round(totalIncome() * 600));
+const MYSTERY_GEMS = 30;
+function mysteryHTML() {
+  return `<h3 class="sub" id="shopMystery">🎁 미스터리 상자 <small class="muted">무엇이 나올지 몰라요! 열어 봐요</small></h3>
+    <div class="mystery-row">
+      <button class="mystery-box" data-act="buyMystery" data-k="gold"><span>🎁</span><b>골드 상자</b><small>골드 · 먹이 · 룬 · 알 · 💎</small><i>💰 ${shortNum(mysteryGoldCost())}</i></button>
+      <button class="mystery-box gem" data-act="buyMystery" data-k="gem"><span>💝</span><b>보석 상자</b><small>💎 많이 · 서사/전설 알 · ★★★ 룬 · 펫 알</small><i>💎 ${MYSTERY_GEMS}</i></button>
+    </div>`;
+}
+function pickW(list) { let r = Math.random() * list.reduce((s, x) => s + x[0], 0); for (const x of list) { r -= x[0]; if (r <= 0) return x[1]; } return list[list.length - 1][1]; }
+function mysteryEgg(ranks) {
+  if (S.hatch.length >= hatchCap()) { earn(10, 'gems'); return '💎 10 (부화장이 가득 차서)'; }
+  const rk = ranks[Math.floor(Math.random() * ranks.length)];
+  const pool = CAT_LIST.filter(c => c.rarity === rk && !c.shop), c = pool[Math.floor(Math.random() * pool.length)];
+  S.hatch.push(c.id);
+  return `🥚 ${c.face} ${c.name} 알 (${RAR[rk].name})`;
+}
+function buyMystery(k) {
+  let got = '';
+  if (k === 'gold') {
+    const cost = mysteryGoldCost();
+    if (!spend(cost)) return;
+    got = pickW([
+      [40, () => { const g = Math.round(cost * (0.5 + Math.random() * 2.5)); earn(g); return `💰 ${shortNum(g)}`; }],
+      [20, () => { const f = Math.max(500, Math.round(totalIncome() * 120)); earn(f, 'food'); return `🍖 ${shortNum(f)}`; }],
+      [15, () => '💠 ' + runeText(giveRune([0.5, 0.4, 0.1]))],
+      [15, () => mysteryEgg(['rare', 'special', 'masterwork', 'hero'])],
+      [10, () => { const n = 5 + Math.floor(Math.random() * 16); earn(n, 'gems'); return `💎 ${n}`; }],
+    ])();
+  } else {
+    if (!spend(MYSTERY_GEMS, 'gems')) return;
+    got = pickW([
+      [30, () => { const n = 10 + Math.floor(Math.random() * 71); earn(n, 'gems'); return `💎 ${n}`; }],
+      [25, () => mysteryEgg(['epic'])],
+      [10, () => mysteryEgg(['legendary'])],
+      [20, () => '💠 ' + runeText(giveRune([0, 0, 1]))],
+      [10, () => { const g = Math.max(20000, Math.round(totalIncome() * 3600)); earn(g); return `💰 ${shortNum(g)}`; }],
+      [5, () => { setTimeout(() => petEgg('premium', true), 1200); return '🌟 고급 펫 알!'; }],
+    ])();
+  }
+  statAdd('mystery', 1);
+  sfx('yay'); save(); updateHud();
+  showModal(`<div class="mystery-open"><div class="mo-box">${k === 'gem' ? '💝' : '🎁'}</div><h3>상자를 열었어요!</h3><p class="mo-got">${got}</p>
+    <div class="row"><button class="btn green" data-act="buyMystery" data-k="${k}">한 번 더 (${k === 'gem' ? `💎 ${MYSTERY_GEMS}` : `💰 ${shortNum(mysteryGoldCost())}`})</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
+
+// ----- 🛒 더 많은 아이템 -----
+const BUY_DAY_MAX = 3;
+const buyDay = () => (S.buyDay && S.buyDay.day === dayKey() ? S.buyDay : (S.buyDay = { day: dayKey(), raid: 0, gwar: 0 }));
+const baitCost = () => Math.max(2000, Math.round(totalIncome() * 60));
+function shopExtraHTML() {
+  const d = buyDay();
+  const it = (act, k, ico, name, sub, cost, dis) => `<button class="shop-item" data-act="${act}" data-k="${k}" ${dis ? 'disabled' : ''}><span class="si-ico">${ico}</span><span class="si-nm">${name}<small>${sub}</small></span><span class="si-cost">${cost}</span></button>`;
+  return `<h3 class="sub" id="shopExtra">🛒 더 많은 아이템</h3>
+    <div class="shop">
+      ${it('buyExtra', 'bait', '🪱', '낚시 미끼 ×10', `지금 미끼 ${fishBait()}개`, `💰 ${shortNum(baitCost())}`)}
+      ${it('buyExtra', 'food10k', '🍖', '먹이 10,000개', '1,000개 10묶음보다 싸요', '💰 13,000')}
+      ${it('buyExtra', 'tix', '🎟️', '미니게임 티켓 ×5', `무료 판을 다 쓰면 💎 대신 써요 (지금 ${S.mgTix || 0}장)`, '💎 10')}
+      ${it('buyExtra', 'raid', '🔥', '레이드 도전권 +1', `오늘의 레이드 한 번 더 (오늘 ${d.raid}/${BUY_DAY_MAX})`, '💎 20', d.raid >= BUY_DAY_MAX || !S.monsters.length)}
+      ${S.guild ? it('buyExtra', 'gwar', '⚔️', '길드전 공격권 +1', `길드전 한 번 더 (오늘 ${d.gwar}/${BUY_DAY_MAX})`, '💎 15', d.gwar >= BUY_DAY_MAX) : ''}
+      ${it('buyExtra', 'runes10', '📦', '룬 상자 ×10', '룬 상자 10개 묶음 (10% 할인)', '💰 9,000')}
+    </div>`;
+}
+function buyExtra(k) {
+  const d = buyDay();
+  if (k === 'bait') { if (!spend(baitCost())) return; fishBait(); S.fish.bait += 10; toast('🪱 미끼 10개!'); }
+  else if (k === 'food10k') { if (!spend(13000)) return; earn(10000, 'food'); toast('🍖 먹이 10,000개!'); }
+  else if (k === 'tix') { if (!spend(10, 'gems')) return; S.mgTix = (S.mgTix || 0) + 5; toast(`🎟️ 미니게임 티켓 5장! (모두 ${S.mgTix}장)`); }
+  else if (k === 'raid') {
+    if (d.raid >= BUY_DAY_MAX || !S.monsters.length) return;
+    const r = raidToday();
+    if (r.hp <= 0) { toast('오늘 레이드 보스는 이미 쓰러졌어요!'); return; }
+    if (!spend(20, 'gems')) return;
+    r.tries++; d.raid++; toast('🔥 레이드 도전 +1!');
+  } else if (k === 'gwar') {
+    if (!S.guild || d.gwar >= BUY_DAY_MAX) return;
+    if (!spend(15, 'gems')) return;
+    gwarToday().left++; d.gwar++; toast('⚔️ 길드전 공격 +1!');
+  } else if (k === 'runes10') {
+    if (!spend(9000)) return;
+    const got = [...Array(10)].map(() => giveRune([0.7, 0.25, 0.05]));
+    toast('📦 룬 10개! ' + got.filter(r => r.lv >= 2).map(runeText).join(' · '));
+  }
+  sfx('buy'); save(); updateHud();
+  const p = $('#panel'), y = p ? p.scrollTop : 0; render(); if (p) $('#panel').scrollTop = y;
+}
+
+// 알 상점에서 "아직 없는 몬스터"와 "이미 있는 몬스터"를 나눠 보여 준다 (부화장에 있는 알도 "있음")
+function ownSplitHTML(types, cardFn) {
+  const own = new Set([...S.monsters.map(m => m.type), ...S.hatch]);
+  const no = types.filter(t => !own.has(t)), yes = types.filter(t => own.has(t));
+  return (no.length ? `<h4 class="own-h new">🆕 아직 없는 몬스터 <small>${no.length}종</small></h4><div class="grid small">${no.map(cardFn).join('')}</div>` : '<p class="muted own-all">🎉 여기 있는 몬스터는 모두 가지고 있어요!</p>')
+    + (yes.length ? `<h4 class="own-h">✅ 이미 있는 몬스터 <small>${yes.length}종</small></h4><div class="grid small">${yes.map(cardFn).join('')}</div>` : '');
+}
 function renderShop() {
   const groups = {};
   S.runes.forEach(r => {
@@ -5384,7 +5510,7 @@ function renderShop() {
   const list = Object.values(groups).sort((a, b) => b.lv - a.lv || a.t.localeCompare(b.t));
   view.innerHTML = `
     <div class="sec-head"><h2>상점</h2><p>서식지와 알은 여기서! 특가·물약·왕국 발전·보석 상점도 있어요.</p></div>
-    ${shopNavHTML()}
+    ${shopTabsHTML()}
     <h3 class="sub" id="shopHab">🏠 서식지 상점 <small class="muted">사면 섬의 빈 땅에 바로 지어져요</small></h3>
     <div class="grid small">${[...EL.map(e => e.id), 'legend'].map(el => {
       const n = S.plots.filter(p => p && p.kind === 'hab' && p.el === el).length;
@@ -5415,12 +5541,14 @@ function renderShop() {
       </div>
     </div>
     <h3 class="sub" id="shopEgg">🥚 몬스터 알 상점 <small class="muted">사면 부화장으로 가요. 알맞은 서식지가 있어야 키울 수 있어요</small></h3>
-    <div class="grid small">${EGG_SHOP.map(t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini',
-      `<div class="price-tag">💰 ${fmt(eggPrice(t))}</div>`)).join('')}</div>
+    ${ownSplitHTML(EGG_SHOP, t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini',
+      `<div class="price-tag">💰 ${fmt(eggPrice(t))}</div>`))}
     ${moreEggsHTML()}
     ${shopMoreHTML()}
+    ${mysteryHTML()}
+    ${shopExtraHTML()}
     ${kingdomShopHTML()}
-    <h3 class="sub">🛍️ 룬 · 먹이 · 골드</h3>
+    <h3 class="sub" id="shopItems">🛍️ 룬 · 먹이 · 골드</h3>
     <div class="shop">
       <button class="shop-item" data-act="buyRune" data-kind="gold"><span class="si-ico">📦</span><span class="si-nm">룬 상자<small>★ 70% · ★★ 25% · ★★★ 5%</small></span><span class="si-cost">💰 1,000</span></button>
       <button class="shop-item" data-act="buyRune" data-kind="gem"><span class="si-ico">🎁</span><span class="si-nm">고급 룬 상자<small>★★ 60% · ★★★ 40%</small></span><span class="si-cost">💎 20</span></button>
@@ -5436,7 +5564,7 @@ function renderShop() {
         <div class="nm">${d.name}</div>
         <div class="meta">골드 +${d.bonus}%</div>
       </div>`).join('')}</div>
-    <h3 class="sub">👑 전설 상점<small class="muted">골드로 살 수 있어요… 모을 수만 있다면요</small></h3>
+    <h3 class="sub" id="shopLegend">👑 전설 상점<small class="muted">골드로 살 수 있어요… 모을 수만 있다면요</small></h3>
     <div class="legend-shop">${SHOP_LEGENDS.map(l => {
       const c = CAT[l.id];
       const owned = S.monsters.filter(m => m.type === l.id).length + S.hatch.filter(t => t === l.id).length;
@@ -5452,7 +5580,7 @@ function renderShop() {
         <button class="btn" data-act="buyLegend" data-id="${l.id}" ${can ? '' : 'disabled'}>구매</button>
       </div>`;
     }).join('')}</div>
-    <h3 class="sub">💠 내 룬 <small class="muted">같은 룬 3개를 합성하면 한 단계 위 룬이 돼요</small>
+    <h3 class="sub" id="shopRunes">💠 내 룬 <small class="muted">같은 룬 3개를 합성하면 한 단계 위 룬이 돼요</small>
       <button class="btn small" data-act="mergeAll" ${list.some(g => g.free >= 3 && g.lv < 3) ? '' : 'disabled'}>✨ 모두 합성</button></h3>
     <div class="rune-inv">${list.length ? list.map(g => `
       <div class="rune-row">
@@ -5460,6 +5588,7 @@ function renderShop() {
         <span class="muted">${g.total}개 (장착 ${g.total - g.free})</span>
         <button class="btn small" data-act="merge" data-t="${g.t}" data-lv="${g.lv}" ${g.free >= 3 && g.lv < 3 ? '' : 'disabled'}>합성</button>
       </div>`).join('') : '<p class="muted">아직 룬이 없어요.</p>'}</div>`;
+  shopApplyTab();
 }
 
 // 지금 수입으로 모으려면 얼마나 걸리는지 (절망 표시기)
@@ -5547,9 +5676,9 @@ function buyRankBox(r) {
 function moreEggsHTML() {
   const disc = evtOn('hatchfest') ? 0.5 : 1;
   const list = HYB_EGGS.filter(t => hybEggEl === 'all' || CAT[t].els.includes(hybEggEl));
-  return `<h3 class="sub" id="shopEgg2">🧬 혼합 몬스터 알 <small class="muted">두 속성 몬스터 55종 · 속성 서식지 둘 중 하나에 살아요</small></h3>
+  return `<h3 class="sub" id="shopEgg2">🧬 혼합 몬스터 알 <small class="muted">두 속성 몬스터 ${HYB_EGGS.length}종 · 속성 서식지 둘 중 하나에 살아요</small></h3>
     <div class="chips">${[['all', '전체'], ...EL.map(e => [e.id, e.emoji])].map(([id, t]) => `<button class="chip ${hybEggEl === id ? 'on' : ''}" data-act="hybEggEl" data-e="${id}">${t}</button>`).join('')}</div>
-    <div class="grid small">${list.map(t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini', `<div class="price-tag">💰 ${fmt(HYB_EGG_PRICE * disc)}</div>`)).join('')}</div>
+    ${ownSplitHTML(list, t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini', `<div class="price-tag">💰 ${fmt(HYB_EGG_PRICE * disc)}</div>`))}
     <h3 class="sub" id="shopBox">🎲 등급 알 상자 <small class="muted">고른 등급의 몬스터가 무작위로! 도감 채우기에 딱</small></h3>
     <div class="rank-boxes">${RANK_BOXES.map(b => `<button class="rank-box" data-act="buyRankBox" data-r="${b.r}" style="--rc:${RAR[b.r].color}">
         <span>🎲</span><b>${RAR[b.r].name} 알</b><small>${CAT_LIST.filter(c => c.rarity === b.r && !c.shop).length}종 중 하나</small><span class="rb-cost">💰 ${shortNum(b.cost * disc)}</span></button>`).join('')}</div>`;
@@ -8620,6 +8749,7 @@ const ACH_MORE = [
   ['wheel',    '🎡 룰렛 돌리기', 'stat', [1, 10, 50, 200], [5, 20, 60, 200]],
   ['memWin',   '🃏 짝 맞추기 끝내기', 'stat', [1, 10, 50, 200], [10, 30, 80, 250]],
   ['mgPlay',   '🎮 미니게임 하기', 'stat', [1, 20, 100, 500], [10, 40, 120, 400]],
+  ['mystery',  '🎁 미스터리 상자 열기', 'stat', [1, 10, 50, 200], [10, 30, 80, 200]],
   ['todoAll',  '📅 오늘 할 일 다 하기', 'stat', [1, 7, 30, 100], [10, 30, 100, 300]],
   ['friendGift', '💌 친구에게 하트 보내기', 'stat', [1, 10, 50, 200], [10, 30, 80, 200]],
   ['coopWin',  '🤝 협동 레이드 승리', 'stat', [1, 5, 20], [30, 80, 200]],
@@ -9117,6 +9247,7 @@ function render() {
 function goShop(id) {
   closeModal();
   tab = 'shop';
+  shopTab = shopTabOf(id);
   render();
   setTimeout(() => {
     const el = document.getElementById(id);
@@ -9265,19 +9396,19 @@ function tutPoint(k) {
   switch (k) {
     case 0: // 서식지 짓기
       if (inModal) return ['#modalBox [data-act=build][data-what^="hab:"]', '#modalBox [data-act=close]'];
-      return need('shop') || ['[data-act=buyHab][data-el="fire"]'];
+      return need('shop') || ['[data-act=buyHab][data-el="fire"]', '.shop-nav [data-tab=build]'];
     case 1: case 3: { // 알 사기 (4단계는 알이 있으면 부화)
       if (k === 3 && (S.hatch.length || allIncs().some(x => x.b))) return tutPoint(2);
       if (inModal) return ['#modalBox [data-act=close]'];
       const el = firstHabEl();
-      return need('shop') || [el ? `[data-act=buyMon][data-type="p:${el}"]` : '#shopEgg', '[data-act=buyMon]'];
+      return need('shop') || [el ? `[data-act=buyMon][data-type="p:${el}"]` : '#shopEgg', '[data-act=buyMon]', '.shop-nav [data-tab=egg]'];
     }
     case 2: // 부화 → 살 곳 고르기 (살 곳이 없으면 "짓고 넣기")
       if (inModal) return ['#modalBox [data-act=place]', '#modalBox [data-act=buildPlace]', '#modalBox [data-act=upPlace]', '#modalBox [data-act=hatchAll]', '#modalBox [data-act=crack]', '#modalBox [data-act=incubate]', '#modalBox [data-act=close]'];
       return onIsland ? { plot: hatcheries()[0] } : [bottomBtn('island')];
     case 4: // 농장 짓기
       if (inModal) return ['#modalBox [data-act=build][data-what="farm"]', '#modalBox [data-act=close]'];
-      return need('shop') || ['[data-act=buyHab][data-el="farm"]'];
+      return need('shop') || ['[data-act=buyHab][data-el="farm"]', '.shop-nav [data-tab=build]'];
     case 5: // 작물 심기
       if (inModal) return ['#modalBox [data-act=plant]', '#modalBox [data-act=close]'];
       return onIsland ? { plot: farmIdx()[0] } : [bottomBtn('island')];
@@ -9304,7 +9435,7 @@ function tutPoint(k) {
       return need('dex') || ['#view [data-act=dexMon]'];
     case 15: // 섬 꾸미기
       if (inModal) return ['#modalBox [data-act=build][data-what^="deco:"]', '#modalBox [data-act=decoPick]', '#modalBox [data-act=close]'];
-      return need('shop') || ['[data-act=buyDeco]:not(.wonder-card):not([disabled])'];
+      return need('shop') || ['[data-act=buyDeco]:not(.wonder-card):not([disabled])', '.shop-nav [data-tab=build]'];
     case 16: // 보스전
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
@@ -9358,16 +9489,16 @@ function tutPoint(k) {
       return S.team.length ? ['#view [data-act=fightLoop]'] : ['#view [data-act=teamAuto]'];
     case 27: // 왕국 발전
       if (inModal) return ['#modalBox [data-act=close]'];
-      return need('shop') || ['[data-act=kdUp]:not([disabled])'];
+      return need('shop') || ['[data-act=kdUp]:not([disabled])', '.shop-nav [data-tab=power]'];
     case 28: // 랜드마크·보석 상점
       if (inModal) return ['#modalBox [data-act=close]'];
-      return need('shop') || ['#shopGem', '#shopWonder'];
+      return need('shop') || ['.shop-nav [data-tab=gem]'];
     case 29: // 오늘의 특가
       if (inModal) return ['#modalBox [data-act=close]'];
-      return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopDeals]'];
+      return need('shop') || ['.shop-nav [data-tab=deal]'];
     case 30: // 물약·교환소
       if (inModal) return ['#modalBox [data-act=close]'];
-      return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopPotion]'];
+      return need('shop') || ['.shop-nav [data-tab=item]'];
     case 31: // 합성 제단
       if (inModal) return ['#modalBox [data-act=altarFuse]:not([disabled])', '#modalBox [data-act=altarAuto]:not([disabled])', '#modalBox [data-act=close]'];
       return need('mons') || ['#view [data-act=altar]'];
@@ -9388,7 +9519,7 @@ function tutPoint(k) {
       return S.team.length ? ['#view [data-act=raidFight]:not([disabled])', '#view .raid-card'] : ['#view [data-act=teamAuto]'];
     case 34: // 복제기
       if (inModal) return ['#modalBox [data-act=close]'];
-      return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopCloner]', '#shopCloner'];
+      return need('shop') || ['.shop-nav [data-tab=power]', '#shopCloner'];
     case 35: // 협동 레이드
       if (inModal) return ['#modalBox .coop-box h4', '#modalBox [data-act=pvpCancel]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
@@ -9399,7 +9530,7 @@ function tutPoint(k) {
       return ['#petBtn'];
     case 37: // 우주 발전
       if (inModal) return ['#modalBox [data-act=close]'];
-      return need('shop') || ['.shop-nav [data-act=shopJump][data-id=shopCosmos]', '#shopCosmos'];
+      return need('shop') || ['.shop-nav [data-tab=power]', '#shopCosmos'];
     case 38: // 친구
       if (inModal) return ['#modalBox #frCode', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
@@ -9632,6 +9763,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🛒', title: '상점 칸', text: '상점이 <b>6칸</b>으로 나뉘었어요! 위쪽 버튼으로 바꿔요.<br>🏠 건물 · 🥚 알 · 🎁 특가·상자 · 🧪 아이템 · 🏛️ 강해지기 · 💎 보석<br>새로 생긴 것: <b>🎁 미스터리 상자</b>(골드/보석) · 🪱 미끼 ×10 · 🍖 먹이 10,000 · 🎟️ 미니게임 티켓 · 🔥 레이드 도전권 · ⚔️ 길드전 공격권 · 📦 룬 상자 ×10' },
   { icon: '📅', title: '오늘 할 일', text: '섬 왼쪽의 <b>📅 할 일</b>에 매일 받을 것들이 모여 있어요!<br>🎁 일일 보상 · 📋 미션 · 🎡 룰렛 · 🏁 경주 응원권 · 🎮 미니게임 · 🔥 레이드 · ⚔️ 길드전 · 💌 하트 …<br>남은 개수가 버튼에 숫자로 보이고, <b>가기 →</b>를 누르면 바로 가요. 다 하면 <b>💎 10</b> 보너스!' },
   { icon: '🎮', title: '미니게임 16가지', text: '섬 왼쪽의 <b>🎮 미니게임</b> 버튼에 게임이 16가지!<br>🎣 낚시 · 🏁 경주 · 🎡 룰렛 · 🃏 짝 맞추기 · 🔨 두더지 잡기 · ⚡ 반응 속도 · 🔢 숫자 순서 · 🎨 색깔 맞추기 · 🧠 순서 기억 · ➕ 빠른 계산 · 🎈 풍선 터뜨리기 · ✊ 가위바위보 · 🔍 다른 그림 찾기 · 🎲 높을까 낮을까 · 📘 속성 퀴즈 · 🎁 보물 상자<br>새 게임은 하루 3판씩 무료! 잘할수록 ⭐이 많고 💰💎 보상도 커져요.' },
   { icon: '🃏', title: '몬스터 짝 맞추기', text: '<b>🃏 짝 맞추기</b>(섬 왼쪽 버튼)에서 뒤집힌 카드 16장 중 <b>같은 몬스터 두 장</b>을 찾아요!<br>적게 뒤집을수록 ⭐이 많아요 (11번 이하면 ⭐⭐⭐). 보상은 ⭐만큼 💰골드와 💎!<br>하루 3판 무료, 그다음엔 💎5. 🏅 최고 기록에 도전해 봐요!' },
@@ -9951,7 +10083,9 @@ const ACTIONS = {
   refreshDeals: () => refreshDeals(),
   buyPotion: (d) => buyPotion(d.id),
   buyExchange: () => buyExchange(),
-  shopJump: (d) => { if (d.id === 'shopKingdom') tutFlag('kingdom', true); if (d.id === 'shopCosmos') tutFlag('cosmos', true); if (d.id === 'shopCloner') tutFlag('cloner', true); if (d.id === 'shopDeals') tutFlag('deals', true); if (d.id === 'shopPotion' || d.id === 'shopExch') tutFlag('potion', true); updateGuide(); const el = document.getElementById(d.id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); } },
+  shopJump: (d) => { shopTab = d.tab || shopTabOf(d.id); render(); const p = $('#panel'); if (p) p.scrollTop = 0; window.scrollTo && window.scrollTo(0, 0); updateGuide(); },
+  buyMystery: (d) => buyMystery(d.k),
+  buyExtra: (d) => buyExtra(d.k),
   bigshopSeen: () => { if (!tutFlag('bigshop')) { tutFlag('bigshop', true); toast('🗽 랜드마크는 모든 섬 골드를, 💎 보석 상점은 로봇·부스터·전설 알을 팔아요!'); updateGuide(); } },
   kdGem: () => kdGemClaim(),
   buyBoost: () => buyBoost(),

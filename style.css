@@ -1497,3 +1497,19 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .td-name { font-size: 13px; font-weight: 700; } .td-name small { color: #ffe066; margin-left: 4px; }
 .td-ok { font-size: 12px; color: #7dff8f; font-weight: 900; }
 .todo-bonus { margin: 8px 0; font-weight: 900; }
+
+/* 🛒 상점 칸 + 미스터리 상자 */
+.shop-tabs { position: sticky; top: 0; z-index: 5; }
+.shop-tabs .chip.on { background: #ffd24a; color: #2a1a0a; border-color: #ffd24a; font-weight: 900; }
+.mystery-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 8px 0; }
+.mystery-box { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 14px 6px; border-radius: 18px; border: 3px solid #ffb020; background: radial-gradient(circle at 50% 20%, rgba(255, 176, 32, .35), rgba(0, 0, 0, .2)); color: var(--text); font: inherit; cursor: pointer; }
+.mystery-box.gem { border-color: #ff69b4; background: radial-gradient(circle at 50% 20%, rgba(255, 105, 180, .35), rgba(0, 0, 0, .2)); }
+.mystery-box span { font-size: 44px; animation: ldBob 1.2s ease-in-out infinite alternate; }
+.mystery-box small { font-size: 10px; color: var(--muted); } .mystery-box i { font-style: normal; font-weight: 900; color: #ffe066; }
+.mystery-open { text-align: center; } .mo-box { font-size: 64px; animation: ready .5s ease-in-out 3; } .mo-got { font-size: 18px; font-weight: 900; color: #ffe066; }
+
+/* 🥚 알 상점: 없는 몬스터 / 있는 몬스터 */
+.own-h { text-align: left; margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
+.own-h.new { color: #7dff8f; }
+.own-h small { color: var(--muted); font-weight: 400; }
+.own-all { margin: 6px 0; }
