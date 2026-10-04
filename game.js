@@ -4146,7 +4146,7 @@ function openIslandList() {
       '<span class="bo-nm">' + (k + 1) + '. ' + th.name + '<br><small>서식지 ' + habs + ' · 몬스터 ' + mons + '</small></span>' +
       '<span class="bo-cost">' + used + '/' + ISLAND_PLOTS + '칸</span></button>';
   }).join('');
-  showModal('<h3>🗺️ 섬 지도 <small class="muted">' + islCount() + '/' + ISL_MAX + '개</small></h3>' + buy + '<div class="build-list">' + rows + '</div>' +
+  showModal('<h3>🗺️ 섬 지도 <small class="muted">' + islCount() + '/' + ISL_MAX + '개</small></h3>' + buy + fillBtnHTML() + '<div class="build-list">' + rows + '</div>' +
     '<div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>');
 }
 
@@ -4195,6 +4195,7 @@ function openBuild(i) {
   showModal(`
     <h3>🏗️ 건설하기</h3>
     <p class="muted">몬스터는 자기 속성과 같은 서식지에서만 살 수 있어요.</p>
+    ${fillBtnHTML()}
     <div class="build-list">
       <button class="build-opt" data-act="decoPick" data-i="${i}" style="--hc:#ff5ce1">
         <span class="bo-ico">🎨</span><span class="bo-nm">섬 꾸미기 장식 <small>(골드 수입 보너스)</small></span><span class="bo-cost">▶</span>
@@ -4214,6 +4215,35 @@ function openBuild(i) {
     <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
 }
 
+const islFree = (k = S.isl || 0) => islandRange(k).filter(j => j < S.plots.length && !S.plots[j]);
+const fillBtnHTML = () => { const n = islFree().length; return n && !VISIT ? `<button class="btn fill-isl" data-act="fillIslOpen">🏠 이 섬 빈 땅 전부에 서식지 짓기 (${n}칸)</button>` : ''; };
+// 골고루: 모든 속성을 돌아가며
+const fillEls = (el, n) => Array.from({ length: n }, (_, k) => (el === 'mix' ? EL[k % EL.length].id : el));
+function openFillIsland() {
+  tutFlag('fillIsl', true);
+  const free = islFree(), th = ISLANDS[S.isl || 0];
+  if (!free.length) { toast('이 섬에는 빈 땅이 없어요'); return; }
+  const opt = (el, ico, nm, color) => { const cost = fillEls(el, free.length).reduce((s, e) => s + habBuildCost(e), 0);
+    return `<button class="build-opt" data-act="fillIsl" data-el="${el}" style="--hc:${color}"><span class="bo-ico">${ico}</span><span class="bo-nm">${nm}</span><span class="bo-cost">💰 ${shortNum(cost)}</span></button>`; };
+  showModal(`<h3>🏠 섬 전체에 서식지 짓기</h3>
+    <p class="muted">${th.emoji} ${th.name}의 빈 땅 <b>${free.length}칸</b>을 고른 서식지로 한 번에 채워요.</p>
+    <div class="build-list">
+      ${opt('mix', '🌈', '골고루 <small>(모든 속성을 돌아가며)</small>', '#ff9ad5')}
+      ${EL.map(e => opt(e.id, habEmoji(e.id), habName(e.id), habColor(e.id))).join('')}
+      ${opt('legend', habEmoji('legend'), habName('legend'), habColor('legend'))}
+    </div>
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
+}
+function fillIsland(el) {
+  const free = islFree();
+  if (!free.length) { toast('이 섬에는 빈 땅이 없어요'); return; }
+  const els = fillEls(el, free.length), cost = els.reduce((s, e) => s + habBuildCost(e), 0);
+  if (!spend(cost)) return;
+  free.forEach((j, k) => { S.plots[j] = { kind: 'hab', el: els[k], lv: 1, gold: 0 }; });
+  sfx('yay');
+  save(); closeModal(); render(); updateHud();
+  toast(`🏠 서식지 ${free.length}개를 한 번에 지었어요!`);
+}
 function build(i, what) {
   i = Number(i);
   if (S.plots[i]) return;
@@ -9898,6 +9928,10 @@ TUT.push(
   { text: '🏝️ 섬 이름(🗺️ 섬 지도)을 눌러 봐요. 💰 골드로 새 섬을 살 수 있어요 (최대 100개!)', done: () => tutFlag('islBuy'),
     go: () => { closeModal(); tab = 'island'; render(); openIslandList(); } },
 );
+TUT.push(
+  { text: '🏠 섬 이름(🗺️ 섬 지도)에서 🏠 이 섬 빈 땅 전부에 서식지 짓기를 눌러 봐요 (한 번에 섬을 꽉 채워요!)', done: () => tutFlag('fillIsl') || !islFree().length,
+    go: () => { closeModal(); tab = 'island'; render(); openFillIsland(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -10129,6 +10163,10 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#islandBar [data-act=islList]'];
+    case 53: // 섬 전체에 서식지
+      if (inModal) return ['#modalBox [data-act=fillIslOpen]', '#modalBox [data-act=close]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#islandBar [data-act=islList]'];
   }
   return null;
 }
@@ -10314,6 +10352,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🏠', title: '섬 전체에 서식지', text: '섬 이름(🗺️ 섬 지도)이나 빈 땅의 🏗️ 건설하기에서 🏠 이 섬 빈 땅 전부에 서식지 짓기를 눌러요.<br>속성 하나를 고르거나 🌈 골고루를 고르면 섬의 빈 땅을 한 번에 꽉 채워요!' },
   { icon: '🗑️', title: '알 모두 버리기', text: '부화장에 알이 너무 많이 쌓였나요?<br>부화장 창 아래쪽 🗑️ 알 모두 버리기를 누르면 한 번에 비울 수 있어요.<br>버린 알은 되돌릴 수 없으니 조심!' },
   { icon: '🏝️', title: '새 섬 사기', text: '섬 이름(🗺️ 섬 지도)을 누르면 맨 위에 🏝️ 새 섬 사기 버튼이 있어요.<br>섬 18개는 처음부터 있고, 19번째부터는 💰 골드로 살 수 있어요 (최대 100개)!<br>섬 하나마다 빈 땅이 25칸씩 생기고, 살 때마다 값이 올라가요.' },
   { icon: '🛒', title: '몬스터 전부 사기', text: '상점 🥚 알 칸에서 🛒 없는 몬스터 전부 사기를 누르면<br>아직 없는 몬스터를 한 번에 모두 사서 바로 부화시켜요!<br>알맞은 서식지가 없으면 부화장에서 기다려요.' },
@@ -10629,6 +10668,8 @@ const ACTIONS = {
   isl: (d) => goIsland((S.isl || 0) + Number(d.d)),
   islGo: (d) => goIsland(d.k),
   islBuy: () => buyIsland(),
+  fillIslOpen: () => openFillIsland(),
+  fillIsl: (d) => fillIsland(d.el),
   islList: () => openIslandList(),
   bossFight: (d) => startBossBattle(d.i),
   daily: () => openDaily(),

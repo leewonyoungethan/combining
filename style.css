@@ -1554,3 +1554,6 @@ body.ui-hidden .todo-btn { opacity: .55; }
 
 /* 🏝️ 섬 사기 */
 .isl-buy { display: block; width: 100%; margin: 6px 0 10px; font-weight: 900; }
+
+/* 🏠 섬 전체에 서식지 */
+.fill-isl { display: block; width: 100%; margin: 6px 0 10px; font-weight: 900; }
