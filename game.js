@@ -1021,7 +1021,18 @@ const AWAY = { sec: (Date.now() - (S.last || Date.now())) / 1000, gold0: S.plots
 // ===================== 계산 =====================
 const byUid = (uid) => S.monsters.find(m => m.uid === Number(uid));
 const monIncome = (m) => RAR[CAT[m.type].rarity].income * m.lv * (1 + 0.3 * (m.star || 0));
-const habMons = (i) => S.monsters.filter(m => m.hab === i);
+let HABIDX = null, HABIDX_REF = null, HABIDX_LEN = -1;
+const habIdxDirty = () => { HABIDX = null; };
+function habMons(i) {
+  const ms = S.monsters;
+  if (!HABIDX || HABIDX_REF !== ms || HABIDX_LEN !== ms.length) {
+    HABIDX = new Map();
+    for (const m of ms) { let a = HABIDX.get(m.hab); if (!a) HABIDX.set(m.hab, (a = [])); a.push(m); }
+    HABIDX_REF = ms; HABIDX_LEN = ms.length;
+  }
+  const a = HABIDX.get(i);
+  return a ? a.slice() : [];
+}
 // 서식지에 들어갈 수 있는 몬스터 수 = 레벨 (최소 2마리, Lv.100이면 100마리). 쌓이는 골드는 무제한
 const habCap = (i) => Math.max(2, S.plots[i].lv);
 const habLvBonus = (i) => (S.plots[i].lv - 1) * HAB_LV_BONUS;
@@ -4268,6 +4279,7 @@ function dropBuilding(from, to) {
     S.plots[to] = p;
     S.plots[from] = null;
     S.monsters.forEach(m => { if (m.hab === from) { m.hab = to; delete walkers[m.uid]; } });
+    habIdxDirty();
     toast('🚚 건물을 옮겼어요');
   } else if (p.kind === 'hatchery') {
     mergeHatch(to, from);
@@ -4570,7 +4582,8 @@ function openBuild(i) {
 const islFree = (k = S.isl || 0) => islandRange(k).filter(j => j < S.plots.length && !S.plots[j]);
 const fillBtnHTML = () => { const n = islFree().length; return n && !VISIT ? `<button class="btn fill-isl" data-act="fillIslOpen">🏠 이 섬 빈 땅 전부에 서식지 짓기 (${n}칸)</button>` : ''; };
 // 골고루: 모든 속성을 돌아가며
-const fillEls = (el, n) => Array.from({ length: n }, (_, k) => (el === 'mix' ? EL[k % EL.length].id : el));
+const MIX_ELS = () => [...EL.map(e => e.id), 'legend'];
+const fillEls = (el, n) => { const mix = MIX_ELS(); return Array.from({ length: n }, (_, k) => (el === 'mix' ? mix[k % mix.length] : el)); };
 function openFillIsland() {
   tutFlag('fillIsl', true);
   const free = islFree(), th = ISLANDS[S.isl || 0];
@@ -4580,7 +4593,7 @@ function openFillIsland() {
   showModal(`<h3>🏠 섬 전체에 서식지 짓기</h3>
     <p class="muted">${th.emoji} ${th.name}의 빈 땅 <b>${free.length}칸</b>을 고른 서식지로 한 번에 채워요.</p>
     <div class="build-list">
-      ${opt('mix', '🌈', '골고루 <small>(모든 속성을 돌아가며)</small>', '#ff9ad5')}
+      ${opt('mix', '🌈', '골고루 <small>(모든 속성 + 🏛️ 전설 서식지를 돌아가며)</small>', '#ff9ad5')}
       ${EL.map(e => opt(e.id, habEmoji(e.id), habName(e.id), habColor(e.id))).join('')}
       ${opt('legend', habEmoji('legend'), habName('legend'), habColor('legend'))}
     </div>
@@ -4727,6 +4740,7 @@ function moveMon(uid, i) {
   i = Number(i);
   if (!m || !habsFor(m.type).some(h => h.i === i)) return;
   m.hab = i;
+  habIdxDirty();
   delete walkers[m.uid];
   save();
   toast(`🏠 ${CAT[m.type].name}이(가) ${habName(S.plots[i].el)}으로 이사했어요!`);
@@ -5284,6 +5298,7 @@ function openHatchery(i = curHatch, slot) {
       ? S.hatch.map((t, k) => `<button class="egg-slot" data-act="incubate" data-idx="${k}"><span class="egg small ${eggLv(t)}">🥚</span><span>🐣 부화!</span></button>`).join('')
       : '<p class="muted">알이 없어요. 교배산이나 상점에서 알을 가져오세요!</p>'}</div>
     ${S.hatch.length + leftover.length > 1 ? '<div class="all-box"><button class="btn green" data-act="hatchAll">🐣 모두 부화 (알맞은 서식지로 자동 이사)</button></div>' : ''}
+    ${S.hatch.length ? '<div class="all-box"><button class="btn" data-act="makeRoom">🏠 남은 알 살 곳 만들기 (빈 서식지 바꾸기 · 새로 짓기)</button></div>' : ''}
     ${S.hatch.length + leftover.length ? `<div class="all-box"><button class="btn ghost small danger" data-act="dumpEggs">🗑️ 알 모두 버리기 (${fmt(S.hatch.length + leftover.length)}개)</button></div>` : ''}
     <p class="muted small-note">부화장 ${n}개가 알을 같이 보관해요 (${hatcheries().map(k => (S.plots[k].cap || HATCH_CAP) + '칸').join(' + ')}${mtnPower() > 1 ? ` + 교배산 추가분 ${2 * (mtnPower() - 1)}칸` : ''})</p>
     <div class="row">
@@ -5539,6 +5554,51 @@ function hatchAll() {
   allIncs().forEach(({ k, s, b }) => { if (b) { S.hatch.push(b.type); hatchIncs(S.plots[k])[s] = null; } });
   return oldHatchAll();
 }
+const eggNeed = (t) => (isLegend(t) ? 'legend' : CAT[t].els[0]);
+const lvCost = (from, to) => { let c = 0; for (let l = from; l < to; l++) c += habUpCost(l); return c; };
+function roomPlan() {
+  // 서식지마다 남은 칸 (속성별)
+  const left = {};
+  S.plots.forEach((p, i) => { if (p && p.kind === 'hab') left[i] = habCap(i) - habMons(i).length; });
+  const need = {};
+  for (const t of S.hatch) {
+    const els = isLegend(t) ? ['legend'] : CAT[t].els;
+    let home = null;
+    for (const [i, n] of Object.entries(left)) if (n > 0 && els.includes(S.plots[i].el)) { home = i; break; }
+    if (home != null) left[home]--;
+    else { const k = eggNeed(t); need[k] = (need[k] || 0) + 1; }
+  }
+  // 빈 서식지(몬스터 0마리) 중에서 바꿀 수 있는 것 (레벨 높은 것부터)
+  const neededEls = new Set(Object.keys(need));
+  const empties = S.plots.map((p, i) => ({ p, i })).filter(({ p, i }) => p && p.kind === 'hab' && !habMons(i).length && !neededEls.has(p.el))
+    .sort((a, b) => b.p.lv - a.p.lv);
+  const free = S.plots.map((p, i) => i).filter(i => !S.plots[i]);
+  const acts = [];
+  let cost = 0, short = 0;
+  for (const [el, n0] of Object.entries(need)) {
+    let n = n0;
+    while (n > 0 && empties.length) { const { p, i } = empties.shift(); acts.push({ i, el, lv: p.lv, conv: true }); cost += habBuildCost(el); n -= Math.max(2, p.lv); }
+    while (n > 0 && free.length) { const i = free.shift(), lv = Math.min(HAB_MAX_LV, Math.max(2, n)); acts.push({ i, el, lv, conv: false }); cost += habBuildCost(el) + lvCost(1, lv); n -= lv; }
+    if (n > 0) short += n;
+  }
+  return { need, acts, cost, short, eggs: Object.values(need).reduce((s, x) => s + x, 0) };
+}
+function makeRoom() {
+  const plan = roomPlan();
+  if (!plan.eggs) { toast('🎉 모든 알이 살 곳이 있어요! 🐣 모두 부화를 눌러요'); return; }
+  if (!plan.acts.length) { toast('😢 바꿀 빈 서식지나 빈 땅이 없어요. 🗺️ 섬 지도에서 새 섬을 사 주세요'); return; }
+  const conv = plan.acts.filter(a => a.conv).length, built = plan.acts.length - conv;
+  const what = Object.entries(plan.need).map(([el, n]) => `${habEmoji(el)} ${habName(el)} ${n}마리`).join(', ');
+  if (!confirm(`🏠 살 곳이 없는 알: ${what}\n\n빈 서식지 ${conv}개를 바꾸고, 빈 땅에 ${built}개를 새로 지을까요?\n💰 ${shortNum(plan.cost)}${plan.short ? `\n(그래도 ${plan.short}마리는 자리가 모자라요. 새 섬을 사 주세요)` : ''}`)) return;
+  if (!spend(plan.cost)) return;
+  for (const a of plan.acts) {
+    if (a.conv) { S.plots[a.i].el = a.el; S.plots[a.i].gold = S.plots[a.i].gold || 0; }
+    else S.plots[a.i] = { kind: 'hab', el: a.el, lv: a.lv, gold: 0 };
+  }
+  habIdxDirty();
+  toast(`🏠 서식지 ${plan.acts.length}개를 준비했어요! 이제 부화시킬게요`);
+  hatchAll();
+}
 function oldHatchAll() {
   const born = [], stuck = [];
   const eggs = S.hatch.slice();
@@ -5560,10 +5620,11 @@ function oldHatchAll() {
   render();
   showModal(`
     <h3>🐣 모두 부화!</h3>
-    ${born.length ? `<div class="grid small">${born.map(b => card({ type: b.type, lv: 1 }, '', 'mini',
-      b.isNew ? '<div class="found-mark">🆕</div>' : '')).join('')}</div>
+    ${born.length ? `<div class="grid small">${born.slice(0, 60).map(b => card({ type: b.type, lv: 1 }, '', 'mini',
+      b.isNew ? '<div class="found-mark">🆕</div>' : '')).join('')}</div>${born.length > 60 ? `<p class="muted">… 외 ${fmt(born.length - 60)}마리</p>` : ''}
       <p class="muted">${born.length}마리가 서식지로 이사했어요.</p>` : ''}
-    ${stuck.length ? `<p class="warn">${stuck.map(t => `${CAT[t].face} ${CAT[t].name}`).join(', ')}<br>살 수 있는 빈 서식지가 없어서 부화장에 남아 있어요.</p>` : ''}
+    ${stuck.length ? `<p class="warn">${stuck.slice(0, 20).map(t => `${CAT[t].face} ${CAT[t].name}`).join(', ')}${stuck.length > 20 ? ` 외 ${fmt(stuck.length - 20)}마리` : ''}<br>살 수 있는 빈 서식지가 없어서 부화장에 남아 있어요.${stuck.some(isLegend) ? '<br>⭐ 전설 이상 몬스터는 🏛️ 전설의 서식지에서만 살아요!' : ''}</p>
+      <div class="row"><button class="btn green" data-act="makeRoom">🏠 남은 알 살 곳 만들기</button></div>` : ''}
     <div class="row"><button class="btn" data-act="close">좋아!</button></div>`);
 }
 
@@ -5595,7 +5656,8 @@ function oldHatchReveal(idx) {
               <span class="bo-nm">${habName(p.el)} Lv.${p.lv} <small>${islandLabel(i)}</small></span>
               <span class="bo-cost">${habMons(i).length}/${habCap(i)}</span>
             </button>`).join('')}</div>`
-        : `<p class="warn">살 수 있는 빈 서식지가 없어요! 필요한 곳: ${need}</p>${roomOptions(idx, type)}`}
+        : `<p class="warn">살 수 있는 빈 서식지가 없어요! 필요한 곳: ${need}${isLegend(type) ? '<br>⭐ 전설 이상 몬스터는 🏛️ 전설의 서식지에서만 살아요' : ''}</p>${roomOptions(idx, type)}
+          <div class="row"><button class="btn green" data-act="makeRoom">🏠 빈 서식지를 바꿔서 살 곳 만들기</button></div>`}
       <div class="row">
         <button class="btn ghost small" data-act="sellEgg" data-idx="${idx}">팔기 (+💰 ${fmt(RAR[c.rarity].cost / 2)})</button>
         <button class="btn ghost small" data-act="close">나중에</button>
@@ -10913,6 +10975,7 @@ const ACTIONS = {
   upHabMax: (d) => upHabMax(d.i),
   hatchAll: () => hatchAll(),
   dumpEggs: () => dumpEggs(),
+  makeRoom: () => makeRoom(),
   feedAll: (d) => feedAll(d.mode),
   team: (d) => toggleTeam(d.uid),
   teamAuto: () => teamAuto(),
