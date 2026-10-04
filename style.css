@@ -1563,3 +1563,35 @@ body.ui-hidden .todo-btn { opacity: .55; }
 @keyframes savedPop { 0% { transform: scale(1); } 40% { transform: scale(1.3); background: rgba(80, 220, 120, .5); } 100% { transform: scale(1); } }
 
 .chk { display: flex; gap: 6px; align-items: center; justify-content: center; margin: 6px 0; font-weight: 700; }
+
+/* 🌦️ 날씨 · 🌙 밤 */
+.wx-layer { position: fixed; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+.wx-layer.hidden { display: none; }
+.wx-tint { position: absolute; inset: 0; transition: background 1s; }
+.wx-layer.night .wx-tint { background: radial-gradient(ellipse at 50% 55%, rgba(10, 20, 70, .25), rgba(5, 8, 40, .62)); }
+.wx-rain .wx-tint, .wx-storm .wx-tint { background: rgba(40, 60, 90, .18); }
+.wx-layer.night.wx-rain .wx-tint, .wx-layer.night.wx-storm .wx-tint { background: rgba(5, 10, 40, .6); }
+.wx-fog .wx-tint { background: linear-gradient(rgba(230, 235, 245, .35), rgba(230, 235, 245, .15)); }
+.wx-heat .wx-tint { background: rgba(255, 140, 40, .12); }
+.wx-snow .wx-tint { background: rgba(220, 235, 255, .12); }
+.wx-layer .drop { position: absolute; top: -10%; width: 2px; height: 18px; background: linear-gradient(transparent, rgba(190, 220, 255, .8)); animation: wxFall linear infinite; }
+.wx-layer .flake { position: absolute; top: -5%; width: 8px; height: 8px; border-radius: 50%; background: #fff; opacity: .85; animation: wxSnow linear infinite; }
+@keyframes wxFall { to { transform: translate(-30px, 115vh); } }
+@keyframes wxSnow { 0% { transform: translate(0, 0); } 50% { transform: translate(20px, 55vh); } 100% { transform: translate(-10px, 110vh); } }
+.wx-layer .star { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: #fff; animation: wxTwinkle 3s ease-in-out infinite; }
+@keyframes wxTwinkle { 50% { opacity: .2; } }
+.wx-layer .flash { position: absolute; inset: 0; background: #fff; opacity: 0; animation: wxFlash 7s infinite; }
+@keyframes wxFlash { 0%, 90%, 94%, 100% { opacity: 0; } 92% { opacity: .5; } 96% { opacity: .3; } }
+.wx-layer .bow { position: absolute; left: 10%; right: 10%; top: 8%; height: 60vh; border-radius: 50% 50% 0 0; opacity: .35;
+  background: radial-gradient(ellipse at 50% 100%, transparent 55%, #8f5bff 56%, #3d8bff 59%, #3dd17a 62%, #ffe14d 65%, #ff9a3d 68%, #ff4d4d 71%, transparent 72%); }
+#wxFly { position: absolute; inset: 0; }
+.wx-shoot, .wx-balloon { position: absolute; pointer-events: auto; font-size: 34px; padding: 10px; filter: drop-shadow(0 0 8px rgba(255, 255, 200, .9)); }
+.wx-shoot { top: var(--y); left: -10%; animation: wxShoot 3.5s linear forwards; }
+@keyframes wxShoot { to { transform: translate(120vw, 25vh) rotate(10deg); } }
+.wx-balloon { left: var(--x); bottom: -15%; animation: wxBalloon 7.5s ease-in-out forwards; }
+@keyframes wxBalloon { 30% { transform: translate(20px, -35vh); } 60% { transform: translate(-15px, -70vh); } 100% { transform: translate(10px, -125vh); } }
+.wx-shoot.got, .wx-balloon.got { animation: none; transform: scale(1.8); opacity: 0; transition: all .35s; }
+.wx-chip { margin-left: 4px; padding: 4px 8px; border-radius: 12px; background: rgba(255, 255, 255, .15); font-size: 16px; }
+.wx-row { display: grid; grid-template-columns: 40px 70px 70px 1fr; align-items: center; gap: 6px; padding: 6px 8px; margin: 4px 0; border-radius: 10px; background: rgba(255, 255, 255, .06); text-align: left; }
+.wx-row.now { background: rgba(255, 224, 102, .18); border: 1px solid rgba(255, 224, 102, .5); }
+.wx-row .wx-e { font-size: 26px; } .wx-row small { color: var(--muted); }

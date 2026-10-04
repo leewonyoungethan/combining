@@ -1747,10 +1747,107 @@ const EVT_PASS = [
 ];
 function evtGoldMult(el) {
   const ev = evtNow();
-  if (ev.id === 'goldrush') return 1.5;
-  if (ev.id === 'element' && ev.el === el) return 2;
-  return 1;
+  const w = weatherMult(el);
+  if (ev.id === 'goldrush') return 1.5 * w;
+  if (ev.id === 'element' && ev.el === el) return 2 * w;
+  return w;
 }
+// ===================== 🌦️ 날씨 · 🌙 낮과 밤 =====================
+const WEATHERS = [
+  { id: 'sun',     e: '☀️', en: 'Sunny', name: '맑음',     w: 38, desc: '화창한 날! 🎈 풍선이 자주 날아와요' },
+  { id: 'rain',    e: '🌧️', en: 'Rain', name: '비',       w: 18, desc: '💧 물 · 🌿 자연 서식지 골드 ×2', els: ['water', 'nature'] },
+  { id: 'snow',    e: '❄️', en: 'Snow', name: '눈',       w: 12, desc: '🧊 얼음 · 💎 수정 서식지 골드 ×2', els: ['ice', 'crystal'] },
+  { id: 'storm',   e: '⛈️', en: 'Storm', name: '천둥번개', w: 12, desc: '⚡ 전기 · 🌪️ 바람 서식지 골드 ×2', els: ['thunder', 'wind'] },
+  { id: 'heat',    e: '🥵', en: 'Heat wave', name: '폭염',     w: 10, desc: '🔥 불 · 🐉 용 서식지 골드 ×2', els: ['fire', 'dragon'] },
+  { id: 'rainbow', e: '🌈', en: 'Rainbow', name: '무지개',   w: 6,  desc: '✨ 모든 서식지 골드 ×1.5!', all: 1.5 },
+  { id: 'fog',     e: '🌫️', en: 'Fog', name: '안개',     w: 4,  desc: '👻 영혼 · 🌑 어둠 서식지 골드 ×2', els: ['spirit', 'dark'] },
+];
+const WX_SLOT = 3 * 3600 * 1000;
+const wxName = (w) => (window.LANG === 'en' ? w.en : w.name);
+const wxSlot = (t = Date.now()) => Math.floor(t / WX_SLOT);
+function weatherAt(slot) {
+  const tot = WEATHERS.reduce((s, w) => s + w.w, 0);
+  let h = Math.imul((slot >>> 0) ^ 0x9e3779b9, 0x85ebca6b) >>> 0; h = (h ^ (h >>> 13)) >>> 0; h = Math.imul(h, 0xc2b2ae35) >>> 0; h = (h ^ (h >>> 16)) >>> 0;
+  let r = (h / 4294967296) * tot;
+  for (const w of WEATHERS) { r -= w.w; if (r < 0) return w; }
+  return WEATHERS[0];
+}
+const weatherNow = () => weatherAt(wxSlot());
+const isNight = (d = new Date()) => d.getHours() >= 19 || d.getHours() < 6;
+function weatherMult(el) {
+  if (typeof S === 'undefined' || !S || VISIT) return 1;
+  const w = weatherNow();
+  return w.all || (w.els && w.els.includes(el) ? 2 : 1);
+}
+const wxDay = () => (S.wx && S.wx.day === dayKey() ? S.wx : (S.wx = { day: dayKey(), star: 0, ball: 0 }));
+const WX_CATCH_MAX = 10;
+let wxShown = '';
+function drawWeather() {
+  const L = $('#wxLayer');
+  if (!L) return;
+  const on = tab === 'island' && !B;
+  L.classList.toggle('hidden', !on);
+  if (!on) return;
+  const w = weatherNow(), night = isNight(), key = w.id + (night ? 'n' : 'd');
+  if (key === wxShown) return;
+  wxShown = key;
+  L.className = `wx-layer wx-${w.id} ${night ? 'night' : 'day'}`;
+  let parts = '';
+  const n = w.id === 'rain' || w.id === 'storm' ? 70 : w.id === 'snow' ? 50 : 0;
+  for (let k = 0; k < n; k++) {
+    const x = (k * 37) % 100, dl = ((k * 53) % 100) / 50, du = w.id === 'snow' ? 5 + (k % 5) : 0.6 + (k % 4) * 0.15;
+    parts += `<i class="${w.id === 'snow' ? 'flake' : 'drop'}" style="left:${x}%;animation-delay:-${dl}s;animation-duration:${du}s"></i>`;
+  }
+  if (night) for (let k = 0; k < 40; k++) parts += `<i class="star" style="left:${(k * 61) % 100}%;top:${(k * 29) % 45}%;animation-delay:-${(k % 7) * 0.5}s"></i>`;
+  if (w.id === 'storm') parts += '<i class="flash"></i>';
+  if (w.id === 'rainbow') parts += '<i class="bow"></i>';
+  L.innerHTML = `<div class="wx-tint"></div>${parts}<div id="wxFly"></div>`;
+}
+// 🌠 별똥별 (밤) · 🎈 풍선 (낮): 날아갈 때 누르면 선물
+function wxSpawn() {
+  if (tab !== 'island' || B || VISIT || !$('#modal').classList.contains('hidden') || document.hidden) return;
+  const fly = $('#wxFly');
+  if (!fly || fly.children.length) return;
+  const night = isNight(), d = wxDay();
+  if ((night ? d.star : d.ball) >= WX_CATCH_MAX) return;
+  const b = document.createElement('button');
+  b.className = night ? 'wx-shoot' : 'wx-balloon';
+  b.textContent = night ? '🌠' : ['🎈', '🎈', '🎁', '🪁'][Math.floor(Math.random() * 4)];
+  b.dataset.act = 'wxCatch';
+  b.style.setProperty('--y', (12 + Math.random() * 45) + '%');
+  b.style.setProperty('--x', (10 + Math.random() * 75) + '%');
+  fly.appendChild(b);
+  setTimeout(() => b.remove(), night ? 3600 : 7600);
+}
+function wxCatch(el) {
+  const night = isNight(), d = wxDay();
+  if ((night ? d.star : d.ball) >= WX_CATCH_MAX) return;
+  if (el) { el.disabled = true; el.classList.add('got'); setTimeout(() => el.remove(), 400); }
+  if (night) { d.star++; earn(3, 'gems'); toast(`🌠 별똥별을 잡았어요! 💎 3 (오늘 ${d.star}/${WX_CATCH_MAX})`); }
+  else { d.ball++; const g = Math.max(1000, Math.round(totalIncome() * 60)); earn(g); toast(`🎈 풍선을 잡았어요! 💰 ${shortNum(g)} (오늘 ${d.ball}/${WX_CATCH_MAX})`); }
+  tutFlag('wx', true);
+  sfx('coin'); save(); updateHud();
+}
+function openWeather() {
+  tutFlag('wx', true);
+  const now = wxSlot(), fmtH = (s) => { const t = new Date(s * WX_SLOT); return String(t.getHours()).padStart(2, '0') + ':00'; };
+  const rows = [0, 1, 2, 3].map(k => { const w = weatherAt(now + k); return `<div class="wx-row ${k ? '' : 'now'}"><span class="wx-e">${w.e}</span><b translate="no">${k ? fmtH(now + k) + ' ~' : (window.LANG === 'en' ? 'Now' : '지금')}</b><span translate="no">${wxName(w)}</span><small>${w.desc}</small></div>`; }).join('');
+  const d = wxDay(), night = isNight();
+  showModal(`<div class="wx-box"><h3>🌦️ 날씨 예보</h3>
+    <p class="muted">날씨는 3시간마다 바뀌어요. 날씨에 맞는 속성 서식지는 골드가 더 많이 나와요!</p>
+    ${rows}
+    <p class="muted">${night ? '🌙 지금은 밤이에요 (저녁 7시 ~ 아침 6시). 하늘을 지나가는 🌠 별똥별을 누르면 💎 3!' : '☀️ 지금은 낮이에요. 날아가는 🎈 풍선을 누르면 💰 골드!'}<br>오늘 잡은 것: 🌠 ${d.star}/${WX_CATCH_MAX} · 🎈 ${d.ball}/${WX_CATCH_MAX}</p>
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
+let wxLastSlot = null;
+setInterval(() => {
+  if (typeof S === 'undefined' || !S) return;
+  const s = wxSlot();
+  if (wxLastSlot != null && s !== wxLastSlot && tab === 'island') { const w = weatherNow(); toast(`${w.e} 날씨가 바뀌었어요: ${wxName(w)}! ${w.desc}`); renderIslandBar(); }
+  wxLastSlot = s;
+  drawWeather();
+}, 5000);
+setInterval(() => { if (Math.random() < 0.5) wxSpawn(); }, 9000);
 const totalIncome = () => S.plots.reduce((s, p, i) => s + (p && p.kind === 'hab' ? habIncome(i) : 0), 0);
 function evtCycle() {
   const d = new Date(), days = Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
@@ -4240,8 +4337,10 @@ function renderIslandBar() {
   const bar = $('#islandBar');
   bar.innerHTML = '<button class="ib-arrow" data-act="isl" data-d="-1">◀</button>' +
     '<button class="ib-name" data-act="islList">' + th.emoji + ' ' + (k + 1) + '. ' + th.name + ' <small>' + used + '/' + ISLAND_PLOTS + '칸' + (decoPercent(k) ? ' · 🎨+' + decoPercent(k) + '%' : '') + ' · 🗺️</small></button>' +
-    '<button class="ib-arrow" data-act="isl" data-d="1">▶</button>';
+    '<button class="ib-arrow" data-act="isl" data-d="1">▶</button>' +
+    (VISIT ? '' : `<button class="wx-chip" data-act="wxInfo" title="날씨 예보">${weatherNow().e}${isNight() ? '🌙' : ''}</button>`);
   bar.classList.toggle('hidden', tab !== 'island');
+  drawWeather();
   $('#zoomBtns').classList.toggle('hidden', tab !== 'island');
   const hb = $('#hideBtn');
   hb.classList.toggle('hidden', tab !== 'island');
@@ -10171,6 +10270,10 @@ TUT.push(
   { text: '⏫ 🗺️ 섬 지도에서 🏝️🏝️ 섬 여러 개 한 번에 사기나 ⏫ 모든 서식지 돈 되는 만큼 올리기를 눌러 봐요', done: () => tutFlag('bulkGrow'),
     go: () => { closeModal(); tab = 'island'; render(); openIslandList(); } },
 );
+TUT.push(
+  { text: '🌦️ 섬 이름 옆 날씨 버튼을 눌러 날씨 예보를 봐요 (날씨에 맞는 서식지는 골드 ×2! 밤엔 🌠, 낮엔 🎈를 잡아요)', done: () => tutFlag('wx'),
+    go: () => { closeModal(); tab = 'island'; render(); openWeather(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -10418,6 +10521,10 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=islBulkOpen]', '#modalBox [data-act=upAllHabsMax]', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#islandBar [data-act=islList]'];
+    case 57: // 날씨
+      if (inModal) return ['#modalBox [data-act=close]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#islandBar [data-act=wxInfo]'];
   }
   return null;
 }
@@ -10603,6 +10710,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🌦️', title: '날씨와 낮 · 밤', text: '섬의 날씨가 3시간마다 바뀌어요! 🌧️ 비엔 물·자연, ❄️ 눈엔 얼음·수정, ⛈️ 천둥번개엔 전기·바람 서식지 골드 ×2, 🌈 무지개엔 모두 ×1.5!<br>저녁 7시부터는 밤이 돼서 섬이 어두워지고 🌠 별똥별이 지나가요 (누르면 💎 3). 낮에는 🎈 풍선을 잡으면 💰!<br>섬 이름 옆 날씨 버튼을 누르면 앞으로의 날씨 예보도 볼 수 있어요.' },
   { icon: '🏝️', title: '한 번에 키우기', text: '🗺️ 섬 지도에서 🏝️🏝️ 섬 여러 개 한 번에 사기를 누르면 1 · 5 · 10 · 25개나 돈 되는 만큼 섬을 사고, 서식지까지 꽉 채워 줘요.<br>⏫ 모든 서식지 돈 되는 만큼 올리기를 누르면 낮은 레벨부터 골고루 Lv.100까지 올려요!' },
   { icon: '💾', title: '저장 버튼', text: '게임은 저절로 저장되지만, 위쪽 💾 버튼을 누르면 지금 바로 저장해요!<br>컴퓨터에서는 Ctrl + S 키로도 저장할 수 있어요.<br>저장이 잘 되면 시간과 크기를 알려 줘요.' },
   { icon: '⏫', title: '서식지 Lv.100', text: '서식지는 이제 Lv.100까지 올릴 수 있어요!<br>레벨만큼 몬스터가 살 수 있고 (Lv.100 = 100마리), 레벨마다 골드 수입 +25%.<br>서식지를 눌러 ⏫ 돈 되는 만큼 올리기를 누르면 한 번에 쭉 올라가요.' },
@@ -10925,6 +11033,8 @@ const ACTIONS = {
   islBuy: () => buyIsland(),
   fillIslOpen: () => openFillIsland(),
   islBulkOpen: () => openIslandBulk(),
+  wxInfo: () => openWeather(),
+  wxCatch: (d, el) => wxCatch(el),
   islBulk: (d) => buyIslandsBulk(d.n),
   upAllHabsMax: () => upAllHabsMax(),
   fillIsl: (d) => fillIsland(d.el),
