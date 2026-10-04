@@ -5964,7 +5964,7 @@ function startLoop() {
   tutFlag('loop', true);
   if (!S.team.map(byUid).filter(Boolean).length) { toast('먼저 팀을 짜 주세요 (⚡ 자동 편성)'); return; }
   LOOP = { wins: 0, start: S.stage, gold: S.gold };
-  toast('🔁 연속 전투 시작! 지거나 ⏹ 멈추기를 누르면 끝나요');
+  toast(tutFlag('speed') ? '🔁 연속 전투 시작! 지거나 ⏹ 멈추기를 누르면 끝나요' : '🔁 연속 전투 시작! 위쪽 ⏩ 배속 버튼을 누르면 최대 1000배까지 빨라져요');
   startBattle();
 }
 function stopLoop(reason) {
@@ -9390,6 +9390,10 @@ TUT.push(
 TUT.push(
   { text: '📅 섬 왼쪽의 📅 할 일에서 오늘 받을 수 있는 것들을 한눈에 봐요 (다 하면 💎10!)', done: () => tutFlag('todo'), go: () => { closeModal(); tab = 'island'; render(); openTodo(); } },
 );
+TUT.push(
+  { text: '⏩ 🔁 연속 전투를 하면서 전투 화면 위쪽 ⏩ 배속 버튼을 눌러 봐요 (최대 1000배속!)', done: () => tutFlag('speed') || (S.bSpeed || 1) > 1,
+    go: () => { closeModal(); tab = 'adventure'; render(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -9597,6 +9601,10 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=todoGo]', '#modalBox [data-act=todoBonus]', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#todoBtn'];
+    case 48: // 전투 배속
+      if (inModal) return ['#modalBox [data-act=close]'];
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return S.team.length ? ['#view [data-act=fightLoop]'] : ['#view [data-act=teamAuto]'];
   }
   return null;
 }
@@ -9782,6 +9790,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '⏩', title: '전투 배속', text: '전투 화면 위쪽 <b>⏩ 배속</b> 버튼을 누를 때마다 빨라져요!<br>보통 전투는 <b>4배</b>까지, <b>🔁 연속 전투</b>는 1 → 2 → 4 → 10 → 25 → 50 → 100 → 250 → 500 → <b>1000배</b>까지!<br>25배부터는 움직이는 장면을 건너뛰고 결과만 빠르게 보여 줘요.' },
   { icon: '🛒', title: '상점 칸', text: '상점이 <b>6칸</b>으로 나뉘었어요! 위쪽 버튼으로 바꿔요.<br>🏠 건물 · 🥚 알 · 🎁 특가·상자 · 🧪 아이템 · 🏛️ 강해지기 · 💎 보석<br>새로 생긴 것: <b>🎁 미스터리 상자</b>(골드/보석) · 🪱 미끼 ×10 · 🍖 먹이 10,000 · 🎟️ 미니게임 티켓 · 🔥 레이드 도전권 · ⚔️ 길드전 공격권 · 📦 룬 상자 ×10' },
   { icon: '📅', title: '오늘 할 일', text: '섬 왼쪽의 <b>📅 할 일</b>에 매일 받을 것들이 모여 있어요!<br>🎁 일일 보상 · 📋 미션 · 🎡 룰렛 · 🏁 경주 응원권 · 🎮 미니게임 · 🔥 레이드 · ⚔️ 길드전 · 💌 하트 …<br>남은 개수가 버튼에 숫자로 보이고, <b>가기 →</b>를 누르면 바로 가요. 다 하면 <b>💎 10</b> 보너스!' },
   { icon: '🎮', title: '미니게임 16가지', text: '섬 왼쪽의 <b>🎮 미니게임</b> 버튼에 게임이 16가지!<br>🎣 낚시 · 🏁 경주 · 🎡 룰렛 · 🃏 짝 맞추기 · 🔨 두더지 잡기 · ⚡ 반응 속도 · 🔢 숫자 순서 · 🎨 색깔 맞추기 · 🧠 순서 기억 · ➕ 빠른 계산 · 🎈 풍선 터뜨리기 · ✊ 가위바위보 · 🔍 다른 그림 찾기 · 🎲 높을까 낮을까 · 📘 속성 퀴즈 · 🎁 보물 상자<br>새 게임은 하루 3판씩 무료! 잘할수록 ⭐이 많고 💰💎 보상도 커져요.' },
@@ -9934,6 +9943,7 @@ const ACTIONS = {
   bSkill: (d) => playerSkill(d.i),
   bTarget: (d) => setTarget(d.id),
   bFast: () => {
+    tutFlag('speed', true);
     const list = LOOP ? SPEEDS_LOOP : SPEEDS, cur = bSpeed();
     const next = list[(list.indexOf(cur) + 1) % list.length] || 1;
     S.bSpeed = next; S.fastBattle = next > 1; B.fast = next > 1;
