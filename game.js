@@ -5960,11 +5960,19 @@ const unitById = (id) => B.units.find(u => u.id === id);
 
 // ----- 🔁 연속 전투: 이기면 잠깐 뒤 다음 스테이지를 자동으로 시작. 지거나 멈추기를 누르면 끝 -----
 let LOOP = null;   // { wins, start, gold }
+function openLoopStart() {
+  if (!S.team.map(byUid).filter(Boolean).length) { toast('먼저 팀을 짜 주세요 (⚡ 자동 편성)'); return; }
+  const cur = S.bSpeed || 1;
+  showModal(`<div class="loop-start"><h3>🔁 연속 전투</h3>
+    <p class="muted">몇 배속으로 할까요? 이기면 다음 스테이지로 자동으로 계속 싸워요. (전투 중에도 ⏩ 버튼으로 바꿀 수 있어요 · <b>Esc</b> 키로 나가기)</p>
+    <div class="ls-grid">${SPEEDS_LOOP.map(sp => `<button class="ls-sp ${sp === cur ? 'on' : ''} ${sp >= 1000 ? 'hot' : ''}" data-act="loopGo" data-sp="${sp}">⏩ ${fmt(sp)}배</button>`).join('')}</div>
+    <div class="row"><button class="btn ghost small" data-act="close">취소</button></div></div>`);
+}
 function startLoop() {
   tutFlag('loop', true);
   if (!S.team.map(byUid).filter(Boolean).length) { toast('먼저 팀을 짜 주세요 (⚡ 자동 편성)'); return; }
   LOOP = { wins: 0, start: S.stage, gold: S.gold };
-  toast(tutFlag('speed') ? '🔁 연속 전투 시작! 지거나 ⏹ 멈추기를 누르면 끝나요' : '🔁 연속 전투 시작! 위쪽 ⏩ 배속 버튼을 누르면 최대 1000배까지 빨라져요');
+  toast(tutFlag('speed') ? '🔁 연속 전투 시작! 지거나 ⏹ 멈추기를 누르면 끝나요' : '🔁 연속 전투 시작! 위쪽 ⏩ 배속 버튼으로 최대 10000배까지 · Esc 키로 나가기');
   startBattle();
 }
 function stopLoop(reason) {
@@ -6007,11 +6015,17 @@ function logB(msg) {
   if (B.log.length > 30) B.log.shift();
 }
 // 배속: 보통 전투 1·2·4배, 🔁 연속 전투는 10·25·50·100배까지
-const SPEEDS_LOOP = [1, 2, 4, 10, 25, 50, 100, 250, 500, 1000], SPEEDS = [1, 2, 4];
+const SPEEDS_LOOP = [1, 2, 4, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000], SPEEDS = [1, 2, 4];
 // 250배속부터는 타이머(최소 4ms)를 기다리지 않고 바로 다음 차례로 (화면이 멈추지 않게 한 번씩 숨은 쉬면서)
 const FAST_Q = [], FAST_CH = new MessageChannel();
-FAST_CH.port1.onmessage = () => { const f = FAST_Q.shift(); if (f) f(); };
-function soon(fn) { FAST_Q.push(fn); FAST_CH.port2.postMessage(0); }
+// 한 번에 쓸 시간(ms): 1000배까지는 한 차례씩, 2500·5000·10000배는 그만큼 여러 차례를 몰아서
+const fastBudget = () => { const sp = typeof B !== 'undefined' && B ? bSpeed() : 0; return sp >= 10000 ? 14 : sp >= 5000 ? 7 : sp >= 2500 ? 3 : 0; };
+FAST_CH.port1.onmessage = () => {
+  const budget = fastBudget(), t0 = performance.now();
+  do { const f = FAST_Q.shift(); if (!f) break; f(); } while (budget && FAST_Q.length && performance.now() - t0 < budget);
+  if (FAST_Q.length) FAST_CH.port2.postMessage(0);
+};
+function soon(fn) { FAST_Q.push(fn); if (FAST_Q.length === 1) FAST_CH.port2.postMessage(0); }
 // clearTimeout(B.timer)로 "바로 진행" 예약도 취소되게
 const _clearTimeout = window.clearTimeout.bind(window);
 window.clearTimeout = (t) => { if (t && typeof t === 'object' && 'dead' in t) t.dead = true; else _clearTimeout(t); };
@@ -6046,7 +6060,7 @@ function fxSpan(cls, html, x, y) {
   return s;
 }
 function floatText(u, html, kind) {
-  if (!$('#fxLayer')) return;
+  if (!$('#fxLayer') || (B && bSpeed() >= 25)) return;   // 25배속부터는 효과 글자 생략
   const { x, y } = centerOf(u);
   const s = fxSpan(`float-num ${kind}`, html, x, y - 20);
   s.animate([
@@ -6057,6 +6071,7 @@ function floatText(u, html, kind) {
   setTimeout(() => s.remove(), dur(1100) + 50);
 }
 async function lunge(att, tgt) {
+  if (B && bSpeed() >= 25) return;   // 25배속부터는 달려드는 움직임 생략 (화면 위치를 재느라 느려져서)
   const el = unitEl(att);
   if (!el) return;
   const p = centerOf(att), q = tgt ? centerOf(tgt) : { x: p.x, y: p.y + (att.side === 'me' ? -200 : 200) };
@@ -6070,7 +6085,7 @@ async function lunge(att, tgt) {
   await wait(520);
 }
 async function projectile(from, to, icon, big) {
-  if (!$('#fxLayer')) return;
+  if (!$('#fxLayer') || (B && bSpeed() >= 25)) return;   // 25배속부터는 날아가는 효과 생략
   const p = centerOf(from), q = centerOf(to);
   const s = fxSpan(`proj ${big ? 'big' : ''}`, icon, p.x, p.y);
   s.animate([
@@ -6087,6 +6102,7 @@ async function projectile(from, to, icon, big) {
   setTimeout(() => boom.remove(), dur(380) + 50);
 }
 function shake(u, strong) {
+  if (B && bSpeed() >= 25) return;
   const el = unitEl(u);
   if (!el) return;
   const k = strong ? 14 : 8;
@@ -6413,6 +6429,17 @@ function endBattle(win) {
   updateHud();
 }
 
+// Esc 키: 열린 창이 있으면 닫고, 전투 중이면 나간다 (연속 전투는 바로 멈추고 나가기)
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || e.isComposing) return;
+  if (B) {
+    e.preventDefault();
+    if (LOOP || B.over) { if (LOOP) stopLoop('Esc'); clearTimeout(B.timer); if (B && B.pvp) { netSend({ t: 'bye' }); netClose(); } B = null; $('#battle').classList.add('hidden'); render(); updateHud(); toast('⌨️ Esc: 전투에서 나왔어요'); }
+    else quitBattle();
+    return;
+  }
+  if (!$('#modal').classList.contains('hidden')) { e.preventDefault(); closeModal(); }
+});
 function quitBattle() {
   if (!B) return;
   // 연속 전투 중에 누르면: 연속만 멈추고 지금 전투는 계속 (끝나면 확인)
@@ -6470,8 +6497,12 @@ function updateLog() {
   log.innerHTML = B.log.slice(-4).map((l, i, a) => `<div class="${i === a.length - 1 ? 'last' : ''}">${l}</div>`).join('');
 }
 
+let lastBDraw = 0;
 function drawBattle() {
   if (!B) return;
+  // 2500배속부터는 화면을 0.05초에 한 번만 다시 그린다 (끝났을 때는 꼭 그린다)
+  if (B.built && !B.over && bSpeed() >= 2500 && performance.now() - lastBDraw < 50) return;
+  lastBDraw = performance.now();
   if (!B.built || !$('#arena')) {
     const me = B.units.filter(u => u.side === 'me');
     const foes = B.units.filter(u => u.side === 'foe');
@@ -9391,7 +9422,7 @@ TUT.push(
   { text: '📅 섬 왼쪽의 📅 할 일에서 오늘 받을 수 있는 것들을 한눈에 봐요 (다 하면 💎10!)', done: () => tutFlag('todo'), go: () => { closeModal(); tab = 'island'; render(); openTodo(); } },
 );
 TUT.push(
-  { text: '⏩ 🔁 연속 전투를 하면서 전투 화면 위쪽 ⏩ 배속 버튼을 눌러 봐요 (최대 1000배속!)', done: () => tutFlag('speed') || (S.bSpeed || 1) > 1,
+  { text: '⏩ 🔁 연속 전투를 시작할 때 배속을 골라 봐요 (최대 10000배속! Esc 키로 나가기)', done: () => tutFlag('speed') || (S.bSpeed || 1) > 1,
     go: () => { closeModal(); tab = 'adventure'; render(); } },
 );
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
@@ -9507,7 +9538,7 @@ function tutPoint(k) {
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#evtBtn'];
     case 26: // 연속 전투
-      if (inModal) return ['#modalBox [data-act=close]'];
+      if (inModal) return ['#modalBox .ls-sp.on', '#modalBox [data-act=loopGo]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return S.team.length ? ['#view [data-act=fightLoop]'] : ['#view [data-act=teamAuto]'];
     case 27: // 왕국 발전
@@ -9602,7 +9633,7 @@ function tutPoint(k) {
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#todoBtn'];
     case 48: // 전투 배속
-      if (inModal) return ['#modalBox [data-act=close]'];
+      if (inModal) return ['#modalBox [data-act=loopGo][data-sp="10"]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return S.team.length ? ['#view [data-act=fightLoop]'] : ['#view [data-act=teamAuto]'];
   }
@@ -9790,7 +9821,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
-  { icon: '⏩', title: '전투 배속', text: '전투 화면 위쪽 <b>⏩ 배속</b> 버튼을 누를 때마다 빨라져요!<br>보통 전투는 <b>4배</b>까지, <b>🔁 연속 전투</b>는 1 → 2 → 4 → 10 → 25 → 50 → 100 → 250 → 500 → <b>1000배</b>까지!<br>25배부터는 움직이는 장면을 건너뛰고 결과만 빠르게 보여 줘요.' },
+  { icon: '⏩', title: '전투 배속', text: '전투 화면 위쪽 <b>⏩ 배속</b> 버튼을 누를 때마다 빨라져요!<br>보통 전투는 <b>4배</b>까지, <b>🔁 연속 전투</b>는 시작할 때 배속을 골라요: 1 · 2 · 4 · 10 · 25 · 50 · 100 · 250 · 500 · 1000 · 2500 · 5000 · <b>10000배</b>!<br>25배부터는 움직이는 장면을 건너뛰고 결과만 빠르게 보여 줘요. 전투 중에 <b>Esc</b> 키를 누르면 바로 나가요.' },
   { icon: '🛒', title: '상점 칸', text: '상점이 <b>6칸</b>으로 나뉘었어요! 위쪽 버튼으로 바꿔요.<br>🏠 건물 · 🥚 알 · 🎁 특가·상자 · 🧪 아이템 · 🏛️ 강해지기 · 💎 보석<br>새로 생긴 것: <b>🎁 미스터리 상자</b>(골드/보석) · 🪱 미끼 ×10 · 🍖 먹이 10,000 · 🎟️ 미니게임 티켓 · 🔥 레이드 도전권 · ⚔️ 길드전 공격권 · 📦 룬 상자 ×10' },
   { icon: '📅', title: '오늘 할 일', text: '섬 왼쪽의 <b>📅 할 일</b>에 매일 받을 것들이 모여 있어요!<br>🎁 일일 보상 · 📋 미션 · 🎡 룰렛 · 🏁 경주 응원권 · 🎮 미니게임 · 🔥 레이드 · ⚔️ 길드전 · 💌 하트 …<br>남은 개수가 버튼에 숫자로 보이고, <b>가기 →</b>를 누르면 바로 가요. 다 하면 <b>💎 10</b> 보너스!' },
   { icon: '🎮', title: '미니게임 16가지', text: '섬 왼쪽의 <b>🎮 미니게임</b> 버튼에 게임이 16가지!<br>🎣 낚시 · 🏁 경주 · 🎡 룰렛 · 🃏 짝 맞추기 · 🔨 두더지 잡기 · ⚡ 반응 속도 · 🔢 숫자 순서 · 🎨 색깔 맞추기 · 🧠 순서 기억 · ➕ 빠른 계산 · 🎈 풍선 터뜨리기 · ✊ 가위바위보 · 🔍 다른 그림 찾기 · 🎲 높을까 낮을까 · 📘 속성 퀴즈 · 🎁 보물 상자<br>새 게임은 하루 3판씩 무료! 잘할수록 ⭐이 많고 💰💎 보상도 커져요.' },
@@ -9937,7 +9968,8 @@ const ACTIONS = {
   team: (d) => toggleTeam(d.uid),
   teamAuto: () => teamAuto(),
   fight: () => startBattle(),
-  fightLoop: () => { if (B) { if (!B.over) return; B = null; $('#battle').classList.add('hidden'); } startLoop(); },
+  fightLoop: () => { if (B) { if (!B.over) return; B = null; $('#battle').classList.add('hidden'); } openLoopStart(); },
+  loopGo: (d) => { S.bSpeed = Number(d.sp) || 1; S.fastBattle = S.bSpeed > 1; if (S.bSpeed > 1) tutFlag('speed', true); save(); closeModal(); startLoop(); },
   loopStop: () => { stopLoop(); },
   nextStage: () => { if (B) { clearTimeout(B.timer); B = null; $('#battle').classList.add('hidden'); } startBattle(); },
   bSkill: (d) => playerSkill(d.i),
