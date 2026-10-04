@@ -1539,3 +1539,7 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .g48-c.l5 { background: #ff9f5a; } .g48-c.l6 { background: #ff7b6b; } .g48-c.l7 { background: #ff5d8f; } .g48-c.l8 { background: #c77dff; }
 .g48-c.l9 { background: #7b9cff; } .g48-c.l10 { background: #4dd4ff; } .g48-c.l11 { background: linear-gradient(135deg, #ffe066, #ff6bd6); }
 .g48-c[class*=" l"] small { color: #5a3b00; }
+
+/* 🌌 우주부자 */
+.rich-gift input { width: 100%; margin: 6px 0; font-size: 18px; text-align: center; }
+.rg-cur, .rg-quick { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 6px 0; }

@@ -9535,19 +9535,50 @@ function openCode() {
   });
 }
 
+// 🌌 우주부자: 숫자와 단위를 적으면 그만큼 받는다 (예: 3Ce · 500만 · 1.5M · 12345)
+let RICH_CUR = 'gold';
+function parseAmount(txt) {
+  const t = String(txt || '').replace(/[,\s]/g, '');
+  const m = t.match(/^(\d+(?:\.\d+)?)(.*)$/);
+  if (!m) return NaN;
+  const num = Number(m[1]), unit = m[2];
+  if (!unit) return num;
+  const en = NUM_UNITS.find(([, s]) => s.toLowerCase() === unit.toLowerCase());
+  if (en) return num * en[0];
+  const kr = KR_UNITS.find(([, s]) => s === unit);
+  if (kr) return num * kr[0];
+  return NaN;
+}
+function openRichGift() {
+  showModal(`<div class="rich-gift"><h3>🌌 우주부자</h3>
+    <p class="muted">받고 싶은 만큼 적어요! 숫자 뒤에 단위를 붙여도 돼요.<br>예) <b>3Ce</b> · <b>500만</b> · <b>1.5M</b> · <b>12345</b> (최대 100Ce)</p>
+    <div class="rg-cur">${[['gold', '💰 골드'], ['gems', '💎 보석'], ['food', '🍖 먹이']].map(([k, l]) => `<button class="btn small ${RICH_CUR === k ? 'green' : 'ghost'}" data-act="richCur" data-k="${k}">${l}</button>`).join('')}</div>
+    <input id="richAmt" maxlength="24" autocomplete="off" placeholder="예: 3Ce">
+    <p class="muted" id="richPrev">&nbsp;</p>
+    <div class="rg-quick">${['1M', '1B', '1T', '1Dc', '1Vg', '1Ce', '3Ce', '100Ce'].map(q => `<button class="btn ghost small" data-act="richQuick" data-q="${q}">${q}</button>`).join('')}</div>
+    <div class="row"><button class="btn big green" data-act="richGo">🎁 받기</button><button class="btn ghost" data-act="close">닫기</button></div></div>`);
+  const inp = $('#richAmt');
+  const prev = () => { const n = parseAmount(inp.value); mgSet('#richPrev', inp.value.trim() ? (isFinite(n) && n > 0 ? `= ${shortNum(Math.min(n, MONEY_CAP))}${n > MONEY_CAP ? ' (최대 100Ce까지만)' : ''}` : '❓ 숫자와 단위를 확인해 주세요') : '&nbsp;'); };
+  inp.addEventListener('input', prev);
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) richGo(); });
+  inp.focus();
+}
+function richGo() {
+  const inp = $('#richAmt');
+  if (!inp) return;
+  const n = parseAmount(inp.value);
+  if (!isFinite(n) || n <= 0) { toast('❓ 숫자를 적어 주세요 (예: 3Ce · 500만)'); return; }
+  const k = RICH_CUR, ico = k === 'gold' ? '💰' : k === 'gems' ? '💎' : '🍖';
+  S[k] = Math.min(MONEY_CAP, (S[k] || 0) + Math.floor(Math.min(n, MONEY_CAP)));
+  save(); updateHud(); render(); sfx('win');
+  closeModal();
+  toast(`🌌 ${ico} ${shortNum(Math.min(n, MONEY_CAP))} 들어왔어요! (지금 ${shortNum(S[k])})`);
+}
 function submitCode() {
   const inp = $('#codeInput');
   if (!inp) return;
   const v = inp.value.replace(/\s/g, '');
-  if (v === CE_CODE) {
-    closeModal();
-    if (S.ceGift) { toast('이미 3Ce를 받았어요 💰'); return; }
-    S.ceGift = true;
-    S.gold = Math.min(MONEY_CAP, (S.gold || 0) + 3e303);
-    save(); updateHud(); render(); sfx('win');
-    toast('🌌 3Ce 💰 들어왔어요! (' + shortNum(S.gold) + ')');
-    return;
-  }
+  if (v === CE_CODE) { openRichGift(); return; }
   if (v === SECRET_CODE) {
     closeModal();
     if (S.infinite) { toast('이미 돈 무한이에요 💰'); return; }
@@ -10484,6 +10515,9 @@ const ACTIONS = {
   music: () => toggleMusic(),
   firstAccOk: () => firstAccOk(),
   krUnits: () => { S.krUnits = !S.krUnits; tutFlag('krunit', true); save(); UT_OPEN = true; openResInfo('gold'); UT_OPEN = false; render(); updateHud(); toast(S.krUnits ? '🇰🇷 이제 만 · 억 · 조 단위로 보여요' : '📏 K · M · B 단위로 돌아왔어요'); },
+  richCur: (d) => { RICH_CUR = d.k; const v = ($('#richAmt') || {}).value || ''; openRichGift(); const i = $('#richAmt'); if (i) { i.value = v; i.dispatchEvent(new Event('input')); } },
+  richQuick: (d) => { const i = $('#richAmt'); if (i) { i.value = d.q; i.dispatchEvent(new Event('input')); } },
+  richGo: () => richGo(),
   lang: () => { tutFlag('lang', true); save(); window.setLang(window.LANG === 'en' ? 'ko' : 'en'); },
   mute: () => { toggleMute(); if ($('#modalBox .build-opt[data-act=mute]')) openAccountMenu(); },
   fullscreen: () => toggleFullscreen(),
