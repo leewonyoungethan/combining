@@ -1519,3 +1519,7 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .ls-sp { padding: 12px 4px; border-radius: 14px; border: 2px solid rgba(255, 255, 255, .25); background: rgba(255, 255, 255, .08); color: var(--text); font: inherit; font-weight: 900; cursor: pointer; }
 .ls-sp.on { border-color: #ffe066; background: rgba(255, 224, 102, .2); }
 .ls-sp.hot { border-color: #ff6b6b; background: linear-gradient(135deg, rgba(255, 107, 107, .3), rgba(255, 176, 32, .25)); }
+
+/* 👤 처음 계정 만들기 */
+.first-acc input { width: 100%; margin: 6px 0; }
+.first-acc h3 { margin: 10px 0 4px; }

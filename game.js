@@ -713,7 +713,8 @@ let ACC = null;
     const id = newAccId(), old = lsGet(KEY);
     let name = '나의 섬';
     try { const o = JSON.parse(old); if (o && o.nick) name = String(o.nick).slice(0, 10); } catch (e) { /* 없음 */ }
-    list = [{ id, name, pin: null, created: Date.now() }];
+    // 예전 섬이 없으면 "처음 온 사람" → 켜자마자 계정을 꼭 만들게 한다 (auto 표시)
+    list = [{ id, name, pin: null, created: Date.now(), ...(old ? {} : { auto: true }) }];
     saveAccounts(list);
     if (old) lsSet(accKey(id), old);
     lsSet(ACC_CUR, id);
@@ -8320,7 +8321,7 @@ function openLogin() {
   </div>`;
   el.classList.remove('hidden');
 }
-function closeLogin() { $('#login').classList.add('hidden'); }
+function closeLogin() { $('#login').classList.add('hidden'); updateGuide(); }
 function accPick(id) {
   const a = accounts().find(x => x.id === id);
   if (!a) return;
@@ -8416,8 +8417,11 @@ async function accImportOk() {
   while (list.some(a => a.name === name)) name = `${String(d.name || '가져온 섬').slice(0, 7)} (${n++})`;
   const a = { id: newAccId(), name, pin: null, created: Date.now() };
   if (!lsSet(accKey(a.id), JSON.stringify(d.save))) { toast('저장 공간이 부족해요'); return; }
-  list.push(a);
-  saveAccounts(list);
+  const rest = list.filter(x => !x.auto);
+  list.filter(x => x.auto).forEach(x => lsDel(accKey(x.id)));
+  rest.push(a);
+  saveAccounts(rest);
+  closeLogin();
   enterAccount(a);
 }
 function openAccountMenu() {
@@ -8489,8 +8493,44 @@ function countLoginDay() {
   S.loginDays = (S.loginDays || 0) + 1;
   save();
 }
+function openFirstAccount() {
+  const el = $('#login');
+  el.innerHTML = `<div class="login-box first-acc">
+    <div class="login-logo"><img src="icon.svg" alt=""><br>몬스터 합치기</div>
+    <h3>👋 처음 오셨네요! 계정을 만들어요</h3>
+    <p class="muted">내 섬의 이름이에요. 랭킹 · 길드 · 친구에게도 보여요.</p>
+    <input id="firstName" maxlength="10" placeholder="이름 (예: 진희)" autocomplete="off">
+    <input id="firstPin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="비밀번호 4자리 (없어도 돼요)">
+    <div class="row"><button class="btn big green" data-act="firstAccOk">✨ 계정 만들고 시작하기</button></div>
+    <p class="muted small-note">🙅 욕설이나 전화번호 같은 개인정보는 이름에 쓸 수 없어요.</p>
+    <div class="row"><button class="btn ghost small" data-act="accImport">📥 다른 기기에서 하던 섬 가져오기</button><button class="btn ghost small" data-act="lang" translate="no">🌐 ${window.LANG === 'en' ? '한국어' : 'English'}</button></div>
+  </div>`;
+  el.classList.remove('hidden');
+  const inp = $('#firstName');
+  if (inp) { inp.focus(); inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) firstAccOk(); }); }
+  updateGuide();
+}
+function firstAccOk() {
+  const name = (($('#firstName') || {}).value || '').trim().slice(0, 10);
+  const pin = (($('#firstPin') || {}).value || '').trim();
+  if (!name) { toast('이름을 적어 주세요'); return; }
+  if (nameProblem(name)) { toast(nameProblem(name)); return; }
+  if (pin && !/^\d{4}$/.test(pin)) { toast('비밀번호는 숫자 4자리예요'); return; }
+  const list = accounts(), a = list.find(x => x.id === ACC.id);
+  if (!a) return;
+  if (list.some(x => x.name === name && x.id !== a.id)) { toast('같은 이름의 계정이 이미 있어요'); return; }
+  a.name = name; a.pin = pin ? pinHash(a.id, pin) : null; delete a.auto;
+  saveAccounts(list);
+  ACC = a; S.nick = name; save();
+  closeLogin();
+  sfx('yay');
+  toast(`🎉 ${name}님의 섬이 만들어졌어요!`);
+  setTimeout(afterEnter, 300);
+}
 function afterEnter() {
   countLoginDay();
+  // 처음 온 사람은 계정부터 (자동으로 만든 계정이면)
+  if (ACC && ACC.auto) { openFirstAccount(); return; }
   if (!$('#modal').classList.contains('hidden') || B || !$('#login').classList.contains('hidden')) return;
   if (!S.welcomed) { openWelcome(0, false); return; }
   if (AWAY.sec > 300 && openWelcomeBack()) return;
@@ -9670,7 +9710,7 @@ function updateFinger() {
   const k = tutShown();
   // 튜토리얼 창·설명 슬라이드가 열려 있을 때는 손가락을 숨긴다
   const reading = !!document.querySelector('#modalBox .tut-list, #modalBox .welcome');
-  const active = !B && !S.tutOff && !S.hideUI && k < TUT.length && !reading && tutGuided(k);
+  const active = !B && !S.tutOff && (!$('#login') || $('#login').classList.contains('hidden')) && !S.hideUI && k < TUT.length && !reading && tutGuided(k);
   const target = active ? tutPoint(k) : null;
   let x = null, y = null, down = false, glow = null;
   fingerTarget = null;
@@ -9787,7 +9827,7 @@ function updateGuide() {
     sfx('yay');
     toast('🎉 튜토리얼을 모두 끝냈어요! 선물로 💎 100. 이제 위쪽 🎯 다음 목표를 따라가 봐요 (💰💎🍖를 누르면 쓰는 법이 나와요)');
   }
-  const show = !B && !S.tutOff && !(S.hideUI && tab === 'island') && k < TUT.length && tutGuided(k);
+  const show = !B && !S.tutOff && (!$('#login') || $('#login').classList.contains('hidden')) && !(S.hideUI && tab === 'island') && k < TUT.length && tutGuided(k);
   g.classList.toggle('hidden', !show);
   if (!show) return;
   const html = `<div class="g-step">${k >= TUT_CORE ? '💡 더 알아보기' : `${tutFocus != null ? '🎓 다시 보기' : '튜토리얼'} ${k + 1} / ${TUT_CORE}`}</div>
@@ -10178,6 +10218,7 @@ const ACTIONS = {
   weekClaim: (d) => weekClaim(d.id),
   weekBonus: () => weekBonus(),
   music: () => toggleMusic(),
+  firstAccOk: () => firstAccOk(),
   lang: () => { tutFlag('lang', true); save(); window.setLang(window.LANG === 'en' ? 'ko' : 'en'); },
   mute: () => { toggleMute(); if ($('#modalBox .build-opt[data-act=mute]')) openAccountMenu(); },
   fullscreen: () => toggleFullscreen(),
