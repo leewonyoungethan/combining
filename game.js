@@ -515,6 +515,48 @@ PAIRS.forEach(([i, j]) => { for (let n = 0; n < HYB_6; n++) addHybrid6(i, j, n);
 LEGENDS.forEach(l => addMon({ ...l, rarity: 'legendary' }));
 MYTHICS.forEach(m => addMon({ ...m, rarity: 'mythic' }));
 SHOP_LEGENDS.forEach(l => addMon({ ...l, rarity: l.rank || 'divine', shop: true }));
+// ---- 🔺 7차: 높은 등급 몬스터를 새로 만들어 피라미드 모양으로 ----
+const PYR_TOP = { origin: 15, absolute: 22, holy: 33, divine: 50, legendary: 120 };
+const PYR_TITLES = {
+  legendary: LEG_TITLES,
+  divine: ['수호신', '천신', '성령', '신수', '빛의 신'],
+  holy: ['성자', '대천사', '성룡', '성왕', '천사왕'],
+  absolute: ['절대자', '지배자', '패왕', '황제', '천하무적'],
+  origin: ['창조신', '태초', '시원', '근원신', '만물의 왕'],
+};
+const ALL_TRIPLES = [];
+for (let x = 0; x < EL.length; x++) for (let y = x + 1; y < EL.length; y++) for (let z = y + 1; z < EL.length; z++) ALL_TRIPLES.push([EL[x].id, EL[y].id, EL[z].id]);
+Object.entries(PYR_TOP).forEach(([rk, want]) => {
+  const have = CAT_LIST.filter(c => c.rarity === rk).length;
+  for (let k = 0; k < want - have; k++) {
+    let els = null;
+    for (let t = 0; t < ALL_TRIPLES.length && !els; t++) {
+      const tr = ALL_TRIPLES[((k + RANK[rk] * 131) * 211 + t * 37) % ALL_TRIPLES.length];
+      if (!usedTriples.has(tripleKey(tr))) { usedTriples.add(tripleKey(tr)); els = tr; }
+    }
+    els = els || ALL_TRIPLES[(k * 7 + RANK[rk]) % ALL_TRIPLES.length];
+    const titles = PYR_TITLES[rk], id = `P:${rk}:${k}`;
+    const title = `${EL[ELI[els[k % 3]]].adj}의 ${titles[k % titles.length]}`;
+    const look = freshCreature2(title, id, hashStr(id) % ALL_CREATURES.length);
+    usedNames.add(look.name);
+    addMon({ id, ...look, els, rarity: rk, ult: `${EL[ELI[els[(k + 1) % 3]]].adj} ${ULT_WORDS[k % ULT_WORDS.length]}` });
+  }
+});
+// 서사 ~ 일반: 피라미드 (위로 갈수록 1.25배씩 줄어든다). 처음 몬스터(대표)는 그대로 일반
+{
+  const NORMAL = RAR_ORDER.slice(0, RANK.epic + 1);   // common ~ epic
+  const pool = CAT_LIST.filter(c => !c.shop && RANK[c.rarity] <= RANK.epic);
+  const keepCommon = (c) => c.variant === 0 || !c.group;
+  const R = 1.25, N = NORMAL.length, unit = pool.length * (R - 1) / (Math.pow(R, N) - 1);
+  // 높은 등급부터 몇 마리씩 (epic이 가장 적고, common이 가장 많다)
+  const want = NORMAL.map((_, i) => Math.round(unit * Math.pow(R, N - 1 - i)));
+  want[0] += pool.length - want.reduce((s, x) => s + x, 0);
+  // 원래 높던 몬스터일수록 높은 등급을 받는다 (같으면 이름표 순서로 섞기)
+  const order = pool.slice().sort((a, b) => (keepCommon(a) - keepCommon(b)) || (RANK[b.rarity] - RANK[a.rarity]) || (frac(a.id + '#pyr') - frac(b.id + '#pyr')));
+  let at = 0;
+  for (let i = N - 1; i >= 0; i--) for (let n = 0; n < want[i] && at < order.length; n++) order[at++].rarity = NORMAL[i];
+  while (at < order.length) order[at++].rarity = 'common';
+}
 CAT_LIST.sort((a, b) => RAR_ORDER.indexOf(a.rarity) - RAR_ORDER.indexOf(b.rarity));
 CAT_LIST.forEach(c => { c.skills = buildSkills(c); });
 
