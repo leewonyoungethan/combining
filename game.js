@@ -653,7 +653,7 @@ const islandLabel = (i) => ISLANDS[islandOf(i)].emoji + (islandOf(i) + 1);
 const HATCH_CAP = 3;
 const BREED_LV = 4;
 const MAX_LV = 20;
-const HAB_MAX_LV = 10;
+const HAB_MAX_LV = 100;
 const HAB_LV_BONUS = 25;   // 서식지 레벨마다 골드 +25%
 const FARM_COST = 250;
 // 순서는 저장 데이터와 맞추려고 그대로 두고, 화면에는 자라는 시간 순으로 보여 준다.
@@ -718,7 +718,7 @@ const habName = (el) => el === 'legend' ? '전설의 서식지' : `${EL[ELI[el]]
 const habEmoji = (el) => el === 'legend' ? '🏛️' : EL[ELI[el]].emoji;
 const habColor = (el) => el === 'legend' ? '#ffb020' : EL[ELI[el]].color;
 const habBuildCost = (el) => el === 'legend' ? 5000 : BASE.includes(el) ? 300 : 1000;
-const habUpCost = (lv) => 400 * lv * lv;
+const habUpCost = (lv) => Math.round(400 * lv * lv * (lv > 10 ? Math.pow(1.15, lv - 10) : 1));
 
 const RUNE = {
   hp:  { name: '체력', emoji: '❤️', vals: [10, 20, 35] },
@@ -843,7 +843,7 @@ const AWAY = { sec: (Date.now() - (S.last || Date.now())) / 1000, gold0: S.plots
 const byUid = (uid) => S.monsters.find(m => m.uid === Number(uid));
 const monIncome = (m) => RAR[CAT[m.type].rarity].income * m.lv * (1 + 0.3 * (m.star || 0));
 const habMons = (i) => S.monsters.filter(m => m.hab === i);
-// 서식지에 들어갈 수 있는 몬스터 수 = 레벨 (최소 2마리, Lv.10이면 10마리). 쌓이는 골드는 무제한
+// 서식지에 들어갈 수 있는 몬스터 수 = 레벨 (최소 2마리, Lv.100이면 100마리). 쌓이는 골드는 무제한
 const habCap = (i) => Math.max(2, S.plots[i].lv);
 const habLvBonus = (i) => (S.plots[i].lv - 1) * HAB_LV_BONUS;
 const habIncome = (i) => habMons(i).reduce((s, m) => s + monIncome(m), 0) * (1 + (habLvBonus(i) + decoPercent(islandOf(i)) + guildPct() + petPct('gold') + kdLv('gold') * 10 + wonderPct()) / 100) * (boostOn() ? 2 : 1) * evtGoldMult(S.plots[i].el);
@@ -4290,13 +4290,15 @@ function openHab(i) {
     <div class="store" data-live="hab:${i}"></div>
     <div class="row">
       <button class="btn" data-act="collectHab" data-i="${i}">💰 골드 걷기</button>
-      <button class="btn ghost" data-act="upHab" data-i="${i}" ${maxed ? 'disabled' : ''}>⬆️ ${maxed ? '최대 레벨' : `업그레이드 (💰 ${fmt(habUpCost(p.lv))})`}</button>
+      <button class="btn ghost" data-act="upHab" data-i="${i}" ${maxed ? 'disabled' : ''}>⬆️ ${maxed ? '최대 레벨' : `업그레이드 (💰 ${shortNum(habUpCost(p.lv))})`}</button>
+      ${maxed ? '' : `<button class="btn ghost" data-act="upHabMax" data-i="${i}">⏫ 돈 되는 만큼 올리기</button>`}
     </div>
+    <p class="muted small-note">⬆️ Lv.${p.lv} / ${HAB_MAX_LV} · 레벨이 오를수록 몬스터가 더 많이 살고 골드도 더 많이 나와요</p>
     ${(() => {
       const ups = S.plots.filter(q => q && q.kind === 'hab' && q.lv < HAB_MAX_LV);
       const cost = ups.reduce((s, q) => s + habUpCost(q.lv), 0);
       return `<div class="all-box">
-        <button class="btn small" data-act="upAllHabs" data-i="${i}" ${ups.length ? '' : 'disabled'}>⬆️ 모든 서식지 한 단계 업그레이드${ups.length ? ` (${ups.length}개 · 💰 ${fmt(cost)})` : ' (모두 최대)'}</button>
+        <button class="btn small" data-act="upAllHabs" data-i="${i}" ${ups.length ? '' : 'disabled'}>⬆️ 모든 서식지 한 단계 업그레이드${ups.length ? ` (${ups.length}개 · 💰 ${shortNum(cost)})` : ' (모두 최대)'}</button>
       </div>`;
     })()}
     <div class="grid small">${mons.length
@@ -4395,6 +4397,19 @@ function collectHab(i, quiet = false) {
   updateHud();
 }
 
+function upHabMax(i) {
+  i = Number(i);
+  const p = S.plots[i];
+  if (!p || p.lv >= HAB_MAX_LV) return;
+  const lv0 = p.lv;
+  while (p.lv < HAB_MAX_LV && (S.infinite || S.gold >= habUpCost(p.lv))) { if (!S.infinite) S.gold -= habUpCost(p.lv); p.lv++; }
+  if (p.lv === lv0) { toast(`💰 골드가 모자라요 (${shortNum(habUpCost(p.lv))} 필요)`); return; }
+  sfx('level');
+  toast(`⏫ ${habName(p.el)} Lv.${lv0} → Lv.${p.lv}! 몬스터 ${habCap(i)}마리까지 · 골드 수입 +${habLvBonus(i)}%`);
+  save(); updateHud();
+  openHab(i);
+  render();
+}
 function upHab(i) {
   i = Number(i);
   const p = S.plots[i];
@@ -5435,7 +5450,7 @@ function roomOptions(idx, type) {
       <span class="bo-ico">${habEmoji(el)}</span><span class="bo-nm">${habName(el)} 새로 짓고 바로 넣기</span><span class="bo-cost">💰 ${fmt(habBuildCost(el))}</span>
     </button>`).join('')}${ups.map(({ p, i }) => `
     <button class="build-opt" data-act="upPlace" data-idx="${idx}" data-i="${i}" style="--hc:${habColor(p.el)}">
-      <span class="bo-ico">⬆️</span><span class="bo-nm">${habName(p.el)} Lv.${p.lv} → ${p.lv + 1} 올리고 넣기</span><span class="bo-cost">💰 ${fmt(habUpCost(p.lv))}</span>
+      <span class="bo-ico">⬆️</span><span class="bo-nm">${habName(p.el)} Lv.${p.lv} → ${p.lv + 1} 올리고 넣기</span><span class="bo-cost">💰 ${shortNum(habUpCost(p.lv))}</span>
     </button>`).join('')}</div>`;
 }
 function buildPlace(idx, el) {
@@ -10352,6 +10367,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '⏫', title: '서식지 Lv.100', text: '서식지는 이제 Lv.100까지 올릴 수 있어요!<br>레벨만큼 몬스터가 살 수 있고 (Lv.100 = 100마리), 레벨마다 골드 수입 +25%.<br>서식지를 눌러 ⏫ 돈 되는 만큼 올리기를 누르면 한 번에 쭉 올라가요.' },
   { icon: '🏠', title: '섬 전체에 서식지', text: '섬 이름(🗺️ 섬 지도)이나 빈 땅의 🏗️ 건설하기에서 🏠 이 섬 빈 땅 전부에 서식지 짓기를 눌러요.<br>속성 하나를 고르거나 🌈 골고루를 고르면 섬의 빈 땅을 한 번에 꽉 채워요!' },
   { icon: '🗑️', title: '알 모두 버리기', text: '부화장에 알이 너무 많이 쌓였나요?<br>부화장 창 아래쪽 🗑️ 알 모두 버리기를 누르면 한 번에 비울 수 있어요.<br>버린 알은 되돌릴 수 없으니 조심!' },
   { icon: '🏝️', title: '새 섬 사기', text: '섬 이름(🗺️ 섬 지도)을 누르면 맨 위에 🏝️ 새 섬 사기 버튼이 있어요.<br>섬 18개는 처음부터 있고, 19번째부터는 💰 골드로 살 수 있어요 (최대 100개)!<br>섬 하나마다 빈 땅이 25칸씩 생기고, 살 때마다 값이 올라가요.' },
@@ -10506,6 +10522,7 @@ const ACTIONS = {
   merge: (d) => merge(d.t, d.lv),
   mergeAll: () => mergeAll(),
   upAllHabs: (d) => upAllHabs(d.i),
+  upHabMax: (d) => upHabMax(d.i),
   hatchAll: () => hatchAll(),
   dumpEggs: () => dumpEggs(),
   feedAll: (d) => feedAll(d.mode),
