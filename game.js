@@ -6006,10 +6006,17 @@ function logB(msg) {
   B.log.push(msg);
   if (B.log.length > 30) B.log.shift();
 }
-function later(fn, ms = 800) { B.timer = setTimeout(fn, B.fast ? ms * 0.25 : ms); }
+// 배속: 보통 전투 1·2·4배, 🔁 연속 전투는 10·25·50·100배까지
+const SPEEDS_LOOP = [1, 2, 4, 10, 25, 50, 100], SPEEDS = [1, 2, 4];
+function bSpeed() {
+  const s = S.bSpeed || (S.fastBattle ? 4 : 1);
+  return LOOP ? s : Math.min(4, s);
+}
+function later(fn, ms = 800) { B.timer = setTimeout(fn, ms / bSpeed()); }
 
 // ----- 애니메이션 도우미 -----
-const dur = (ms) => (B && B.fast ? ms * 0.35 : ms);
+// 25배속부터는 움직이는 장면을 건너뛴다 (너무 빨라서 안 보이니까)
+const dur = (ms) => (B ? (bSpeed() >= 25 ? 0 : ms / bSpeed()) : ms);
 const wait = (ms) => new Promise(r => setTimeout(r, dur(ms)));
 const unitEl = (u) => document.getElementById('u-' + u.id);
 function centerOf(u) {
@@ -6388,7 +6395,7 @@ function endBattle(win) {
   if (win) mission('win');
   save();
   if (LOOP && !B.pvp && !B.gwar && !B.raid && B.bossIdx == null) {
-    if (win) { const b = B; setTimeout(() => { if (B === b && LOOP) loopNext(); }, 1600); }
+    if (win) { const b = B; setTimeout(() => { if (B === b && LOOP) loopNext(); }, Math.max(60, 1600 / bSpeed())); }
     else { LOOP.wins = LOOP.wins; setTimeout(() => stopLoop('패배'), 300); }
   }
   drawBattle();
@@ -6478,7 +6485,8 @@ function drawBattle() {
     B.built = true;
   }
   $('#bRound').textContent = `라운드 ${B.round}`;
-  $('#bFast').textContent = B.fast ? '▶️ 보통 속도' : '⏩ 빠르게';
+  $('#bFast').textContent = `⏩ ${bSpeed()}배속`;
+  $('#bFast').classList.toggle('on', bSpeed() > 1);
   if ($('#bAuto')) { $('#bAuto').textContent = B.auto ? '🤖 자동 켜짐' : '🤖 자동'; $('#bAuto').classList.toggle('on', !!B.auto); }
   $('#bQuitTop').style.display = B.over ? 'none' : '';
   $('#bQuitTop').textContent = LOOP ? '⏹ 연속 멈추기' : '🏳️ 포기';
@@ -9914,7 +9922,13 @@ const ACTIONS = {
   nextStage: () => { if (B) { clearTimeout(B.timer); B = null; $('#battle').classList.add('hidden'); } startBattle(); },
   bSkill: (d) => playerSkill(d.i),
   bTarget: (d) => setTarget(d.id),
-  bFast: () => { B.fast = !B.fast; S.fastBattle = B.fast; drawBattle(); },
+  bFast: () => {
+    const list = LOOP ? SPEEDS_LOOP : SPEEDS, cur = bSpeed();
+    const next = list[(list.indexOf(cur) + 1) % list.length] || 1;
+    S.bSpeed = next; S.fastBattle = next > 1; B.fast = next > 1;
+    if (!LOOP && next === 4) toast('⏩ 🔁 연속 전투에서는 100배속까지 빨라져요!');
+    save(); drawBattle();
+  },
   bAuto: () => {
     if (!B || (B.pvp && !B.coop)) return;
     B.auto = !B.auto; S.autoBattle = B.auto;
