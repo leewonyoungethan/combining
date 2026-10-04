@@ -1546,3 +1546,8 @@ body.ui-hidden .todo-btn { opacity: .55; }
 
 /* 🛒 전부 사기 */
 .buy-all { display: block; width: 100%; margin: 4px 0 10px; font-weight: 900; }
+
+/* 📚 모든 몬스터 상점 */
+.all-shop .chips { margin: 4px 0; }
+.as-search input { flex: 1; min-width: 0; }
+.as-pages { justify-content: center; align-items: center; gap: 8px; margin: 8px 0; }

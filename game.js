@@ -496,6 +496,22 @@ function makeSpecialN(prefix, k, titles) {
 for (let k = 0; k < LEGEND_NEW; k++) LEGENDS.push(makeSpecialN('L', k, LEG_TITLES));
 for (let k = 0; k < MYTHIC_NEW; k++) MYTHICS.push(makeSpecialN('M', k, MYTH_TITLES));
 PAIRS.push(...NEW_PAIRS);
+// ---- 6차: 40000마리까지 (꾸밈말 + 속성 이름) ----
+const PURE_6 = 90, HYB_6 = 80;
+const MOD6 = ['아기', '꼬마', '거대', '황금', '무지개', '왕관', '쌍둥이', '수상한', '졸린', '용감한', '장난꾸러기', '털복숭이', '통통한', '날쌘', '고대', '미래'];
+const adj6 = (elId, n) => `${MOD6[n % MOD6.length]} ${EL[ELI[elId]].adj}`;
+function addPure6(e, n) {
+  const group = 'p:' + e.id, id = `${group}:w${n}`, seed = hashStr(group + '#6') + n * 23;
+  const look = freshCreature2(adj6(e.id, n), id, seed);
+  addMon({ id, group, variant: 1000 + n, ...look, els: [e.id], rarity: RAR_ORDER[rankOfVariant(n, PURE_6, frac(group + '#6'))], mod: variantMod(id) });
+}
+function addHybrid6(i, j, n) {
+  const a = EL[i], b = EL[j], group = `h:${a.id}+${b.id}`, id = `${group}:w${n}`, seed = hashStr(group + '#6') + n * 23;
+  const look = freshCreature2(adj6(n % 2 ? b.id : a.id, Math.floor(n / 2) + i * 3 + j), id, seed);
+  addMon({ id, group, variant: 1000 + n, ...look, els: [a.id, b.id], rarity: RAR_ORDER[rankOfVariant(n, HYB_6, frac(group + '#6'))], mod: variantMod(id) });
+}
+EL.forEach(e => { for (let n = 0; n < PURE_6; n++) addPure6(e, n); });
+PAIRS.forEach(([i, j]) => { for (let n = 0; n < HYB_6; n++) addHybrid6(i, j, n); });
 LEGENDS.forEach(l => addMon({ ...l, rarity: 'legendary' }));
 MYTHICS.forEach(m => addMon({ ...m, rarity: 'mythic' }));
 SHOP_LEGENDS.forEach(l => addMon({ ...l, rarity: l.rank || 'divine', shop: true }));
@@ -3041,6 +3057,7 @@ function unitTableHTML() {
     <div class="ut-grid">${NUM_UNITS.slice().reverse().map(([u, s], i) => `<span><b>${s}</b><small>10<sup>${3 * (i + 1)}</sup></small></span>`).join('')}</div></details>`;
 }
 let UT_OPEN = false;
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing && e.target && e.target.id === 'allShopQ') { ALL_SHOP.q = e.target.value.trim().slice(0, 20); ALL_SHOP.page = 0; allShopRedraw(); } });
 document.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('unit-table') && e.target.open) tutFlag('unitTable', true); }, true);
 function openResInfo(r) {
   tutFlag('res', true);
@@ -5599,7 +5616,7 @@ function monGroupsHTML() {
 // ===================== 🛒 상점 칸(탭) + 새 물건 =====================
 const SHOP_TABS = [
   { id: 'build', name: '🏠 건물',      secs: ['shopHab', 'shopDeco'] },
-  { id: 'egg',   name: '🥚 알',        secs: ['shopEgg', 'shopEgg2', 'shopBox', 'shopLegend'] },
+  { id: 'egg',   name: '🥚 알',        secs: ['shopEgg', 'shopEgg2', 'shopAll', 'shopBox', 'shopLegend'] },
   { id: 'deal',  name: '🎁 특가·상자', secs: ['shopDeals', 'shopMystery'] },
   { id: 'item',  name: '🧪 아이템',    secs: ['shopPotion', 'shopExtra', 'shopItems', 'shopExch', 'shopRunes'] },
   { id: 'power', name: '🏛️ 강해지기',  secs: ['shopKingdom', 'shopWonder', 'shopCosmos', 'shopCloner'] },
@@ -5914,12 +5931,69 @@ function buyRankBox(r) {
   render();
   openHatchery();
 }
+// 📚 모든 몬스터 상점: 게임에 있는 몬스터 전부를 등급 · 속성 · 이름으로 찾아서 산다
+const ALL_SHOP = { r: 'all', el: 'all', q: '', own: 'no', page: 0 };
+const ALL_PER = 48, ALL_BULK = 500;
+const anyPrice = (t) => Math.round(300 * Math.pow(3, RANK[CAT[t].rarity]) * (evtOn('hatchfest') ? 0.5 : 1));
+function allShopList() {
+  const own = new Set([...S.monsters.map(m => m.type), ...S.hatch]), q = ALL_SHOP.q.trim();
+  return CAT_LIST.filter(c => (ALL_SHOP.r === 'all' || c.rarity === ALL_SHOP.r) && (ALL_SHOP.el === 'all' || c.els.includes(ALL_SHOP.el))
+    && (!q || c.name.includes(q)) && (ALL_SHOP.own === 'all' || (ALL_SHOP.own === 'yes') === own.has(c.id))).map(c => c.id);
+}
+const allShopMissing = () => { const own = new Set([...S.monsters.map(m => m.type), ...S.hatch]); return allShopList().filter(t => !own.has(t)); };
+function allShopHTML() {
+  const list = allShopList(), pages = Math.max(1, Math.ceil(list.length / ALL_PER));
+  ALL_SHOP.page = Math.max(0, Math.min(ALL_SHOP.page, pages - 1));
+  const show = list.slice(ALL_SHOP.page * ALL_PER, (ALL_SHOP.page + 1) * ALL_PER);
+  const miss = ALL_SHOP.own === 'yes' ? [] : allShopMissing(), bulk = miss.slice(0, ALL_BULK);
+  const chip = (k, v, label) => `<button class="chip ${ALL_SHOP[k] === v ? 'on' : ''}" data-act="allShopSet" data-k="${k}" data-v="${v}">${label}</button>`;
+  return `<h3 class="sub" id="shopAll">📚 모든 몬스터 상점 <small class="muted">게임에 있는 몬스터 ${fmt(CAT_LIST.length)}마리를 전부 살 수 있어요</small></h3>
+    <div class="all-shop">
+      <div class="chips">${chip('own', 'no', '🆕 없는 몬스터')}${chip('own', 'yes', '✅ 있는 몬스터')}${chip('own', 'all', '📚 전체')}</div>
+      <div class="chips">${chip('r', 'all', '모든 등급')}${RAR_ORDER.map(r => chip('r', r, RAR[r].name)).join('')}</div>
+      <div class="chips">${chip('el', 'all', '모든 속성')}${EL.map(e => chip('el', e.id, e.emoji)).join('')}</div>
+      <div class="row as-search"><input id="allShopQ" placeholder="이름으로 찾기 (예: 드래곤)" value="${esc(ALL_SHOP.q)}" autocomplete="off"><button class="btn small" data-act="allShopFind">🔍 찾기</button></div>
+      <p class="muted">${fmt(list.length)}마리 · ${ALL_SHOP.page + 1} / ${pages}쪽</p>
+      ${bulk.length ? `<button class="btn green buy-all" data-act="allShopBuyAll">🛒 이 목록의 없는 몬스터 전부 사기 (${fmt(bulk.length)}마리 · 💰 ${shortNum(bulk.reduce((s, t) => s + anyPrice(t), 0))})${miss.length > ALL_BULK ? ` · 한 번에 ${ALL_BULK}마리씩` : ''}</button>` : ''}
+      ${show.length ? `<div class="grid small">${show.map(t => card({ type: t, lv: 1 }, `data-act="buyAny" data-type="${t}"`, 'mini', `<div class="price-tag">💰 ${shortNum(anyPrice(t))}</div>`)).join('')}</div>` : '<p class="muted">찾는 몬스터가 없어요</p>'}
+      <div class="row as-pages"><button class="btn small ghost" data-act="allShopPage" data-d="-10">⏪</button><button class="btn small" data-act="allShopPage" data-d="-1">◀</button><b>${ALL_SHOP.page + 1} / ${pages}</b><button class="btn small" data-act="allShopPage" data-d="1">▶</button><button class="btn small ghost" data-act="allShopPage" data-d="10">⏩</button></div>
+    </div>`;
+}
+// 상점을 다시 그려도 보던 자리 그대로
+function allShopRedraw() {
+  const p = $('#panel'), py = p ? p.scrollTop : 0, wy = window.scrollY;
+  render();
+  if (p) p.scrollTop = py; window.scrollTo(0, wy);
+}
+function buyAny(type) {
+  if (!CAT[type]) return;
+  if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요 (또는 🛒 전부 사기)'); return; }
+  if (!spend(anyPrice(type))) return;
+  S.hatch.push(type);
+  sfx('buy'); mission('buyEgg'); save();
+  toast(`🥚 ${CAT[type].name} 알을 샀어요! 부화장에 있어요`);
+  allShopRedraw(); updateHud();
+}
+function allShopBuyAll() {
+  tutFlag('buyAll', true);
+  const list = allShopMissing().slice(0, ALL_BULK);
+  if (!list.length) { toast('🎉 이미 모두 가지고 있어요!'); return; }
+  const cost = list.reduce((s, t) => s + anyPrice(t), 0);
+  if (!confirm(`🛒 없는 몬스터 ${list.length}마리를 모두 살까요?\n💰 ${shortNum(cost)}`)) return;
+  if (!spend(cost)) return;
+  S.hatch.push(...list);
+  mission('buyEgg');
+  sfx('buy');
+  toast(`🛒 ${list.length}마리를 샀어요! 바로 부화시킬게요`);
+  hatchAll();
+}
 function moreEggsHTML() {
   const disc = evtOn('hatchfest') ? 0.5 : 1;
   const list = HYB_EGGS.filter(t => hybEggEl === 'all' || CAT[t].els.includes(hybEggEl));
   return `<h3 class="sub" id="shopEgg2">🧬 혼합 몬스터 알 <small class="muted">두 속성 몬스터 ${HYB_EGGS.length}종 · 속성 서식지 둘 중 하나에 살아요</small></h3>
     <div class="chips">${[['all', '전체'], ...EL.map(e => [e.id, e.emoji])].map(([id, t]) => `<button class="chip ${hybEggEl === id ? 'on' : ''}" data-act="hybEggEl" data-e="${id}">${t}</button>`).join('')}</div>
     ${ownSplitHTML(list, t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini', `<div class="price-tag">💰 ${fmt(HYB_EGG_PRICE * disc)}</div>`), 'hyb')}
+    ${allShopHTML()}
     <h3 class="sub" id="shopBox">🎲 등급 알 상자 <small class="muted">고른 등급의 몬스터가 무작위로! 도감 채우기에 딱</small></h3>
     <div class="rank-boxes">${RANK_BOXES.map(b => `<button class="rank-box" data-act="buyRankBox" data-r="${b.r}" style="--rc:${RAR[b.r].color}">
         <span>🎲</span><b>${RAR[b.r].name} 알</b><small>${CAT_LIST.filter(c => c.rarity === b.r && !c.shop).length}종 중 하나</small><span class="rb-cost">💰 ${shortNum(b.cost * disc)}</span></button>`).join('')}</div>`;
@@ -10324,6 +10398,11 @@ const ACTIONS = {
   buyLegend: (d) => buyLegend(d.id),
   buyMon: (d) => buyMon(d.type),
   buyAllMons: (d) => buyAllMons(d.kind),
+  buyAny: (d) => buyAny(d.type),
+  allShopBuyAll: () => allShopBuyAll(),
+  allShopSet: (d) => { ALL_SHOP[d.k] = d.v; ALL_SHOP.page = 0; allShopRedraw(); },
+  allShopFind: () => { ALL_SHOP.q = (($('#allShopQ') || {}).value || '').trim().slice(0, 20); ALL_SHOP.page = 0; allShopRedraw(); },
+  allShopPage: (d) => { ALL_SHOP.page += Number(d.d) || 0; allShopRedraw(); },
   buyHab: (d) => buyHab(d.el),
   buyFood: (d) => buyFood(d.n),
   buyGold: (d) => buyGold(d.n),
