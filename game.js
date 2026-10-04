@@ -4256,6 +4256,76 @@ function goIsland(k) {
   closeModal();
   render();
 }
+// n개 사는 값 (모자라면 살 수 있는 만큼만)
+function islBulkPlan(want) {
+  let k = islCount(), cost = 0, n = 0;
+  const gold = S.infinite ? Infinity : S.gold;
+  while (n < want && k < ISL_MAX) { const c = Math.round(1e8 * Math.pow(5, k - ISL_BASE)); if (cost + c > gold) break; cost += c; k++; n++; }
+  return { n, cost };
+}
+function openIslandBulk() {
+  if (VISIT) return;
+  if (islCount() >= ISL_MAX) { toast(`🏝️ 섬은 ${ISL_MAX}개까지예요!`); return; }
+  const opts = [1, 5, 10, 25, ISL_MAX].map(w => {
+    const p = islBulkPlan(w), label = w === ISL_MAX ? '돈 되는 만큼 전부' : `${w}개`;
+    return `<button class="build-opt" data-act="islBulk" data-n="${w}" ${p.n ? '' : 'disabled'}><span class="bo-ico">🏝️</span><span class="bo-nm">${label}<br><small>${p.n ? `${p.n}개 사요 (${islCount() + 1}번 ~ ${islCount() + p.n}번)` : '💰 골드가 모자라요'}</small></span><span class="bo-cost">💰 ${shortNum(p.cost)}</span></button>`;
+  }).join('');
+  showModal(`<h3>🏝️ 섬 여러 개 한 번에 사기</h3>
+    <p class="muted">지금 섬 ${islCount()}개 / 최대 ${ISL_MAX}개 · 다음 섬 💰 ${shortNum(islPrice())}부터 5배씩 비싸져요</p>
+    <label class="chk"><input type="checkbox" id="islBulkFill" checked> 🏠 산 섬마다 🌈 골고루 서식지를 꽉 채우기</label>
+    <div class="build-list">${opts}</div>
+    <div class="row"><button class="btn ghost small" data-act="islList">← 섬 지도</button><button class="btn ghost small" data-act="close">닫기</button></div>`);
+}
+function buyIslandsBulk(want) {
+  const fill = !!($('#islBulkFill') || {}).checked;
+  const p = islBulkPlan(Number(want) || 1);
+  if (!p.n) { toast('💰 골드가 모자라요'); return; }
+  if (!spend(p.cost)) return;
+  const k0 = islCount();
+  for (let n = 0; n < p.n * ISLAND_PLOTS; n++) S.plots.push(null);
+  let built = 0, fillCost = 0;
+  if (fill) {
+    for (let k = k0; k < k0 + p.n; k++) {
+      const free = islFree(k), els = fillEls('mix', free.length), c = els.reduce((s, e) => s + habBuildCost(e), 0);
+      if (!S.infinite && S.gold < c) break;
+      if (!S.infinite) S.gold -= c;
+      fillCost += c;
+      free.forEach((j, x) => { S.plots[j] = { kind: 'hab', el: els[x], lv: 1, gold: 0 }; });
+      built += free.length;
+    }
+  }
+  S.isl = k0;
+  sfx('yay');
+  save(); closeModal(); render(); updateHud();
+  toast(`🏝️ 섬 ${p.n}개를 샀어요! (${k0 + 1}번 ~ ${k0 + p.n}번)${built ? ` · 🏠 서식지 ${built}개도 지었어요` : ''}`);
+}
+// ⏫ 모든 서식지를 돈 되는 만큼 (가장 낮은 레벨부터 골고루)
+function upAllHabsMax() {
+  const habs = S.plots.map((p, i) => ({ p, i })).filter(({ p }) => p && p.kind === 'hab' && p.lv < HAB_MAX_LV);
+  if (!habs.length) { toast('⏫ 모든 서식지가 이미 Lv.' + HAB_MAX_LV + '이에요!'); return; }
+  let ups = 0;
+  const lvSum0 = habs.reduce((s, h) => s + h.p.lv, 0);
+  // 레벨별로 한 바퀴씩: 낮은 레벨부터 한 단계씩 올린다
+  for (let guard = 0; guard < HAB_MAX_LV; guard++) {
+    habs.sort((a, b) => a.p.lv - b.p.lv);
+    let moved = false;
+    for (const { p } of habs) {
+      if (p.lv >= HAB_MAX_LV) continue;
+      const c = habUpCost(p.lv);
+      if (!S.infinite && S.gold < c) continue;
+      if (!S.infinite) S.gold -= c;
+      p.lv++; ups++; moved = true;
+    }
+    if (!moved) break;
+  }
+  if (!ups) { toast(`💰 골드가 모자라요 (${shortNum(habUpCost(habs.sort((a, b) => a.p.lv - b.p.lv)[0].p.lv))} 필요)`); return; }
+  const maxed = S.plots.filter(p => p && p.kind === 'hab' && p.lv >= HAB_MAX_LV).length, all = S.plots.filter(p => p && p.kind === 'hab').length;
+  sfx('level');
+  save(); updateHud(); render();
+  toast(`⏫ 서식지 ${habs.length}개를 ${ups}단계 올렸어요! (Lv.100: ${maxed}/${all}개)`);
+  if (curHabOpen != null && S.plots[curHabOpen]) openHab(curHabOpen); else closeModal();
+}
+let curHabOpen = null;
 function buyIsland() {
   if (VISIT) return;
   if (islCount() >= ISL_MAX) { toast(`🏝️ 섬은 ${ISL_MAX}개까지예요!`); return; }
@@ -4269,10 +4339,12 @@ function buyIsland() {
   toast(`🏝️ 새 섬 ${th.emoji} ${th.name}이 생겼어요! 빈 땅 ${ISLAND_PLOTS}칸`);
 }
 function openIslandList() {
+  curHabOpen = null;
   tutFlag('islBuy', true);
-  const buy = VISIT ? '' : islCount() < ISL_MAX
-    ? `<button class="btn green isl-buy" data-act="islBuy">🏝️ 새 섬 사기 · ${ISLANDS[islCount()].emoji} ${islCount() + 1}. ${ISLANDS[islCount()].name} (💰 ${shortNum(islPrice())})</button>`
-    : `<p class="muted">🏝️ 섬 ${ISL_MAX}개를 모두 가졌어요!</p>`;
+  const buy = (VISIT ? '' : islCount() < ISL_MAX
+    ? `<button class="btn green isl-buy" data-act="islBuy">🏝️ 새 섬 사기 · ${ISLANDS[islCount()].emoji} ${islCount() + 1}. ${ISLANDS[islCount()].name} (💰 ${shortNum(islPrice())})</button>
+       <button class="btn isl-buy" data-act="islBulkOpen">🏝️🏝️ 섬 여러 개 한 번에 사기</button>`
+    : `<p class="muted">🏝️ 섬 ${ISL_MAX}개를 모두 가졌어요!</p>`) + (VISIT ? '' : `<button class="btn isl-buy" data-act="upAllHabsMax">⏫ 모든 서식지 돈 되는 만큼 올리기 (최대 Lv.${HAB_MAX_LV})</button>`);
   const rows = ISLANDS.slice(0, islCount()).map((th, k) => {
     const r = islandRange(k), used = r.filter(i => S.plots[i]).length;
     const habs = r.filter(i => S.plots[i] && S.plots[i].kind === 'hab').length;
@@ -4415,6 +4487,7 @@ function build(i, what) {
 
 // ----- 서식지 -----
 function openHab(i) {
+  curHabOpen = Number(i);
   const p = S.plots[i];
   const mons = habMons(i);
   const maxed = p.lv >= HAB_MAX_LV;
@@ -4435,6 +4508,7 @@ function openHab(i) {
       const cost = ups.reduce((s, q) => s + habUpCost(q.lv), 0);
       return `<div class="all-box">
         <button class="btn small" data-act="upAllHabs" data-i="${i}" ${ups.length ? '' : 'disabled'}>⬆️ 모든 서식지 한 단계 업그레이드${ups.length ? ` (${ups.length}개 · 💰 ${shortNum(cost)})` : ' (모두 최대)'}</button>
+        ${ups.length ? '<button class="btn small" data-act="upAllHabsMax">⏫ 모든 서식지 돈 되는 만큼 올리기</button>' : ''}
       </div>`;
     })()}
     <div class="grid small">${mons.length
@@ -10504,6 +10578,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🏝️', title: '한 번에 키우기', text: '🗺️ 섬 지도에서 🏝️🏝️ 섬 여러 개 한 번에 사기를 누르면 1 · 5 · 10 · 25개나 돈 되는 만큼 섬을 사고, 서식지까지 꽉 채워 줘요.<br>⏫ 모든 서식지 돈 되는 만큼 올리기를 누르면 낮은 레벨부터 골고루 Lv.100까지 올려요!' },
   { icon: '💾', title: '저장 버튼', text: '게임은 저절로 저장되지만, 위쪽 💾 버튼을 누르면 지금 바로 저장해요!<br>컴퓨터에서는 Ctrl + S 키로도 저장할 수 있어요.<br>저장이 잘 되면 시간과 크기를 알려 줘요.' },
   { icon: '⏫', title: '서식지 Lv.100', text: '서식지는 이제 Lv.100까지 올릴 수 있어요!<br>레벨만큼 몬스터가 살 수 있고 (Lv.100 = 100마리), 레벨마다 골드 수입 +25%.<br>서식지를 눌러 ⏫ 돈 되는 만큼 올리기를 누르면 한 번에 쭉 올라가요.' },
   { icon: '🏠', title: '섬 전체에 서식지', text: '섬 이름(🗺️ 섬 지도)이나 빈 땅의 🏗️ 건설하기에서 🏠 이 섬 빈 땅 전부에 서식지 짓기를 눌러요.<br>속성 하나를 고르거나 🌈 골고루를 고르면 섬의 빈 땅을 한 번에 꽉 채워요!' },
@@ -10824,6 +10899,9 @@ const ACTIONS = {
   islGo: (d) => goIsland(d.k),
   islBuy: () => buyIsland(),
   fillIslOpen: () => openFillIsland(),
+  islBulkOpen: () => openIslandBulk(),
+  islBulk: (d) => buyIslandsBulk(d.n),
+  upAllHabsMax: () => upAllHabsMax(),
   fillIsl: (d) => fillIsland(d.el),
   islList: () => openIslandList(),
   bossFight: (d) => startBossBattle(d.i),
