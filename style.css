@@ -1543,3 +1543,6 @@ body.ui-hidden .todo-btn { opacity: .55; }
 /* 🌌 우주부자 */
 .rich-gift input { width: 100%; margin: 6px 0; font-size: 18px; text-align: center; }
 .rg-cur, .rg-quick { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 6px 0; }
+
+/* 🛒 전부 사기 */
+.buy-all { display: block; width: 100%; margin: 4px 0 10px; font-weight: 900; }

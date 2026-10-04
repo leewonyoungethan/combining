@@ -5713,10 +5713,31 @@ function buyExtra(k) {
 }
 
 // 알 상점에서 "아직 없는 몬스터"와 "이미 있는 몬스터"를 나눠 보여 준다 (부화장에 있는 알도 "있음")
-function ownSplitHTML(types, cardFn) {
+// 사는 값 (알 상점 · 혼합 알)
+const buyAllPrice = (kind, t) => (kind === 'hyb' ? Math.round(HYB_EGG_PRICE * (evtOn('hatchfest') ? 0.5 : 1)) : eggPrice(t));
+const buyAllList = (kind) => {
+  const own = new Set([...S.monsters.map(m => m.type), ...S.hatch]);
+  const types = kind === 'hyb' ? HYB_EGGS.filter(t => hybEggEl === 'all' || CAT[t].els.includes(hybEggEl)) : EGG_SHOP;
+  return types.filter(t => !own.has(t));
+};
+function buyAllMons(kind) {
+  tutFlag('buyAll', true);
+  const list = buyAllList(kind);
+  if (!list.length) { toast('🎉 이미 모두 가지고 있어요!'); return; }
+  const cost = list.reduce((s, t) => s + buyAllPrice(kind, t), 0);
+  if (!confirm(`🛒 없는 몬스터 ${list.length}마리를 모두 살까요?\n💰 ${shortNum(cost)}`)) return;
+  if (!spend(cost)) return;
+  S.hatch.push(...list);     // 한꺼번에 살 때는 부화장 칸 수를 넘어도 괜찮아요 → 바로 부화
+  list.forEach(() => mission('buyEgg'));
+  sfx('buy');
+  toast(`🛒 ${list.length}마리를 샀어요! 바로 부화시킬게요`);
+  hatchAll();
+}
+function ownSplitHTML(types, cardFn, kind) {
   const own = new Set([...S.monsters.map(m => m.type), ...S.hatch]);
   const no = types.filter(t => !own.has(t)), yes = types.filter(t => own.has(t));
-  return (no.length ? `<h4 class="own-h new">🆕 아직 없는 몬스터 <small>${no.length}종</small></h4><div class="grid small">${no.map(cardFn).join('')}</div>` : '<p class="muted own-all">🎉 여기 있는 몬스터는 모두 가지고 있어요!</p>')
+  const allBtn = kind && no.length ? `<button class="btn green buy-all" data-act="buyAllMons" data-kind="${kind}">🛒 없는 몬스터 전부 사기 (${no.length}마리 · 💰 ${shortNum(no.reduce((s, t) => s + buyAllPrice(kind, t), 0))})</button>` : '';
+  return (no.length ? `<h4 class="own-h new">🆕 아직 없는 몬스터 <small>${no.length}종</small></h4>${allBtn}<div class="grid small">${no.map(cardFn).join('')}</div>` : '<p class="muted own-all">🎉 여기 있는 몬스터는 모두 가지고 있어요!</p>')
     + (yes.length ? `<h4 class="own-h">✅ 이미 있는 몬스터 <small>${yes.length}종</small></h4><div class="grid small">${yes.map(cardFn).join('')}</div>` : '');
 }
 function renderShop() {
@@ -5762,7 +5783,7 @@ function renderShop() {
     </div>
     <h3 class="sub" id="shopEgg">🥚 몬스터 알 상점 <small class="muted">사면 부화장으로 가요. 알맞은 서식지가 있어야 키울 수 있어요</small></h3>
     ${ownSplitHTML(EGG_SHOP, t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini',
-      `<div class="price-tag">💰 ${fmt(eggPrice(t))}</div>`))}
+      `<div class="price-tag">💰 ${fmt(eggPrice(t))}</div>`), 'egg')}
     ${moreEggsHTML()}
     ${shopMoreHTML()}
     ${mysteryHTML()}
@@ -5898,7 +5919,7 @@ function moreEggsHTML() {
   const list = HYB_EGGS.filter(t => hybEggEl === 'all' || CAT[t].els.includes(hybEggEl));
   return `<h3 class="sub" id="shopEgg2">🧬 혼합 몬스터 알 <small class="muted">두 속성 몬스터 ${HYB_EGGS.length}종 · 속성 서식지 둘 중 하나에 살아요</small></h3>
     <div class="chips">${[['all', '전체'], ...EL.map(e => [e.id, e.emoji])].map(([id, t]) => `<button class="chip ${hybEggEl === id ? 'on' : ''}" data-act="hybEggEl" data-e="${id}">${t}</button>`).join('')}</div>
-    ${ownSplitHTML(list, t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini', `<div class="price-tag">💰 ${fmt(HYB_EGG_PRICE * disc)}</div>`))}
+    ${ownSplitHTML(list, t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini', `<div class="price-tag">💰 ${fmt(HYB_EGG_PRICE * disc)}</div>`), 'hyb')}
     <h3 class="sub" id="shopBox">🎲 등급 알 상자 <small class="muted">고른 등급의 몬스터가 무작위로! 도감 채우기에 딱</small></h3>
     <div class="rank-boxes">${RANK_BOXES.map(b => `<button class="rank-box" data-act="buyRankBox" data-r="${b.r}" style="--rc:${RAR[b.r].color}">
         <span>🎲</span><b>${RAR[b.r].name} 알</b><small>${CAT_LIST.filter(c => c.rarity === b.r && !c.shop).length}종 중 하나</small><span class="rb-cost">💰 ${shortNum(b.cost * disc)}</span></button>`).join('')}</div>`;
@@ -9747,6 +9768,10 @@ TUT.push(
   { text: '🧩 🎮 미니게임에 새로 생긴 🧩 몬스터 2048 · 🐤 날아라 몬스터 · 🧱 탑 쌓기 · 🐍 먹보 몬스터 중 하나를 해 봐요', done: () => tutFlag('newMg'),
     go: () => { closeModal(); tab = 'island'; render(); openGames(); } },
 );
+TUT.push(
+  { text: '🛒 상점 🥚 알 칸의 🛒 없는 몬스터 전부 사기 버튼으로 없는 몬스터를 한꺼번에 사 봐요', done: () => tutFlag('buyAll') || !buyAllList('egg').length,
+    go: () => { closeModal(); tab = 'shop'; shopTab = 'egg'; render(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -9969,6 +9994,11 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=mgStart][data-id=m2048]', '#modalBox .mg-card[data-id=m2048]', '#modalBox [data-act=games]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#gameBtn'];
+    case 51: // 없는 몬스터 전부 사기
+      if (inModal) return ['#modalBox [data-act=close]'];
+      if (tab !== 'shop') return [bottomBtn('shop')];
+      if (shopTab !== 'egg') return ['#view [data-act=shopJump][data-tab=egg]'];
+      return ['#view [data-act=buyAllMons]'];
   }
   return null;
 }
@@ -10154,6 +10184,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🛒', title: '몬스터 전부 사기', text: '상점 🥚 알 칸에서 🛒 없는 몬스터 전부 사기를 누르면<br>아직 없는 몬스터를 한 번에 모두 사서 바로 부화시켜요!<br>알맞은 서식지가 없으면 부화장에서 기다려요.' },
   { icon: '🧩', title: '새 미니게임 4가지', text: '🧩 몬스터 2048: 같은 몬스터를 밀어서 합치면 🥚→🐣→🐥→🐤→🐔→🦅로 진화!<br>🐤 날아라 몬스터: 눌러서 날아올라 기둥 사이를 통과!<br>🧱 탑 쌓기: 왔다 갔다 하는 블록을 딱 맞게 내려놓아 높이 쌓기!<br>🐍 먹보 몬스터: 🍖을 먹을수록 길어지고 빨라져요!' },
   { icon: '🇰🇷', title: '한국 돈 단위', text: '돈이 커지면 K · M · B · T 같은 단위로 줄여서 보여 줘요.<br>위쪽 💰를 누르고 📏 돈 단위 보기에서 🇰🇷 한국 단위를 켜면<br>만 · 억 · 조 · 경 · 해 … 무량대수까지 17가지 한국 단위로 보여요!' },
   { icon: '⏩', title: '전투 배속', text: '전투 화면 위쪽 <b>⏩ 배속</b> 버튼을 누를 때마다 빨라져요!<br>보통 전투는 <b>4배</b>까지, <b>🔁 연속 전투</b>는 시작할 때 배속을 골라요: 1 · 2 · 4 · 10 · 25 · 50 · 100 · 250 · 500 · 1000 · 2500 · 5000 · <b>10000배</b>!<br>25배부터는 움직이는 장면을 건너뛰고 결과만 빠르게 보여 줘요. 전투 중에 <b>Esc</b> 키를 누르면 바로 나가요.' },
@@ -10292,6 +10323,7 @@ const ACTIONS = {
   buyRune: (d) => buyRune(d.kind),
   buyLegend: (d) => buyLegend(d.id),
   buyMon: (d) => buyMon(d.type),
+  buyAllMons: (d) => buyAllMons(d.kind),
   buyHab: (d) => buyHab(d.el),
   buyFood: (d) => buyFood(d.n),
   buyGold: (d) => buyGold(d.n),
