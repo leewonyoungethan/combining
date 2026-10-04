@@ -4885,6 +4885,7 @@ function openHatchery(i = curHatch, slot) {
       ? S.hatch.map((t, k) => `<button class="egg-slot" data-act="incubate" data-idx="${k}"><span class="egg small ${eggLv(t)}">🥚</span><span>🐣 부화!</span></button>`).join('')
       : '<p class="muted">알이 없어요. 교배산이나 상점에서 알을 가져오세요!</p>'}</div>
     ${S.hatch.length + leftover.length > 1 ? '<div class="all-box"><button class="btn green" data-act="hatchAll">🐣 모두 부화 (알맞은 서식지로 자동 이사)</button></div>' : ''}
+    ${S.hatch.length + leftover.length ? `<div class="all-box"><button class="btn ghost small danger" data-act="dumpEggs">🗑️ 알 모두 버리기 (${fmt(S.hatch.length + leftover.length)}개)</button></div>` : ''}
     <p class="muted small-note">부화장 ${n}개가 알을 같이 보관해요 (${hatcheries().map(k => (S.plots[k].cap || HATCH_CAP) + '칸').join(' + ')}${mtnPower() > 1 ? ` + 교배산 추가분 ${2 * (mtnPower() - 1)}칸` : ''})</p>
     <div class="row">
       ${(p.lv || 1) > 1 ? `<button class="btn ghost small" data-act="splitHatch" data-i="${i}">🔓 합치기 취소 (${p.lv}개로 나누기)</button>` : ''}
@@ -4893,6 +4894,17 @@ function openHatchery(i = curHatch, slot) {
     </div>`);
 }
 
+function dumpEggs() {
+  const left = allIncs().filter(x => x.b), n = S.hatch.length + left.length;
+  if (!n) { toast('버릴 알이 없어요'); return; }
+  if (!confirm(`🗑️ 부화장에 있는 알 ${n}개를 모두 버릴까요?\n버린 알은 되돌릴 수 없어요!`)) return;
+  S.hatch = [];
+  left.forEach(({ k, s }) => { hatchIncs(S.plots[k])[s] = null; });
+  sfx('err');
+  save(); render();
+  toast(`🗑️ 알 ${n}개를 버렸어요`);
+  openHatchery();
+}
 function startInc(k, s, type) {
   const total = hatchTime(type);
   hatchIncs(S.plots[k])[s] = { type, total, end: Date.now() + total * 1000 };
@@ -10302,6 +10314,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🗑️', title: '알 모두 버리기', text: '부화장에 알이 너무 많이 쌓였나요?<br>부화장 창 아래쪽 🗑️ 알 모두 버리기를 누르면 한 번에 비울 수 있어요.<br>버린 알은 되돌릴 수 없으니 조심!' },
   { icon: '🏝️', title: '새 섬 사기', text: '섬 이름(🗺️ 섬 지도)을 누르면 맨 위에 🏝️ 새 섬 사기 버튼이 있어요.<br>섬 18개는 처음부터 있고, 19번째부터는 💰 골드로 살 수 있어요 (최대 100개)!<br>섬 하나마다 빈 땅이 25칸씩 생기고, 살 때마다 값이 올라가요.' },
   { icon: '🛒', title: '몬스터 전부 사기', text: '상점 🥚 알 칸에서 🛒 없는 몬스터 전부 사기를 누르면<br>아직 없는 몬스터를 한 번에 모두 사서 바로 부화시켜요!<br>알맞은 서식지가 없으면 부화장에서 기다려요.' },
   { icon: '🧩', title: '새 미니게임 4가지', text: '🧩 몬스터 2048: 같은 몬스터를 밀어서 합치면 🥚→🐣→🐥→🐤→🐔→🦅로 진화!<br>🐤 날아라 몬스터: 눌러서 날아올라 기둥 사이를 통과!<br>🧱 탑 쌓기: 왔다 갔다 하는 블록을 딱 맞게 내려놓아 높이 쌓기!<br>🐍 먹보 몬스터: 🍖을 먹을수록 길어지고 빨라져요!' },
@@ -10455,6 +10468,7 @@ const ACTIONS = {
   mergeAll: () => mergeAll(),
   upAllHabs: (d) => upAllHabs(d.i),
   hatchAll: () => hatchAll(),
+  dumpEggs: () => dumpEggs(),
   feedAll: (d) => feedAll(d.mode),
   team: (d) => toggleTeam(d.uid),
   teamAuto: () => teamAuto(),
