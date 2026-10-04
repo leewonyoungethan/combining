@@ -6235,7 +6235,7 @@ function buyRankBox(r) {
 }
 // 📚 모든 몬스터 상점: 게임에 있는 몬스터 전부를 등급 · 속성 · 이름으로 찾아서 산다
 const ALL_SHOP = { r: 'all', el: 'all', q: '', own: 'no', page: 0 };
-const ALL_PER = 48, ALL_BULK = 500;
+const ALL_PER = 48, ALL_BULK = 1000;
 const anyPrice = (t) => Math.round(300 * Math.pow(3, RANK[CAT[t].rarity]) * (evtOn('hatchfest') ? 0.5 : 1));
 function allShopList() {
   const own = new Set([...S.monsters.map(m => m.type), ...S.hatch]), q = ALL_SHOP.q.trim();
