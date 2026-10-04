@@ -764,7 +764,7 @@ const ACC_LOCKS = [
 function accLocked(a) {
   if (!a) return null;
   let rid = '', nick = '';
-  try { const d = JSON.parse(lsGet(accKey(a.id)) || 'null'); if (d) { rid = d.rankId || ''; nick = String(d.nick || ''); } } catch (e) { /* 저장 없음 */ }
+  try { const d = JSON.parse(readSave(a.id) || 'null'); if (d) { rid = d.rankId || ''; nick = String(d.nick || ''); } } catch (e) { /* 저장 없음 */ }
   const nm = String(a.name || '').trim().toLowerCase();
   return ACC_LOCKS.find(l => Date.now() < l.until && (nm === l.name || nick.trim().toLowerCase() === l.name || (rid && rid === l.rid))) || null;
 }
@@ -792,7 +792,7 @@ function newState() {
 
 function load(id = ACC && ACC.id) {
   try {
-    const raw = lsGet(accKey(id));
+    const raw = readSave(id);
     if (!raw) return null;
     const s = JSON.parse(raw);
     if (!s || !Array.isArray(s.monsters) || !Array.isArray(s.plots)) return null;
@@ -828,18 +828,133 @@ function load(id = ACC && ACC.id) {
   }
 }
 
+// 🗜️ 저장 압축 (LZ 방식, 글자 하나에 15비트씩 담는다)
+function lzPack(str) {
+  const out = [];
+  let val = 0, pos = 0;
+  const put = (v, n) => { for (let i = 0; i < n; i++) { val = (val << 1) | (v & 1); v >>= 1; if (pos === 14) { out.push(String.fromCharCode(val + 32)); val = 0; pos = 0; } else pos++; } };
+  // 사전을 나무(trie) 모양으로: 글자를 이어 붙이지 않아서 빠르다
+  const root = new Map(), fresh = new Set();
+  let enlarge = 2, size = 3, bits = 2;
+  const bump = () => { if (--enlarge === 0) { enlarge = Math.pow(2, bits); bits++; } };
+  const emit = (node) => {
+    if (node.single !== undefined && fresh.has(node.single)) {
+      const code = node.single;
+      if (code < 256) { put(0, bits); put(code, 8); } else { put(1, bits); put(code, 16); }
+      bump();
+      fresh.delete(code);
+    } else put(node.code, bits);
+    bump();
+  };
+  let w = null;
+  for (let k = 0; k < str.length; k++) {
+    const c = str.charCodeAt(k);
+    let one = root.get(c);
+    if (!one) { one = { code: size++, kids: new Map(), single: c }; root.set(c, one); fresh.add(c); }
+    if (w === null) { w = one; continue; }
+    const nx = w.kids.get(c);
+    if (nx) { w = nx; continue; }
+    emit(w);
+    w.kids.set(c, { code: size++, kids: new Map() });
+    w = one;
+  }
+  if (w !== null) emit(w);
+  put(2, bits);
+  for (;;) { val <<= 1; if (pos === 14) { out.push(String.fromCharCode(val + 32)); break; } pos++; }
+  return out.join('') + ' ';
+}
+function lzUnpack(s) {
+  const len = s.length;
+  let idx = 0, cur = s.charCodeAt(idx++) - 32, mask = 16384;
+  const get = (n) => {
+    let r = 0;
+    for (let p = 0; p < n; p++) {
+      const b = cur & mask;
+      mask >>= 1;
+      if (mask === 0) { mask = 16384; cur = s.charCodeAt(idx++) - 32; }
+      if (b) r |= (1 << p);
+    }
+    return r;
+  };
+  const dict = [0, 1, 2];
+  let enlarge = 4, size = 4, bits = 3;
+  let t = get(2), c;
+  if (t === 2) return '';
+  c = String.fromCharCode(get(t === 0 ? 8 : 16));
+  dict[3] = c;
+  let w = c;
+  const res = [c];
+  for (;;) {
+    if (idx > len) return null;
+    let code = get(bits);
+    if (code === 2) return res.join('');
+    if (code === 0 || code === 1) { dict[size++] = String.fromCharCode(get(code === 0 ? 8 : 16)); code = size - 1; if (--enlarge === 0) { enlarge = Math.pow(2, bits); bits++; } }
+    let entry;
+    if (dict[code] !== undefined) entry = dict[code];
+    else if (code === size) entry = w + w[0];
+    else return null;
+    res.push(entry);
+    dict[size++] = w + entry[0];
+    w = entry;
+    if (--enlarge === 0) { enlarge = Math.pow(2, bits); bits++; }
+  }
+}
+// 큰 저장은 압축해서 넣는다 ("Z1:" 표시). 작은 저장은 그대로 (빠르게)
+const SAVE_ZIP_AT = 100000;
+function readSave(id) {
+  const raw = lsGet(accKey(id));
+  if (!raw) return null;
+  if (raw.startsWith('Z1:')) { try { return lzUnpack(raw.slice(3)); } catch (e) { return null; } }
+  return raw;
+}
+// 다시 받을 수 있는 것(랭킹 보관함)부터 비워서 자리를 만든다
+function freeStorage() {
+  let n = 0;
+  try { for (let k = localStorage.length - 1; k >= 0; k--) { const key = localStorage.key(k); if (key && key.startsWith('combining-rankstore-')) { localStorage.removeItem(key); n++; } } } catch (e) { /* 저장소 없음 */ }
+  return n;
+}
+function writeSave(id, objOrJson) {
+  const json = typeof objOrJson === 'string' ? objOrJson : JSON.stringify(objOrJson);
+  const data = json.length > SAVE_ZIP_AT ? 'Z1:' + lzPack(json) : json;
+  if (lsSet(accKey(id), data)) return data.length;
+  freeStorage();
+  return lsSet(accKey(id), data) ? data.length : 0;
+}
+// 다른 계정의 예전(압축 안 된) 큰 저장도 압축해서 자리를 아낀다
+function compactAllSaves() {
+  accounts().forEach(a => { const raw = lsGet(accKey(a.id)); if (raw && !raw.startsWith('Z1:') && raw.length > SAVE_ZIP_AT) writeSave(a.id, raw); });
+}
+// 저장은 1.5초 동안 모아서 한 번에 (압축이 오래 걸리지 않게). 창을 닫거나 숨길 때는 바로
+let SAVE_T = null, SAVE_ACC = null, SAVE_S = null, lastSaved = {}, lastFullWarn = 0;
+function flushSave() {
+  clearTimeout(SAVE_T); SAVE_T = null;
+  const acc = SAVE_ACC, s = SAVE_S;
+  SAVE_ACC = SAVE_S = null;
+  if (!acc || !s) return true;
+  const json = JSON.stringify(s);
+  if (lastSaved[acc] === json) return true;
+  const ok = writeSave(acc, json);
+  if (ok) lastSaved[acc] = json;
+  else if (Date.now() - lastFullWarn > 60000) { lastFullWarn = Date.now(); toast('⚠️ 저장 공간이 부족해요! 안 쓰는 계정을 지우면 자리가 생겨요'); }
+  return !!ok;
+}
+function storageUsedKB() { let n = 0; try { for (let k = 0; k < localStorage.length; k++) { const key = localStorage.key(k); n += key.length + (localStorage.getItem(key) || '').length; } } catch (e) { /* 없음 */ } return Math.round(n * 2 / 1024); }
+
 // 💾 지금 저장하기: 저장이 잘 됐는지 다시 읽어서 확인한다
 function saveNow() {
   if (VISIT) { toast('👀 친구 섬 구경 중에는 저장하지 않아요'); return; }
   if (!ACC) { toast('계정에 들어간 다음에 저장할 수 있어요'); return; }
   S.last = Date.now();
-  const data = JSON.stringify(S);
-  const ok = lsSet(accKey(ACC.id), data) && lsGet(accKey(ACC.id)) === data;
-  if (!ok) { sfx('err'); toast('⚠️ 저장하지 못했어요! 저장 공간이 부족한지 확인해 주세요'); return; }
+  flushSave();
+  const json = JSON.stringify(S), size = writeSave(ACC.id, json);
+  const ok = size && readSave(ACC.id) === json;
+  if (ok) lastSaved[ACC.id] = json;
+  const data = { length: size };
+  if (!ok) { sfx('err'); toast('⚠️ 저장하지 못했어요! 저장 공간이 부족해요. 안 쓰는 계정을 지우면 자리가 생겨요'); return; }
   S.savedAt = Date.now();
   sfx('coin');
   const t = new Date(), hh = String(t.getHours()).padStart(2, '0'), mm = String(t.getMinutes()).padStart(2, '0'), ss = String(t.getSeconds()).padStart(2, '0');
-  toast(`💾 저장했어요! (${hh}:${mm}:${ss} · ${Math.ceil(data.length / 1024)}KB)`);
+  toast(`💾 저장했어요! (${hh}:${mm}:${ss} · ${Math.ceil(data.length * 2 / 1024)}KB · 전체 ${fmt(storageUsedKB())}KB 사용)`);
   const b = document.getElementById('saveBtn');
   if (b) { b.classList.remove('saved'); void b.offsetWidth; b.classList.add('saved'); }
 }
@@ -849,7 +964,10 @@ document.addEventListener('keydown', (e) => {
 function save() {
   if (VISIT) return;   // 친구 섬 구경 중에는 저장하지 않는다
   if (!ACC) return;
-  lsSet(accKey(ACC.id), JSON.stringify(S));
+  // 다른 계정/섬으로 바뀌었으면 앞의 것부터 저장
+  if (SAVE_ACC && (SAVE_ACC !== ACC.id || SAVE_S !== S)) flushSave();
+  SAVE_ACC = ACC.id; SAVE_S = S;
+  if (!SAVE_T) SAVE_T = setTimeout(flushSave, 1500);
 }
 
 let S = load() || newState();
@@ -8733,12 +8851,13 @@ function visitExit() {
 const pinHash = (id, pin) => hashStr(`pin:${id}:${pin}`).toString(36);
 function accSummary(a) {
   try {
-    const d = JSON.parse(lsGet(accKey(a.id)));
+    const d = JSON.parse(readSave(a.id));
     if (!d) return '새 섬';
     return `몬스터 ${fmt((d.monsters || []).length)} · 도감 ${fmt(Object.keys(d.dex || {}).length)} · 💰${d.infinite ? '∞' : fmt(d.gold || 0)}`;
   } catch (e) { return '새 섬'; }
 }
 function openLogin() {
+  flushSave();
   const list = accounts();
   const el = $('#login');
   el.innerHTML = `<div class="login-box">
@@ -8787,7 +8906,7 @@ function enterAccount(a) {
   if (accLocked(a)) { lockToast(a, accLocked(a)); openLogin(); return; }
   if (VISIT) visitExit();
   if (B) { clearTimeout(B.timer); if (B.pvp) { netSend({ t: 'bye' }); netClose(); } B = null; $('#battle').classList.add('hidden'); }
-  if (ACC && S) save();
+  if (ACC && S) { save(); flushSave(); }
   ACC = a;
   lsSet(ACC_CUR, a.id);
   S = load() || newState();
@@ -8831,7 +8950,7 @@ function accDel(id) {
   if (!confirm(`${a.name} 계정을 지울까요? 이 계정의 섬과 몬스터가 모두 사라져요.`)) return;
   if (!confirm('정말 지울까요? 되돌릴 수 없어요.')) return;
   // 온라인 기록(랭킹·길드)에서도 바로 빠지게
-  try { const old = JSON.parse(lsGet(accKey(id)) || 'null'); if (old && old.rankId) rankDelete(old.rankId); } catch (e) { /* 저장이 없음 */ }
+  try { const old = JSON.parse(readSave(id) || 'null'); if (old && old.rankId) rankDelete(old.rankId); } catch (e) { /* 저장이 없음 */ }
   lsDel(accKey(id));
   const rest = list.filter(x => x.id !== id);
   saveAccounts(rest);
@@ -8856,7 +8975,7 @@ async function accImportOk() {
   let n = 2;
   while (list.some(a => a.name === name)) name = `${String(d.name || '가져온 섬').slice(0, 7)} (${n++})`;
   const a = { id: newAccId(), name, pin: null, created: Date.now() };
-  if (!lsSet(accKey(a.id), JSON.stringify(d.save))) { toast('저장 공간이 부족해요'); return; }
+  if (!writeSave(a.id, d.save)) { toast('저장 공간이 부족해요! 안 쓰는 계정을 지우면 자리가 생겨요'); return; }
   const rest = list.filter(x => !x.auto);
   list.filter(x => x.auto).forEach(x => lsDel(accKey(x.id)));
   rest.push(a);
@@ -10569,7 +10688,7 @@ const ACTIONS = {
     if (B.auto && B.waiting && B.cur && B.cur.side === 'me') { if (B.coop && B.pvp.role === 'guest') { coopAutoPick(); return; } B.waiting = false; aiAct(B.cur); } else drawBattle();
   },
   typeChart: () => openTypeChart(),
-  applyUpdate: () => { if (B && !B.over) { toast('전투가 끝나면 적용할게요'); return; } save(); location.reload(); },
+  applyUpdate: () => { if (B && !B.over) { toast('전투가 끝나면 적용할게요'); return; } save(); flushSave(); location.reload(); },
   hardRefresh: () => { toast('🔄 최신 버전을 받는 중…'); hardRefresh(); },
   account: () => openAccountMenu(),
   accSwitch: () => { closeModal(); save(); openLogin(); },
@@ -11000,7 +11119,7 @@ function showUpdateBanner() {
 }
 // 옛 파일을 지우고 최신 버전으로 다시 켜기 (저장은 그대로)
 async function hardRefresh() {
-  save();
+  save(); flushSave();
   try { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); } catch (e) { /* 캐시 없음 */ }
   try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.update())); } catch (e) { /* 없음 */ }
   location.reload();
@@ -11008,7 +11127,9 @@ async function hardRefresh() {
 window.addEventListener('offline', () => toast('📴 오프라인이에요. 실시간 친구 대전 말고는 그대로 할 수 있어요'));
 window.addEventListener('online', () => toast('📶 다시 연결됐어요'));
 setInterval(save, 10000);   // 중요한 행동은 그때그때 저장하므로 자동 저장은 10초마다
-document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { save(); flushSave(); } });
 setInterval(updateFinger, 250);
-window.addEventListener('beforeunload', save);
-window.addEventListener('pagehide', save);
+window.addEventListener('beforeunload', () => { save(); flushSave(); });
+window.addEventListener('pagehide', () => { save(); flushSave(); });
+// 켤 때 한 번: 예전 큰 저장들을 압축해서 자리 만들기
+setTimeout(() => { try { compactAllSaves(); } catch (e) { /* 없음 */ } }, 4000);
