@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="몬스터 합치기">
-<link rel="stylesheet" href="style.css?v=182">
+<link rel="stylesheet" href="style.css?v=183">
 <script>
   // 게임이 켜지다가 문제가 생기면 멈춘 화면 대신 다시 시도 버튼을 보여 준다
   window.addEventListener('error', function (e) { window.__bootErr = (e && e.message) || '알 수 없는 오류'; });
@@ -70,6 +70,7 @@
     <button class="pill code-btn mis-btn" data-act="missions" title="미션">📋<i class="dot" id="misDot"></i></button>
     <button class="pill code-btn" data-act="account" title="계정">👤</button>
     <button class="pill code-btn full-btn hidden" id="fullBtn" data-act="fullscreen" title="전체화면">⛶</button>
+    <button class="pill code-btn save-btn" id="saveBtn" data-act="saveNow" title="지금 저장하기 (Ctrl+S)">💾</button>
     <button class="pill code-btn mute-btn" id="muteBtn" data-act="mute" title="무음 모드 켜기">🔊</button>
     <button class="pill code-btn tut-btn" data-act="help" title="튜토리얼">🎓<span>튜토리얼</span></button>
     <button class="pill code-btn menu-btn" id="menuBtn" data-act="menu" title="메뉴">☰<i class="dot" id="menuDot"></i></button>
@@ -108,8 +109,8 @@
 <div id="toast" class="toast"></div>
 <div id="finger" class="finger hidden"><span class="f-hand">👆</span><span class="f-tip">여기를 눌러요!</span></div>
 
-<script src="i18n.js?v=40"></script>
-<script src="game.js?v=190"></script>
+<script src="i18n.js?v=41"></script>
+<script src="game.js?v=191"></script>
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
 </body>
 </html>

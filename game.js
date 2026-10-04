@@ -828,6 +828,24 @@ function load(id = ACC && ACC.id) {
   }
 }
 
+// 💾 지금 저장하기: 저장이 잘 됐는지 다시 읽어서 확인한다
+function saveNow() {
+  if (VISIT) { toast('👀 친구 섬 구경 중에는 저장하지 않아요'); return; }
+  if (!ACC) { toast('계정에 들어간 다음에 저장할 수 있어요'); return; }
+  S.last = Date.now();
+  const data = JSON.stringify(S);
+  const ok = lsSet(accKey(ACC.id), data) && lsGet(accKey(ACC.id)) === data;
+  if (!ok) { sfx('err'); toast('⚠️ 저장하지 못했어요! 저장 공간이 부족한지 확인해 주세요'); return; }
+  S.savedAt = Date.now();
+  sfx('coin');
+  const t = new Date(), hh = String(t.getHours()).padStart(2, '0'), mm = String(t.getMinutes()).padStart(2, '0'), ss = String(t.getSeconds()).padStart(2, '0');
+  toast(`💾 저장했어요! (${hh}:${mm}:${ss} · ${Math.ceil(data.length / 1024)}KB)`);
+  const b = document.getElementById('saveBtn');
+  if (b) { b.classList.remove('saved'); void b.offsetWidth; b.classList.add('saved'); }
+}
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 's' || e.key === 'S' || e.key === 'ㄴ')) { e.preventDefault(); saveNow(); }
+});
 function save() {
   if (VISIT) return;   // 친구 섬 구경 중에는 저장하지 않는다
   if (!ACC) return;
@@ -10367,6 +10385,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '💾', title: '저장 버튼', text: '게임은 저절로 저장되지만, 위쪽 💾 버튼을 누르면 지금 바로 저장해요!<br>컴퓨터에서는 Ctrl + S 키로도 저장할 수 있어요.<br>저장이 잘 되면 시간과 크기를 알려 줘요.' },
   { icon: '⏫', title: '서식지 Lv.100', text: '서식지는 이제 Lv.100까지 올릴 수 있어요!<br>레벨만큼 몬스터가 살 수 있고 (Lv.100 = 100마리), 레벨마다 골드 수입 +25%.<br>서식지를 눌러 ⏫ 돈 되는 만큼 올리기를 누르면 한 번에 쭉 올라가요.' },
   { icon: '🏠', title: '섬 전체에 서식지', text: '섬 이름(🗺️ 섬 지도)이나 빈 땅의 🏗️ 건설하기에서 🏠 이 섬 빈 땅 전부에 서식지 짓기를 눌러요.<br>속성 하나를 고르거나 🌈 골고루를 고르면 섬의 빈 땅을 한 번에 꽉 채워요!' },
   { icon: '🗑️', title: '알 모두 버리기', text: '부화장에 알이 너무 많이 쌓였나요?<br>부화장 창 아래쪽 🗑️ 알 모두 버리기를 누르면 한 번에 비울 수 있어요.<br>버린 알은 되돌릴 수 없으니 조심!' },
@@ -10748,6 +10767,7 @@ const ACTIONS = {
   richQuick: (d) => { const i = $('#richAmt'); if (i) { i.value = d.q; i.dispatchEvent(new Event('input')); } },
   richGo: () => richGo(),
   lang: () => { tutFlag('lang', true); save(); window.setLang(window.LANG === 'en' ? 'ko' : 'en'); },
+  saveNow: () => saveNow(),
   mute: () => { toggleMute(); if ($('#modalBox .build-opt[data-act=mute]')) openAccountMenu(); },
   fullscreen: () => toggleFullscreen(),
   wbCollect: () => { collectAll(); closeModal(); if (dailyReady() && tutStep() >= 8) setTimeout(openDaily, 300); },
