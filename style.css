@@ -1527,3 +1527,15 @@ body.ui-hidden .todo-btn { opacity: .55; }
 /* 🇰🇷 한국 돈 단위 */
 .ut-kr { margin: 6px 0 10px; padding-bottom: 8px; border-bottom: 1px dashed rgba(255, 255, 255, .2); }
 .ut-kr .ut-grid { max-height: none; }
+
+/* 🎮 새 미니게임: 2048 · 날아라 · 탑 쌓기 · 먹보 */
+.mg-cv { display: block; margin: 6px auto; max-width: 100%; border-radius: 14px; touch-action: none; box-shadow: 0 4px 14px rgba(0, 0, 0, .3); }
+.mg-pad { display: grid; grid-template-columns: repeat(3, 56px); gap: 6px; justify-content: center; margin: 8px 0; }
+.mg-pad .btn { font-size: 20px; padding: 8px 0; }
+.g48 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: min(300px, 100%); margin: 6px auto; padding: 6px; border-radius: 14px; background: rgba(0, 0, 0, .25); touch-action: none; }
+.g48-c { aspect-ratio: 1; border-radius: 10px; background: rgba(255, 255, 255, .07); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.g48-c span { font-size: 30px; line-height: 1; } .g48-c small { font-size: 10px; color: var(--muted); font-weight: 900; }
+.g48-c.l1 { background: #fff3c4; } .g48-c.l2 { background: #ffe39a; } .g48-c.l3 { background: #ffd166; } .g48-c.l4 { background: #ffb347; }
+.g48-c.l5 { background: #ff9f5a; } .g48-c.l6 { background: #ff7b6b; } .g48-c.l7 { background: #ff5d8f; } .g48-c.l8 { background: #c77dff; }
+.g48-c.l9 { background: #7b9cff; } .g48-c.l10 { background: #4dd4ff; } .g48-c.l11 { background: linear-gradient(135deg, #ffe066, #ff6bd6); }
+.g48-c[class*=" l"] small { color: #5a3b00; }

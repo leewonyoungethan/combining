@@ -2347,7 +2347,7 @@ function memWin() {
   if (row) row.innerHTML = `<button class="btn green" data-act="memAgain">🃏 한 판 더${d.plays >= MEM_FREE ? ` (💎 ${MEM_COST})` : ` (무료 ${MEM_FREE - d.plays}판)`}</button><button class="btn ghost small" data-act="memClose">닫기</button>`;
 }
 
-// ===================== 🎮 미니게임 모음 (16가지) =====================
+// ===================== 🎮 미니게임 모음 (20가지) =====================
 // 새 게임 12개는 게임마다 하루 3판 무료, 그다음엔 💎3. ⭐(0~3)만큼 💰골드와 💎를 받는다
 const MG_FREE = 3, MG_COST = 3;
 const MG_LIST = [
@@ -2367,6 +2367,10 @@ const MG_LIST = [
   { id: 'hilo',    e: '🎲', name: '높을까 낮을까', sub: '다음 숫자가 높을지 낮을지' },
   { id: 'quiz',    e: '📘', name: '속성 퀴즈',     sub: '어느 속성이 더 강할까?' },
   { id: 'boxes',   e: '🎁', name: '보물 상자',     sub: '💣을 피해 상자 열기 (그만둘 수도!)' },
+  { id: 'm2048',   e: '🧩', name: '몬스터 2048',   sub: '같은 몬스터를 밀어서 합치기' },
+  { id: 'flappy',  e: '🐤', name: '날아라 몬스터', sub: '눌러서 날아 기둥 사이 통과' },
+  { id: 'stack',   e: '🧱', name: '탑 쌓기',       sub: '딱 맞게 내려놓아 높이 쌓기' },
+  { id: 'snake',   e: '🐍', name: '먹보 몬스터',   sub: '🍖을 먹으면 길어져요' },
 ];
 const mgDef = (id) => MG_LIST.find(g => g.id === id);
 const mgDay = () => (S.mg && S.mg.day === dayKey() ? S.mg : (S.mg = { day: dayKey(), n: {} }));
@@ -2389,7 +2393,7 @@ function openGames() {
   tutFlag('games', true);
   mgStop();
   showModal(`<div class="mg-hub"><h3>🎮 미니게임</h3>
-    <p class="muted">16가지 미니게임! 새 게임은 하루 3판씩 무료예요. <span class="mg-dot-demo">●</span> = 오늘 무료로 할 수 있어요</p>
+    <p class="muted">20가지 미니게임! 새 게임은 하루 3판씩 무료예요. <span class="mg-dot-demo">●</span> = 오늘 무료로 할 수 있어요</p>
     <div class="mg-grid">${MG_LIST.map(g => `<button class="mg-card ${mgReady(g) ? 'ready' : ''}" data-act="mgOpen" data-id="${g.id}">
         <span class="mg-e">${g.e}</span><b>${g.name}</b><small>${g.sub}</small>
         ${g.old ? '' : `<i class="mg-free">${mgFreeLeft(g.id) ? `무료 ${mgFreeLeft(g.id)}` : `💎${MG_COST}`}</i>`}
@@ -2421,6 +2425,10 @@ const MG_HELP = {
   odd: '똑같은 그림들 사이에서 <b>하나만 다른 그림</b>을 찾아요. 점점 많아져요! 25초 동안 도전.<br>12개 이상 ⭐⭐⭐',
   hilo: '다음 숫자가 지금보다 <b>높을지 낮을지</b> 맞혀요. 틀리면 끝!<br>7번 연속 맞히면 ⭐⭐⭐',
   quiz: '<b>속성 상성</b> 문제 8개! "이 속성은 무엇에게 강할까?"<br>7개 이상 맞히면 ⭐⭐⭐',
+  m2048: '<b>⬆️⬇️⬅️➡️</b> (화살표 키 · 밀기 · 버튼)으로 판을 밀어요. 같은 몬스터끼리 부딪히면 <b>합쳐져서 진화</b>해요! 🥚→🐣→🐥→🐤→🐔→🦃→🦅→🐲…<br>🦅(128)까지 만들면 ⭐⭐⭐ · 언제든 🏁 끝내고 받기',
+  flappy: '화면을 누르거나 <b>스페이스</b>를 누르면 몬스터가 날아올라요. 초록 기둥 사이를 지나가요! 부딪히면 끝.<br>15개 통과하면 ⭐⭐⭐',
+  stack: '왔다 갔다 하는 블록을 <b>딱 맞게</b> 내려놓아요 (화면 · 스페이스). 삐져나온 부분은 잘려요! 완전히 빗나가면 끝.<br>15층 쌓으면 ⭐⭐⭐',
+  snake: '<b>⬆️⬇️⬅️➡️</b> (화살표 키 · 밀기 · 버튼)으로 몬스터를 움직여 <b>🍖</b>을 먹어요. 먹을수록 길어지고 빨라져요! 벽이나 내 몸에 닿으면 끝.<br>🍖 15개 먹으면 ⭐⭐⭐',
   boxes: '상자 3개 중 하나에는 <b>💣</b>이 있어요. 보물을 찾을수록 보상이 커지지만, 💣을 열면 다 잃어요!<br>언제든 <b>그만</b>하고 받을 수 있어요. 5단계까지 가면 ⭐⭐⭐',
 };
 function mgStart(id) {
@@ -2477,7 +2485,199 @@ function mgTimer(sec, onEnd) {
   mgI(() => { if (!MG || MG.over) return; MG.left--; draw(); if (MG.left <= 0) onEnd(); }, 1000);
 }
 
+// 화살표 버튼 · 손가락으로 밀기
+const mgPad = () => `<div class="mg-pad"><span></span><button class="btn small" data-act="mgHit" data-dir="up">⬆️</button><span></span><button class="btn small" data-act="mgHit" data-dir="left">⬅️</button><button class="btn small" data-act="mgHit" data-dir="down">⬇️</button><button class="btn small" data-act="mgHit" data-dir="right">➡️</button></div>`;
+function mgSwipe(el, fn) {
+  if (!el) return;
+  let sx = 0, sy = 0;
+  el.addEventListener('touchstart', (e) => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; }, { passive: true });
+  el.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+  el.addEventListener('touchend', (e) => {
+    const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    fn(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+  });
+}
+const MG_ARROW = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', w: 'up', s: 'down', a: 'left', d: 'right' };
+// 게임 중 키보드 (화살표 · 스페이스)
+document.addEventListener('keydown', (e) => {
+  if (!MG || MG.over || !MG.key || $('#modal').classList.contains('hidden') || e.isComposing) return;
+  if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+  if (MG.key(e.key)) e.preventDefault();
+});
 const MG_GAMES = {
+  // 🧩 몬스터 2048
+  m2048() {
+    const LV = ['', '🥚', '🐣', '🐥', '🐤', '🐔', '🦃', '🦅', '🐲', '🐉', '🌟', '👑'];
+    const face = (v) => LV[Math.min(v, 11)];
+    mgShell('m2048', `<span>🏅 <b id="mgBest"></b></span><span>점수 <b id="mgScore">0</b></span>`, `<div class="g48" id="g48"></div>${mgPad()}`);
+    const M = MG;
+    M.g = Array(16).fill(0);
+    const add = () => { const f = M.g.map((v, i) => (v ? -1 : i)).filter(i => i >= 0); if (f.length) M.g[f[Math.floor(Math.random() * f.length)]] = Math.random() < 0.9 ? 1 : 2; };
+    const draw = () => {
+      mgSet('#g48', M.g.map(v => `<div class="g48-c l${Math.min(v, 11)}">${v ? `<span>${face(v)}</span><small>${Math.pow(2, v)}</small>` : ''}</div>`).join(''));
+      mgSet('#mgScore', M.score); mgSet('#mgBest', face(Math.max(...M.g)));
+    };
+    const slide = (a0) => {
+      const a = a0.filter(Boolean), out = [];
+      for (let i = 0; i < a.length; i++) {
+        if (a[i] === a[i + 1]) { out.push(a[i] + 1); M.score += Math.pow(2, a[i] + 1); i++; } else out.push(a[i]);
+      }
+      while (out.length < 4) out.push(0);
+      return out;
+    };
+    const LINES = { left: k => [0, 1, 2, 3].map(c => k * 4 + c), right: k => [3, 2, 1, 0].map(c => k * 4 + c), up: k => [0, 1, 2, 3].map(r => r * 4 + k), down: k => [3, 2, 1, 0].map(r => r * 4 + k) };
+    const canMove = () => M.g.some((v, i) => !v || (i % 4 < 3 && M.g[i + 1] === v) || (i < 12 && M.g[i + 4] === v));
+    const end = () => { const top = Math.max(...M.g); mgFinish(starsBy(top, 7, 6, 5), `${face(top)} ${Math.pow(2, top)}까지 · ${M.score}점`); };
+    M.move = (dir) => {
+      if (M.over || !LINES[dir]) return;
+      let moved = false;
+      for (let k = 0; k < 4; k++) {
+        const idx = LINES[dir](k), after = slide(idx.map(i => M.g[i]));
+        idx.forEach((i, j) => { if (M.g[i] !== after[j]) moved = true; M.g[i] = after[j]; });
+      }
+      if (!moved) return;
+      add(); draw(); sfx('tap');
+      if (!canMove()) end();
+    };
+    M.hit = (d) => { if (d.end) end(); else M.move(d.dir); };
+    M.key = (k) => { if (MG_ARROW[k]) { M.move(MG_ARROW[k]); return true; } };
+    mgSwipe($('#g48'), M.move);
+    add(); add(); draw();
+    mgSet('#mgBtns', '<button class="btn green small" data-act="mgHit" data-end="1">🏁 끝내고 받기</button><button class="btn ghost small" data-act="mgQuit">그만하기</button>');
+  },
+  // 🐤 날아라 몬스터
+  flappy() {
+    mgShell('flappy', `<span>🚩 <b id="mgScore">0</b></span><span class="muted">화면 · 스페이스 = 날기</span>`, `<canvas id="fpC" class="mg-cv" width="300" height="400"></canvas>`);
+    const M = MG, cv = $('#fpC'), c = cv.getContext('2d'), face = rndMonFace();
+    Object.assign(M, { y: 200, v: 0, pipes: [], t: 70, started: false });
+    const draw = () => {
+      const g = c.createLinearGradient(0, 0, 0, 400); g.addColorStop(0, '#7ec8ff'); g.addColorStop(1, '#e3f6ff');
+      c.fillStyle = g; c.fillRect(0, 0, 300, 400);
+      M.pipes.forEach(p => {
+        c.fillStyle = '#3cb371'; c.fillRect(p.x, 0, 50, p.top); c.fillRect(p.x, p.top + p.gap, 50, 400 - p.top - p.gap);
+        c.fillStyle = '#2e8b57'; c.fillRect(p.x - 4, p.top - 14, 58, 14); c.fillRect(p.x - 4, p.top + p.gap, 58, 14);
+      });
+      c.font = '30px serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.save(); c.translate(60, M.y); c.rotate(Math.max(-0.5, Math.min(0.8, M.v / 10))); c.fillText(face, 0, 0); c.restore();
+      if (!M.started) { c.fillStyle = '#123'; c.font = 'bold 18px sans-serif'; c.fillText('눌러서 시작!', 150, 300); }
+    };
+    const die = () => { draw(); mgFinish(starsBy(M.score, 15, 8, 3), `${M.score}개 통과`); };
+    M.flap = () => { if (M.over) return; M.started = true; M.v = -6.2; };
+    let last = performance.now();
+    const step = (now) => {
+      if (MG !== M || M.over || !document.body.contains(cv)) return;
+      const dt = Math.min(2, (now - last) / 16.67); last = now;
+      if (M.started) {
+        M.v += 0.36 * dt; M.y += M.v * dt; M.t += dt;
+        if (M.t > 95) { M.t = 0; const gap = Math.max(105, 140 - M.score * 2); M.pipes.push({ x: 300, top: 40 + Math.random() * (400 - gap - 80), gap, passed: false }); }
+        for (const p of M.pipes) {
+          p.x -= 2.3 * dt;
+          if (!p.passed && p.x + 50 < 60) { p.passed = true; M.score++; mgSet('#mgScore', M.score); sfx('coin'); }
+          if (p.x < 60 + 13 && p.x + 50 > 60 - 13 && (M.y - 12 < p.top || M.y + 12 > p.top + p.gap)) return die();
+        }
+        M.pipes = M.pipes.filter(p => p.x > -60);
+        if (M.y > 400 - 12 || M.y < -20) return die();
+      }
+      draw();
+      nextFrame(step);
+    };
+    cv.addEventListener('pointerdown', (e) => { e.preventDefault(); M.flap(); });
+    M.key = (k) => { if (k === ' ' || k === 'ArrowUp' || k === 'Enter') { M.flap(); return true; } };
+    draw(); nextFrame(step);
+  },
+  // 🧱 탑 쌓기
+  stack() {
+    mgShell('stack', `<span>🧱 <b id="mgScore">0</b></span><span class="muted">화면 · 스페이스 = 내려놓기</span>`, `<canvas id="stC" class="mg-cv" width="280" height="380"></canvas>`);
+    const M = MG, cv = $('#stC'), c = cv.getContext('2d'), W = 280, H = 22, face = rndMonFace();
+    M.blocks = [{ x: 70, w: 140 }];
+    M.cur = { x: 0, w: 140, dir: 1 };
+    M.speed = 2;
+    const draw = () => {
+      c.fillStyle = '#1b2240'; c.fillRect(0, 0, W, 380);
+      const n = M.blocks.length + (M.cur ? 1 : 0), off = Math.max(0, n * H - 300);
+      const yOf = (i) => 380 - (i + 1) * H + off;
+      M.blocks.forEach((b, i) => { c.fillStyle = `hsl(${(i * 23) % 360} 70% 60%)`; c.fillRect(b.x, yOf(i), b.w, H - 2); });
+      if (M.cur) {
+        const i = M.blocks.length;
+        c.fillStyle = `hsl(${(i * 23) % 360} 80% 65%)`; c.fillRect(M.cur.x, yOf(i), M.cur.w, H - 2);
+        c.font = '18px serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(face, M.cur.x + M.cur.w / 2, yOf(i) + H / 2 - 1);
+      }
+    };
+    M.drop = () => {
+      if (M.over || !M.cur) return;
+      const top = M.blocks[M.blocks.length - 1], cur = M.cur;
+      const l = Math.max(top.x, cur.x), r = Math.min(top.x + top.w, cur.x + cur.w);
+      if (r <= l) { M.cur = null; draw(); sfx('err'); mgFinish(starsBy(M.score, 15, 10, 5), `${M.score}층`); return; }
+      const perfect = Math.abs(cur.x - top.x) < 5;
+      const nb = perfect ? { x: top.x, w: top.w } : { x: l, w: r - l };
+      M.blocks.push(nb);
+      M.score++; mgSet('#mgScore', M.score); sfx(perfect ? 'yay' : 'coin');
+      mgSet('#mgMsg', perfect ? '✨ 딱 맞았어요!' : '');
+      M.speed = Math.min(6, 2 + M.score * 0.22);
+      M.cur = { x: M.score % 2 ? W - nb.w : 0, w: nb.w, dir: M.score % 2 ? -1 : 1 };
+    };
+    let last = performance.now();
+    const step = (now) => {
+      if (MG !== M || M.over || !document.body.contains(cv)) return;
+      const dt = Math.min(2, (now - last) / 16.67); last = now;
+      const cur = M.cur;
+      if (cur) {
+        cur.x += cur.dir * M.speed * dt;
+        if (cur.x <= 0) { cur.x = 0; cur.dir = 1; }
+        if (cur.x + cur.w >= W) { cur.x = W - cur.w; cur.dir = -1; }
+      }
+      draw();
+      nextFrame(step);
+    };
+    cv.addEventListener('pointerdown', (e) => { e.preventDefault(); M.drop(); });
+    M.key = (k) => { if (k === ' ' || k === 'Enter' || k === 'ArrowDown') { M.drop(); return true; } };
+    draw(); nextFrame(step);
+  },
+  // 🐍 먹보 몬스터
+  snake() {
+    const N = 12, CL = 24;
+    mgShell('snake', `<span>먹은 🍖 <b id="mgScore">0</b></span>`, `<canvas id="snC" class="mg-cv" width="${N * CL}" height="${N * CL}"></canvas>${mgPad()}`);
+    const M = MG, cv = $('#snC'), c = cv.getContext('2d'), face = rndMonFace();
+    M.body = [{ x: 5, y: 6 }, { x: 4, y: 6 }, { x: 3, y: 6 }];
+    M.dir = { x: 1, y: 0 }; M.nd = null;
+    const newFood = () => { let f; do { f = { x: Math.floor(Math.random() * N), y: Math.floor(Math.random() * N) }; } while (M.body.some(b => b.x === f.x && b.y === f.y)); M.food = f; };
+    newFood();
+    const draw = () => {
+      c.fillStyle = '#20402a'; c.fillRect(0, 0, N * CL, N * CL);
+      c.fillStyle = '#25492f';
+      for (let y = 0; y < N; y++) for (let x = (y % 2); x < N; x += 2) c.fillRect(x * CL, y * CL, CL, CL);
+      c.font = '18px serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('🍖', M.food.x * CL + CL / 2, M.food.y * CL + CL / 2);
+      M.body.forEach((b, i) => {
+        if (i === 0) { c.font = '20px serif'; c.fillText(face, b.x * CL + CL / 2, b.y * CL + CL / 2); return; }
+        c.fillStyle = `hsl(${100 + i * 6} 70% ${60 - Math.min(25, i)}%)`;
+        c.beginPath(); c.arc(b.x * CL + CL / 2, b.y * CL + CL / 2, CL / 2 - 3, 0, Math.PI * 2); c.fill();
+      });
+    };
+    const V = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
+    M.turn = (d) => { const v = V[d]; if (!v || (v.x === -M.dir.x && v.y === -M.dir.y)) return; M.nd = v; };
+    const tick = () => {
+      if (MG !== M || M.over) return;
+      if (M.nd) { M.dir = M.nd; M.nd = null; }
+      const h = { x: M.body[0].x + M.dir.x, y: M.body[0].y + M.dir.y };
+      const eat = h.x === M.food.x && h.y === M.food.y;
+      const bodyHit = M.body.slice(0, eat ? M.body.length : M.body.length - 1).some(b => b.x === h.x && b.y === h.y);
+      if (h.x < 0 || h.y < 0 || h.x >= N || h.y >= N || bodyHit) { sfx('err'); mgFinish(starsBy(M.score, 15, 10, 5), `🍖 ${M.score}개`); return; }
+      M.body.unshift(h);
+      if (eat) { M.score++; mgSet('#mgScore', M.score); sfx('coin'); newFood(); } else M.body.pop();
+      draw();
+      mgT(tick, Math.max(85, 190 - M.score * 6));
+    };
+    draw();
+    mgSet('#mgMsg', '방향을 누르면 출발해요!');
+    M.started = false;
+    const go = () => { if (M.started) return; M.started = true; mgSet('#mgMsg', ''); mgT(tick, 300); };
+    const t0 = M.turn; M.turn = (d) => { t0(d); go(); };
+    M.hit = (d) => M.turn(d.dir);
+    M.key = (k) => { if (MG_ARROW[k]) { M.turn(MG_ARROW[k]); return true; } };
+    mgSwipe(cv, (d) => M.turn(d));
+  },
   // 🔨 두더지 잡기
   whack() {
     mgShell('whack', `<span id="mgTime"></span><span>점수 <b id="mgScore">0</b></span>`,
@@ -2643,6 +2843,7 @@ function mgHit(d, el) {
   const M = MG;
   if (!M || M.over) return;
   const id = M.id;
+  if (M.hit) { M.hit(d, el); return; }
   if (id === 'whack') {
     const i = Number(d.i), h = M.holes[i];
     if (!h) return;
@@ -6040,6 +6241,8 @@ const SPEEDS_LOOP = [1, 2, 4, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000
 const FAST_Q = [], FAST_CH = new MessageChannel();
 // 한 번 몰아서 일하는 시간(ms)을 정하고, 그 시간이 지나면 화면이 한 번 그려질 때까지 쉰다
 // (쉬지 않고 계속 돌리면 화면이 멈추고 휴대폰에서는 튕긴다)
+// 다음 화면 그릴 때 (화면 그리기가 멈춰 있어도 0.034초 뒤에는 꼭 실행)
+function nextFrame(fn) { let done = false; const go = () => { if (done) return; done = true; fn(performance.now()); }; requestAnimationFrame(go); setTimeout(go, 34); }
 let fastSliceStart = 0;
 function fastPump() {
   const sp = typeof B !== 'undefined' && B ? bSpeed() : 0;
@@ -6049,7 +6252,7 @@ function fastPump() {
   if (!FAST_Q.length) { fastSliceStart = 0; return; }
   if (performance.now() - fastSliceStart >= slice) {
     fastSliceStart = 0;
-    if (document.hidden) setTimeout(fastPump, 0); else requestAnimationFrame(fastPump);
+    if (document.hidden) setTimeout(fastPump, 0); else nextFrame(fastPump);
   } else FAST_CH.port2.postMessage(0);
 }
 FAST_CH.port1.onmessage = fastPump;
@@ -9485,7 +9688,7 @@ TUT.push(
   { text: '🃏 🎮 미니게임의 🃏 짝 맞추기에서 같은 몬스터 카드 두 장을 찾아봐요 (하루 3판 무료!)', done: () => tutFlag('memory') || stat('memWin') > 0, go: () => { closeModal(); tab = 'island'; render(); openMemory(); } },
 );
 TUT.push(
-  { text: '🎮 섬 왼쪽의 🎮 미니게임에서 게임을 하나 해 봐요 (16가지 · 하루 3판씩 무료!)', done: () => stat('mgPlay') > 0, go: () => { closeModal(); tab = 'island'; render(); openGames(); } },
+  { text: '🎮 섬 왼쪽의 🎮 미니게임에서 게임을 하나 해 봐요 (20가지 · 하루 3판씩 무료!)', done: () => stat('mgPlay') > 0, go: () => { closeModal(); tab = 'island'; render(); openGames(); } },
 );
 TUT.push(
   { text: '📅 섬 왼쪽의 📅 할 일에서 오늘 받을 수 있는 것들을 한눈에 봐요 (다 하면 💎10!)', done: () => tutFlag('todo'), go: () => { closeModal(); tab = 'island'; render(); openTodo(); } },
@@ -9905,7 +10108,7 @@ const WELCOME = [
   { icon: '⏩', title: '전투 배속', text: '전투 화면 위쪽 <b>⏩ 배속</b> 버튼을 누를 때마다 빨라져요!<br>보통 전투는 <b>4배</b>까지, <b>🔁 연속 전투</b>는 시작할 때 배속을 골라요: 1 · 2 · 4 · 10 · 25 · 50 · 100 · 250 · 500 · 1000 · 2500 · 5000 · <b>10000배</b>!<br>25배부터는 움직이는 장면을 건너뛰고 결과만 빠르게 보여 줘요. 전투 중에 <b>Esc</b> 키를 누르면 바로 나가요.' },
   { icon: '🛒', title: '상점 칸', text: '상점이 <b>6칸</b>으로 나뉘었어요! 위쪽 버튼으로 바꿔요.<br>🏠 건물 · 🥚 알 · 🎁 특가·상자 · 🧪 아이템 · 🏛️ 강해지기 · 💎 보석<br>새로 생긴 것: <b>🎁 미스터리 상자</b>(골드/보석) · 🪱 미끼 ×10 · 🍖 먹이 10,000 · 🎟️ 미니게임 티켓 · 🔥 레이드 도전권 · ⚔️ 길드전 공격권 · 📦 룬 상자 ×10' },
   { icon: '📅', title: '오늘 할 일', text: '섬 왼쪽의 <b>📅 할 일</b>에 매일 받을 것들이 모여 있어요!<br>🎁 일일 보상 · 📋 미션 · 🎡 룰렛 · 🏁 경주 응원권 · 🎮 미니게임 · 🔥 레이드 · ⚔️ 길드전 · 💌 하트 …<br>남은 개수가 버튼에 숫자로 보이고, <b>가기 →</b>를 누르면 바로 가요. 다 하면 <b>💎 10</b> 보너스!' },
-  { icon: '🎮', title: '미니게임 16가지', text: '섬 왼쪽의 <b>🎮 미니게임</b> 버튼에 게임이 16가지!<br>🎣 낚시 · 🏁 경주 · 🎡 룰렛 · 🃏 짝 맞추기 · 🔨 두더지 잡기 · ⚡ 반응 속도 · 🔢 숫자 순서 · 🎨 색깔 맞추기 · 🧠 순서 기억 · ➕ 빠른 계산 · 🎈 풍선 터뜨리기 · ✊ 가위바위보 · 🔍 다른 그림 찾기 · 🎲 높을까 낮을까 · 📘 속성 퀴즈 · 🎁 보물 상자<br>새 게임은 하루 3판씩 무료! 잘할수록 ⭐이 많고 💰💎 보상도 커져요.' },
+  { icon: '🎮', title: '미니게임 20가지', text: '섬 왼쪽의 <b>🎮 미니게임</b> 버튼에 게임이 20가지!<br>🎣 낚시 · 🏁 경주 · 🎡 룰렛 · 🃏 짝 맞추기 · 🔨 두더지 잡기 · ⚡ 반응 속도 · 🔢 숫자 순서 · 🎨 색깔 맞추기 · 🧠 순서 기억 · ➕ 빠른 계산 · 🎈 풍선 터뜨리기 · ✊ 가위바위보 · 🔍 다른 그림 찾기 · 🎲 높을까 낮을까 · 📘 속성 퀴즈 · 🎁 보물 상자 · 🧩 몬스터 2048 · 🐤 날아라 몬스터 · 🧱 탑 쌓기 · 🐍 먹보 몬스터<br>새 게임은 하루 3판씩 무료! 잘할수록 ⭐이 많고 💰💎 보상도 커져요.' },
   { icon: '🃏', title: '몬스터 짝 맞추기', text: '<b>🃏 짝 맞추기</b>(섬 왼쪽 버튼)에서 뒤집힌 카드 16장 중 <b>같은 몬스터 두 장</b>을 찾아요!<br>적게 뒤집을수록 ⭐이 많아요 (11번 이하면 ⭐⭐⭐). 보상은 ⭐만큼 💰골드와 💎!<br>하루 3판 무료, 그다음엔 💎5. 🏅 최고 기록에 도전해 봐요!' },
   { icon: '🎡', title: '행운의 룰렛', text: '<b>🎡 룰렛</b>(섬 왼쪽 버튼)을 하루 1번 <b>무료</b>로 돌려요! 💎10이면 5번 더.<br>💰 골드 · 🤑 골드 대박 · 💎 보석 · 🍖 먹이 · 📦 룬 · 🥚 희귀 알… 그리고 아주 가끔 <b>🎰 잭팟 💎100</b>!' },
   { icon: '🏁', title: '몬스터 경주', text: '<b>🏁 경주</b>(섬 왼쪽 버튼)에서 몬스터 5마리가 달리기 시합을 해요!<br>1등할 것 같은 몬스터를 응원하고 골드를 걸면, 맞혔을 때 <b>4.5배</b>!<br>하루 1번은 <b>🎟️ 무료 응원권</b> (맞히면 💎15). 💨부스터 · 🍌미끄러짐 · 😴낮잠… 끝까지 몰라요!' },
