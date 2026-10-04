@@ -952,6 +952,7 @@ function saveNow() {
   const data = { length: size };
   if (!ok) { sfx('err'); toast('⚠️ 저장하지 못했어요! 저장 공간이 부족해요. 안 쓰는 계정을 지우면 자리가 생겨요'); return; }
   S.savedAt = Date.now();
+  tutFlag('saveNow', true);
   sfx('coin');
   const t = new Date(), hh = String(t.getHours()).padStart(2, '0'), mm = String(t.getMinutes()).padStart(2, '0'), ss = String(t.getSeconds()).padStart(2, '0');
   toast(`💾 저장했어요! (${hh}:${mm}:${ss} · ${Math.ceil(data.length * 2 / 1024)}KB · 전체 ${fmt(storageUsedKB())}KB 사용)`);
@@ -4265,6 +4266,7 @@ function islBulkPlan(want) {
 }
 function openIslandBulk() {
   if (VISIT) return;
+  tutFlag('bulkGrow', true);
   if (islCount() >= ISL_MAX) { toast(`🏝️ 섬은 ${ISL_MAX}개까지예요!`); return; }
   const opts = [1, 5, 10, 25, ISL_MAX].map(w => {
     const p = islBulkPlan(w), label = w === ISL_MAX ? '돈 되는 만큼 전부' : `${w}개`;
@@ -4301,6 +4303,7 @@ function buyIslandsBulk(want) {
 }
 // ⏫ 모든 서식지를 돈 되는 만큼 (가장 낮은 레벨부터 골고루)
 function upAllHabsMax() {
+  tutFlag('bulkGrow', true);
   const habs = S.plots.map((p, i) => ({ p, i })).filter(({ p }) => p && p.kind === 'hab' && p.lv < HAB_MAX_LV);
   if (!habs.length) { toast('⏫ 모든 서식지가 이미 Lv.' + HAB_MAX_LV + '이에요!'); return; }
   let ups = 0;
@@ -6268,6 +6271,7 @@ function allShopRedraw() {
   if (p) p.scrollTop = py; window.scrollTo(0, wy);
 }
 function buyAny(type) {
+  tutFlag('allShop', true);
   if (!CAT[type]) return;
   if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요 (또는 🛒 전부 사기)'); return; }
   if (!spend(anyPrice(type))) return;
@@ -6277,6 +6281,7 @@ function buyAny(type) {
   allShopRedraw(); updateHud();
 }
 function allShopBuyAll() {
+  tutFlag('allShop', true);
   tutFlag('buyAll', true);
   const list = allShopMissing().slice(0, ALL_BULK);
   if (!list.length) { toast('🎉 이미 모두 가지고 있어요!'); return; }
@@ -10158,6 +10163,14 @@ TUT.push(
   { text: '🏠 섬 이름(🗺️ 섬 지도)에서 🏠 이 섬 빈 땅 전부에 서식지 짓기를 눌러 봐요 (한 번에 섬을 꽉 채워요!)', done: () => tutFlag('fillIsl') || !islFree().length,
     go: () => { closeModal(); tab = 'island'; render(); openFillIsland(); } },
 );
+TUT.push(
+  { text: '📚 상점 🥚 알 칸의 📚 모든 몬스터 상점에서 ▶ 다음 쪽을 눌러 봐요 (몬스터 40000마리를 등급 · 속성 · 이름으로 찾고, 1000마리씩 한 번에 사요!)', done: () => tutFlag('allShop'),
+    go: () => { closeModal(); tab = 'shop'; shopTab = 'egg'; render(); const h = $('#shopAll'); if (h) h.scrollIntoView({ block: 'start' }); } },
+  { text: '💾 위쪽 💾 저장 버튼을 눌러 봐요 (컴퓨터는 Ctrl + S). "저장했어요!"가 나오면 안전해요', done: () => tutFlag('saveNow'),
+    go: () => { closeModal(); saveNow(); } },
+  { text: '⏫ 🗺️ 섬 지도에서 🏝️🏝️ 섬 여러 개 한 번에 사기나 ⏫ 모든 서식지 돈 되는 만큼 올리기를 눌러 봐요', done: () => tutFlag('bulkGrow'),
+    go: () => { closeModal(); tab = 'island'; render(); openIslandList(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -10391,6 +10404,18 @@ function tutPoint(k) {
       return ['#islandBar [data-act=islList]'];
     case 53: // 섬 전체에 서식지
       if (inModal) return ['#modalBox [data-act=fillIslOpen]', '#modalBox [data-act=close]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#islandBar [data-act=islList]'];
+    case 54: // 모든 몬스터 상점
+      if (inModal) return ['#modalBox [data-act=close]'];
+      if (tab !== 'shop') return [bottomBtn('shop')];
+      if (shopTab !== 'egg') return ['#view [data-act=shopJump][data-tab=egg]'];
+      return ['#view [data-act=allShopPage][data-d="1"]'];
+    case 55: // 저장 버튼
+      if (inModal) return ['#modalBox [data-act=close]'];
+      return ['#saveBtn'];
+    case 56: // 한 번에 키우기
+      if (inModal) return ['#modalBox [data-act=islBulkOpen]', '#modalBox [data-act=upAllHabsMax]', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#islandBar [data-act=islList]'];
   }
@@ -10726,9 +10751,9 @@ const ACTIONS = {
   buyAllMons: (d) => buyAllMons(d.kind),
   buyAny: (d) => buyAny(d.type),
   allShopBuyAll: () => allShopBuyAll(),
-  allShopSet: (d) => { ALL_SHOP[d.k] = d.v; ALL_SHOP.page = 0; allShopRedraw(); },
-  allShopFind: () => { ALL_SHOP.q = (($('#allShopQ') || {}).value || '').trim().slice(0, 20); ALL_SHOP.page = 0; allShopRedraw(); },
-  allShopPage: (d) => { ALL_SHOP.page += Number(d.d) || 0; allShopRedraw(); },
+  allShopSet: (d) => { tutFlag('allShop', true); ALL_SHOP[d.k] = d.v; ALL_SHOP.page = 0; allShopRedraw(); },
+  allShopFind: () => { tutFlag('allShop', true); ALL_SHOP.q = (($('#allShopQ') || {}).value || '').trim().slice(0, 20); ALL_SHOP.page = 0; allShopRedraw(); },
+  allShopPage: (d) => { tutFlag('allShop', true); ALL_SHOP.page += Number(d.d) || 0; allShopRedraw(); },
   buyHab: (d) => buyHab(d.el),
   buyFood: (d) => buyFood(d.n),
   buyGold: (d) => buyGold(d.n),
