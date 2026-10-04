@@ -722,6 +722,7 @@ let ACC = null;
   ACC = list.find(a => a.id === lsGet(ACC_CUR)) || list[0];
 })();
 const SECRET_CODE = '방탄유리';
+const CE_CODE = '우주부자';   // 💰 3Ce 선물 (계정마다 한 번)
 // ----- 🔒 계정 잠금 (관리자): 정해진 시간까지 그 계정으로 못 들어간다. 시간이 지나면 저절로 풀린다 -----
 // name: 계정 이름(대소문자 무시) · rid: 랭킹 id
 const ACC_LOCKS = [
@@ -799,7 +800,7 @@ function save() {
 }
 
 let S = load() || newState();
-['gold', 'gems', 'food'].forEach(k => { if (typeof S[k] === 'number' && !(S[k] < 1e300)) S[k] = 1e300; });
+['gold', 'gems', 'food'].forEach(k => { if (typeof S[k] === 'number' && !(S[k] < 1e305)) S[k] = 1e305; });
 // 돌아왔을 때 "없는 동안 쌓인 골드"를 보여 주려고 켤 때의 상태를 기억
 const AWAY = { sec: (Date.now() - (S.last || Date.now())) / 1000, gold0: S.plots.reduce((s, p) => s + (p && p.kind === 'hab' ? p.gold || 0 : 0), 0) };
 
@@ -850,8 +851,8 @@ function spend(cost, cur = 'gold') {
   S[cur] -= cost;
   return true;
 }
-// 골드·보석이 너무 커져서 저장이 깨지지 않게 1e300에서 멈춘다
-const MONEY_CAP = 1e300;
+// 골드·보석이 너무 커져서 저장이 깨지지 않게 1e305에서 멈춘다 (3Ce = 3×10^303도 들어가게)
+const MONEY_CAP = 1e305;
 function earn(n, cur = 'gold') { if (!S.infinite) S[cur] = Math.min(MONEY_CAP, S[cur] + n); }
 // 모험 골드: 50스테이지까지는 1.25배씩, 그 뒤로는 1.03배씩만 (예전엔 끝없이 1.25배라 숫자가 폭발했음)
 const stageGold = (st) => st <= 50 ? 120 * Math.pow(1.25, st - 1) : 120 * Math.pow(1.25, 49) * Math.pow(st / 50, 2.5);
@@ -2440,6 +2441,7 @@ function mgStart(id) {
     else if (!spend(MG_COST, 'gems')) return;
   }
   d.n[id] = (d.n[id] || 0) + 1;
+  if (['m2048', 'flappy', 'stack', 'snake'].includes(id)) tutFlag('newMg', true);
   save(); updateHud();
   mgStop();
   MG = { id, timers: [], over: false, score: 0 };
@@ -3298,13 +3300,13 @@ const shortNum = (n) => {
   if (krOn() && Math.abs(n) < 1e72) {
     for (let i = KR_UNITS.length - 1; i >= 0; i--) {
       const [u, s] = KR_UNITS[i];
-      if (Math.abs(n) >= u) { const v = n / u, d = Math.abs(v) >= 100 ? 0 : 1, p = Math.pow(10, d); return (Math.floor(v * p) / p).toFixed(d).replace(/\.0$/, '') + s; }
+      if (Math.abs(n) >= u) { const v = n / u * (1 + 1e-12), d = Math.abs(v) >= 100 ? 0 : 1, p = Math.pow(10, d); return (Math.floor(v * p) / p).toFixed(d).replace(/\.0$/, '') + s; }
     }
   }
   if (Math.abs(n) >= 1e306) { const e = Math.floor(Math.log10(Math.abs(n))); return (Math.floor(n / Math.pow(10, e) * 10) / 10) + 'e' + e; }
   for (const [u, s] of NUM_UNITS) {
     if (Math.abs(n) >= u) {
-      const v = n / u;
+      const v = n / u * (1 + 1e-12);   // 3e303 / 1e303 = 2.999… 이 2.9로 보이지 않게
       // 버림으로 표시 (1.99M을 2M으로 올리지 않게)
       const d = Math.abs(v) >= 100 ? 0 : 1, p = Math.pow(10, d);
       return (Math.floor(v * p) / p).toFixed(d).replace(/\.0$/, '') + s;
@@ -9537,6 +9539,15 @@ function submitCode() {
   const inp = $('#codeInput');
   if (!inp) return;
   const v = inp.value.replace(/\s/g, '');
+  if (v === CE_CODE) {
+    closeModal();
+    if (S.ceGift) { toast('이미 3Ce를 받았어요 💰'); return; }
+    S.ceGift = true;
+    S.gold = Math.min(MONEY_CAP, (S.gold || 0) + 3e303);
+    save(); updateHud(); render(); sfx('win');
+    toast('🌌 3Ce 💰 들어왔어요! (' + shortNum(S.gold) + ')');
+    return;
+  }
   if (v === SECRET_CODE) {
     closeModal();
     if (S.infinite) { toast('이미 돈 무한이에요 💰'); return; }
@@ -9700,6 +9711,10 @@ TUT.push(
 TUT.push(
   { text: '🇰🇷 위쪽 💰를 눌러 📏 돈 단위 보기를 열고, 🇰🇷 한국 단위(만 · 억 · 조)를 켜 봐요', done: () => tutFlag('krunit') || !!S.krUnits || (window.LANG === 'en' && tutFlag('unitTable')),
     go: () => { closeModal(); UT_OPEN = true; openResInfo('gold'); UT_OPEN = false; } },
+);
+TUT.push(
+  { text: '🧩 🎮 미니게임에 새로 생긴 🧩 몬스터 2048 · 🐤 날아라 몬스터 · 🧱 탑 쌓기 · 🐍 먹보 몬스터 중 하나를 해 봐요', done: () => tutFlag('newMg'),
+    go: () => { closeModal(); tab = 'island'; render(); openGames(); } },
 );
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
@@ -9919,6 +9934,10 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=close]'];
       return ['[data-act=resInfo][data-r=gold]'];
     }
+    case 50: // 새 미니게임 4개
+      if (inModal) return ['#modalBox [data-act=mgStart][data-id=m2048]', '#modalBox .mg-card[data-id=m2048]', '#modalBox [data-act=games]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#gameBtn'];
   }
   return null;
 }
@@ -10104,6 +10123,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🧩', title: '새 미니게임 4가지', text: '🧩 몬스터 2048: 같은 몬스터를 밀어서 합치면 🥚→🐣→🐥→🐤→🐔→🦅로 진화!<br>🐤 날아라 몬스터: 눌러서 날아올라 기둥 사이를 통과!<br>🧱 탑 쌓기: 왔다 갔다 하는 블록을 딱 맞게 내려놓아 높이 쌓기!<br>🐍 먹보 몬스터: 🍖을 먹을수록 길어지고 빨라져요!' },
   { icon: '🇰🇷', title: '한국 돈 단위', text: '돈이 커지면 K · M · B · T 같은 단위로 줄여서 보여 줘요.<br>위쪽 💰를 누르고 📏 돈 단위 보기에서 🇰🇷 한국 단위를 켜면<br>만 · 억 · 조 · 경 · 해 … 무량대수까지 17가지 한국 단위로 보여요!' },
   { icon: '⏩', title: '전투 배속', text: '전투 화면 위쪽 <b>⏩ 배속</b> 버튼을 누를 때마다 빨라져요!<br>보통 전투는 <b>4배</b>까지, <b>🔁 연속 전투</b>는 시작할 때 배속을 골라요: 1 · 2 · 4 · 10 · 25 · 50 · 100 · 250 · 500 · 1000 · 2500 · 5000 · <b>10000배</b>!<br>25배부터는 움직이는 장면을 건너뛰고 결과만 빠르게 보여 줘요. 전투 중에 <b>Esc</b> 키를 누르면 바로 나가요.' },
   { icon: '🛒', title: '상점 칸', text: '상점이 <b>6칸</b>으로 나뉘었어요! 위쪽 버튼으로 바꿔요.<br>🏠 건물 · 🥚 알 · 🎁 특가·상자 · 🧪 아이템 · 🏛️ 강해지기 · 💎 보석<br>새로 생긴 것: <b>🎁 미스터리 상자</b>(골드/보석) · 🪱 미끼 ×10 · 🍖 먹이 10,000 · 🎟️ 미니게임 티켓 · 🔥 레이드 도전권 · ⚔️ 길드전 공격권 · 📦 룬 상자 ×10' },
