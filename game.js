@@ -2833,11 +2833,12 @@ function unitTableHTML() {
   const kr = window.LANG === 'en' ? '' : `<div class="ut-kr"><button class="btn small ${S.krUnits ? 'green' : 'ghost'}" data-act="krUnits">🇰🇷 한국 단위로 보기 ${S.krUnits ? '켜짐' : '꺼짐'}</button>
     <p class="muted">켜면 숫자를 만 · 억 · 조 · 경…으로 보여 줘요 (1만 배마다 바뀌어요)</p>
     <div class="ut-grid">${KR_UNITS.map(([u, s], i) => `<span><b>${s}</b><small>10<sup>${4 * (i + 1)}</sup></small></span>`).join('')}</div></div>`;
-  return `<details class="unit-table" ${UT_OPEN ? 'open' : ''}><summary>📏 돈 단위 보기 (K → Ce ${NUM_UNITS.length}가지${window.LANG === 'en' ? '' : ` + 만 → 무량대수 ${KR_UNITS.length}가지`})</summary>${kr}
+  return `<details class="unit-table" ${UT_OPEN ? 'open' : ''}><summary>${window.LANG === 'en' ? `📏 돈 단위 보기 (K → Ce, ${NUM_UNITS.length}가지)` : `📏 돈 단위 보기 (K → Ce ${NUM_UNITS.length}가지 + 만 → 무량대수 ${KR_UNITS.length}가지)`}</summary>${kr}
     <p class="muted">1000배마다 단위가 바뀌어요. 예) 1K = 1,000 · 1M = 1,000K</p>
     <div class="ut-grid">${NUM_UNITS.slice().reverse().map(([u, s], i) => `<span><b>${s}</b><small>10<sup>${3 * (i + 1)}</sup></small></span>`).join('')}</div></details>`;
 }
 let UT_OPEN = false;
+document.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('unit-table') && e.target.open) tutFlag('unitTable', true); }, true);
 function openResInfo(r) {
   tutFlag('res', true);
   const x = RES_INFO[r];
@@ -9493,6 +9494,10 @@ TUT.push(
   { text: '⏩ 🔁 연속 전투를 시작할 때 배속을 골라 봐요 (최대 10000배속! Esc 키로 나가기)', done: () => tutFlag('speed') || (S.bSpeed || 1) > 1,
     go: () => { closeModal(); tab = 'adventure'; render(); } },
 );
+TUT.push(
+  { text: '🇰🇷 위쪽 💰를 눌러 📏 돈 단위 보기를 열고, 🇰🇷 한국 단위(만 · 억 · 조)를 켜 봐요', done: () => tutFlag('krunit') || !!S.krUnits || (window.LANG === 'en' && tutFlag('unitTable')),
+    go: () => { closeModal(); UT_OPEN = true; openResInfo('gold'); UT_OPEN = false; } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -9704,6 +9709,13 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=loopGo][data-sp="10"]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return S.team.length ? ['#view [data-act=fightLoop]'] : ['#view [data-act=teamAuto]'];
+    case 49: { // 한국 돈 단위
+      const ut = document.querySelector('#modalBox .unit-table');
+      if (ut && !ut.open) return ['#modalBox .unit-table summary'];
+      if (ut) return [window.LANG === 'en' ? '#modalBox [data-act=close]' : '#modalBox [data-act=krUnits]'];
+      if (inModal) return ['#modalBox [data-act=close]'];
+      return ['[data-act=resInfo][data-r=gold]'];
+    }
   }
   return null;
 }
@@ -9889,6 +9901,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🇰🇷', title: '한국 돈 단위', text: '돈이 커지면 K · M · B · T 같은 단위로 줄여서 보여 줘요.<br>위쪽 💰를 누르고 📏 돈 단위 보기에서 🇰🇷 한국 단위를 켜면<br>만 · 억 · 조 · 경 · 해 … 무량대수까지 17가지 한국 단위로 보여요!' },
   { icon: '⏩', title: '전투 배속', text: '전투 화면 위쪽 <b>⏩ 배속</b> 버튼을 누를 때마다 빨라져요!<br>보통 전투는 <b>4배</b>까지, <b>🔁 연속 전투</b>는 시작할 때 배속을 골라요: 1 · 2 · 4 · 10 · 25 · 50 · 100 · 250 · 500 · 1000 · 2500 · 5000 · <b>10000배</b>!<br>25배부터는 움직이는 장면을 건너뛰고 결과만 빠르게 보여 줘요. 전투 중에 <b>Esc</b> 키를 누르면 바로 나가요.' },
   { icon: '🛒', title: '상점 칸', text: '상점이 <b>6칸</b>으로 나뉘었어요! 위쪽 버튼으로 바꿔요.<br>🏠 건물 · 🥚 알 · 🎁 특가·상자 · 🧪 아이템 · 🏛️ 강해지기 · 💎 보석<br>새로 생긴 것: <b>🎁 미스터리 상자</b>(골드/보석) · 🪱 미끼 ×10 · 🍖 먹이 10,000 · 🎟️ 미니게임 티켓 · 🔥 레이드 도전권 · ⚔️ 길드전 공격권 · 📦 룬 상자 ×10' },
   { icon: '📅', title: '오늘 할 일', text: '섬 왼쪽의 <b>📅 할 일</b>에 매일 받을 것들이 모여 있어요!<br>🎁 일일 보상 · 📋 미션 · 🎡 룰렛 · 🏁 경주 응원권 · 🎮 미니게임 · 🔥 레이드 · ⚔️ 길드전 · 💌 하트 …<br>남은 개수가 버튼에 숫자로 보이고, <b>가기 →</b>를 누르면 바로 가요. 다 하면 <b>💎 10</b> 보너스!' },
@@ -10247,7 +10260,7 @@ const ACTIONS = {
   weekBonus: () => weekBonus(),
   music: () => toggleMusic(),
   firstAccOk: () => firstAccOk(),
-  krUnits: () => { S.krUnits = !S.krUnits; save(); UT_OPEN = true; openResInfo('gold'); UT_OPEN = false; render(); updateHud(); toast(S.krUnits ? '🇰🇷 이제 만 · 억 · 조 단위로 보여요' : '📏 K · M · B 단위로 돌아왔어요'); },
+  krUnits: () => { S.krUnits = !S.krUnits; tutFlag('krunit', true); save(); UT_OPEN = true; openResInfo('gold'); UT_OPEN = false; render(); updateHud(); toast(S.krUnits ? '🇰🇷 이제 만 · 억 · 조 단위로 보여요' : '📏 K · M · B 단위로 돌아왔어요'); },
   lang: () => { tutFlag('lang', true); save(); window.setLang(window.LANG === 'en' ? 'ko' : 'en'); },
   mute: () => { toggleMute(); if ($('#modalBox .build-opt[data-act=mute]')) openAccountMenu(); },
   fullscreen: () => toggleFullscreen(),
