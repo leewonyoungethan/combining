@@ -1523,3 +1523,7 @@ body.ui-hidden .todo-btn { opacity: .55; }
 /* 👤 처음 계정 만들기 */
 .first-acc input { width: 100%; margin: 6px 0; }
 .first-acc h3 { margin: 10px 0 4px; }
+
+/* 🇰🇷 한국 돈 단위 */
+.ut-kr { margin: 6px 0 10px; padding-bottom: 8px; border-bottom: 1px dashed rgba(255, 255, 255, .2); }
+.ut-kr .ut-grid { max-height: none; }

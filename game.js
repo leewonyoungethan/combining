@@ -854,7 +854,7 @@ function spend(cost, cur = 'gold') {
 const MONEY_CAP = 1e300;
 function earn(n, cur = 'gold') { if (!S.infinite) S[cur] = Math.min(MONEY_CAP, S[cur] + n); }
 // 모험 골드: 50스테이지까지는 1.25배씩, 그 뒤로는 1.03배씩만 (예전엔 끝없이 1.25배라 숫자가 폭발했음)
-const stageGold = (st) => st <= 50 ? 120 * Math.pow(1.25, st - 1) : 120 * Math.pow(1.25, 49) * Math.pow(1.03, st - 50);
+const stageGold = (st) => st <= 50 ? 120 * Math.pow(1.25, st - 1) : 120 * Math.pow(1.25, 49) * Math.pow(st / 50, 2.5);
 
 // ----- 효과음 -----
 let AC = null;
@@ -884,8 +884,10 @@ function duckMusic(sec) {
   g.setValueAtTime(DUCK_VOL, now + sec + 0.05);
   g.linearRampToValueAtTime(MUSIC_VOL, now + sec + 0.6);
 }
+let lastFastSfx = 0;
 function sfx(kind) {
   if (!soundOn() || !SFX[kind]) return;
+  if (typeof B !== 'undefined' && B && LOOP && bSpeed() >= 25) { const n = performance.now(); if (n - lastFastSfx < 300) return; lastFastSfx = n; }
   try {
     if (!audioCtx()) return;
     if (AC.state === 'suspended') AC.resume();
@@ -2828,10 +2830,14 @@ const RES_INFO = {
     btns: '<button class="btn green" data-act="resGo" data-to="mons">🐾 몬스터 키우기</button>' },
 };
 function unitTableHTML() {
-  return `<details class="unit-table"><summary>📏 돈 단위 보기 (K → Ce, ${NUM_UNITS.length}가지)</summary>
+  const kr = window.LANG === 'en' ? '' : `<div class="ut-kr"><button class="btn small ${S.krUnits ? 'green' : 'ghost'}" data-act="krUnits">🇰🇷 한국 단위로 보기 ${S.krUnits ? '켜짐' : '꺼짐'}</button>
+    <p class="muted">켜면 숫자를 만 · 억 · 조 · 경…으로 보여 줘요 (1만 배마다 바뀌어요)</p>
+    <div class="ut-grid">${KR_UNITS.map(([u, s], i) => `<span><b>${s}</b><small>10<sup>${4 * (i + 1)}</sup></small></span>`).join('')}</div></div>`;
+  return `<details class="unit-table" ${UT_OPEN ? 'open' : ''}><summary>📏 돈 단위 보기 (K → Ce ${NUM_UNITS.length}가지${window.LANG === 'en' ? '' : ` + 만 → 무량대수 ${KR_UNITS.length}가지`})</summary>${kr}
     <p class="muted">1000배마다 단위가 바뀌어요. 예) 1K = 1,000 · 1M = 1,000K</p>
     <div class="ut-grid">${NUM_UNITS.slice().reverse().map(([u, s], i) => `<span><b>${s}</b><small>10<sup>${3 * (i + 1)}</sup></small></span>`).join('')}</div></details>`;
 }
+let UT_OPEN = false;
 function openResInfo(r) {
   tutFlag('res', true);
   const x = RES_INFO[r];
@@ -3080,10 +3086,19 @@ const NUM_UNITS = (() => {
   }
   return out.reverse();
 })();
+const KR_UNITS = ['만', '억', '조', '경', '해', '자', '양', '구', '간', '정', '재', '극', '항하사', '아승기', '나유타', '불가사의', '무량대수'].map((s, i) => [Math.pow(10, 4 * (i + 1)), s]);
+const krOn = () => S.krUnits && window.LANG !== 'en';
 const shortNum = (n) => {
   n = Math.floor(n);
   if (Math.abs(n) < 1e4) return fmt(n);
   if (!isFinite(n)) return '∞';
+  // 한국 단위: 무량대수(10^68)의 1만 배까지는 만 · 억 · 조 …로 (그보다 크면 영어 단위)
+  if (krOn() && Math.abs(n) < 1e72) {
+    for (let i = KR_UNITS.length - 1; i >= 0; i--) {
+      const [u, s] = KR_UNITS[i];
+      if (Math.abs(n) >= u) { const v = n / u, d = Math.abs(v) >= 100 ? 0 : 1, p = Math.pow(10, d); return (Math.floor(v * p) / p).toFixed(d).replace(/\.0$/, '') + s; }
+    }
+  }
   if (Math.abs(n) >= 1e306) { const e = Math.floor(Math.log10(Math.abs(n))); return (Math.floor(n / Math.pow(10, e) * 10) / 10) + 'e' + e; }
   for (const [u, s] of NUM_UNITS) {
     if (Math.abs(n) >= u) {
@@ -5816,6 +5831,7 @@ function merge(t, lv) {
 }
 
 // ===================== 화면: 모험 =====================
+const ENEMY_POOLS = { n: -1, p: {} };
 function enemyTeam(stage) {
   let seed = stage * 7919 + 13;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -5824,7 +5840,8 @@ function enemyTeam(stage) {
   const count = stage === 1 ? 1 : stage === 2 ? 2 : 3;
   for (let i = 0; i < count; i++) {
     const ri = Math.max(0, tier - (rnd() < 0.35 ? 1 : 0));
-    const pool = CAT_LIST.filter(c => c.rarity === RAR_ORDER[ri]);
+    if (ENEMY_POOLS.n !== CAT_LIST.length) { ENEMY_POOLS.n = CAT_LIST.length; ENEMY_POOLS.p = {}; }
+    const pool = ENEMY_POOLS.p[ri] || (ENEMY_POOLS.p[ri] = CAT_LIST.filter(c => c.rarity === RAR_ORDER[ri]));
     const c = pool[Math.floor(rnd() * pool.length)];
     const lv = Math.min(MAX_LV, stage + Math.floor(rnd() * 2));
     res.push({ type: c.id, lv });
@@ -5980,6 +5997,7 @@ function stopLoop(reason) {
   if (!LOOP) return;
   const l = LOOP;
   LOOP = null;
+  save(); updateHud();
   toast(`⏹ 연속 전투 끝! ${l.wins}연승 (스테이지 ${l.start} → ${S.stage})${reason ? ' · ' + reason : ''}`);
   if (B) drawBattle();
 }
@@ -5989,7 +6007,7 @@ function loopNext() {
   LOOP.wins++;
   clearTimeout(B.timer);
   B = null;
-  $('#battle').classList.add('hidden');
+  if (bSpeed() < 250) $('#battle').classList.add('hidden');
   startBattle();
 }
 
@@ -6019,14 +6037,22 @@ function logB(msg) {
 const SPEEDS_LOOP = [1, 2, 4, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000], SPEEDS = [1, 2, 4];
 // 250배속부터는 타이머(최소 4ms)를 기다리지 않고 바로 다음 차례로 (화면이 멈추지 않게 한 번씩 숨은 쉬면서)
 const FAST_Q = [], FAST_CH = new MessageChannel();
-// 한 번에 쓸 시간(ms): 1000배까지는 한 차례씩, 2500·5000·10000배는 그만큼 여러 차례를 몰아서
-const fastBudget = () => { const sp = typeof B !== 'undefined' && B ? bSpeed() : 0; return sp >= 10000 ? 14 : sp >= 5000 ? 7 : sp >= 2500 ? 3 : 0; };
-FAST_CH.port1.onmessage = () => {
-  const budget = fastBudget(), t0 = performance.now();
-  do { const f = FAST_Q.shift(); if (!f) break; f(); } while (budget && FAST_Q.length && performance.now() - t0 < budget);
-  if (FAST_Q.length) FAST_CH.port2.postMessage(0);
-};
-function soon(fn) { FAST_Q.push(fn); if (FAST_Q.length === 1) FAST_CH.port2.postMessage(0); }
+// 한 번 몰아서 일하는 시간(ms)을 정하고, 그 시간이 지나면 화면이 한 번 그려질 때까지 쉰다
+// (쉬지 않고 계속 돌리면 화면이 멈추고 휴대폰에서는 튕긴다)
+let fastSliceStart = 0;
+function fastPump() {
+  const sp = typeof B !== 'undefined' && B ? bSpeed() : 0;
+  const slice = sp >= 10000 ? 9 : sp >= 5000 ? 6 : sp >= 2500 ? 4 : 10, many = sp >= 2500;
+  if (!fastSliceStart) fastSliceStart = performance.now();
+  do { const f = FAST_Q.shift(); if (!f) break; try { f(); } catch (e) { console.error(e); } } while (many && FAST_Q.length && performance.now() - fastSliceStart < slice);
+  if (!FAST_Q.length) { fastSliceStart = 0; return; }
+  if (performance.now() - fastSliceStart >= slice) {
+    fastSliceStart = 0;
+    if (document.hidden) setTimeout(fastPump, 0); else requestAnimationFrame(fastPump);
+  } else FAST_CH.port2.postMessage(0);
+}
+FAST_CH.port1.onmessage = fastPump;
+function soon(fn) { FAST_Q.push(fn); if (FAST_Q.length === 1 && !fastSliceStart) FAST_CH.port2.postMessage(0); }
 // clearTimeout(B.timer)로 "바로 진행" 예약도 취소되게
 const _clearTimeout = window.clearTimeout.bind(window);
 window.clearTimeout = (t) => { if (t && typeof t === 'object' && 'dead' in t) t.dead = true; else _clearTimeout(t); };
@@ -6421,14 +6447,16 @@ function endBattle(win) {
   B.result = { win, rewards };
   sfx(win ? 'win' : 'lose');
   if (win) mission('win');
-  save();
+  const fastLoop = LOOP && bSpeed() >= 100;
+  if (!fastLoop || performance.now() - lastLoopSave > 2000) { lastLoopSave = performance.now(); save(); }
   if (LOOP && !B.pvp && !B.gwar && !B.raid && B.bossIdx == null) {
     if (win) { const b = B; const go = () => { if (B === b && LOOP) loopNext(); }; if (bSpeed() >= 250) soon(go); else setTimeout(go, Math.max(60, 1600 / bSpeed())); }
     else { LOOP.wins = LOOP.wins; setTimeout(() => stopLoop('패배'), 300); }
   }
   drawBattle();
-  updateHud();
+  if (!fastLoop || performance.now() - lastLoopHud > 250) { lastLoopHud = performance.now(); updateHud(); }
 }
+let lastLoopSave = 0, lastLoopHud = 0;
 
 // Esc 키: 열린 창이 있으면 닫고, 전투 중이면 나간다 (연속 전투는 바로 멈추고 나가기)
 document.addEventListener('keydown', (e) => {
@@ -6502,7 +6530,7 @@ let lastBDraw = 0;
 function drawBattle() {
   if (!B) return;
   // 2500배속부터는 화면을 0.05초에 한 번만 다시 그린다 (끝났을 때는 꼭 그린다)
-  if (B.built && !B.over && bSpeed() >= 2500 && performance.now() - lastBDraw < 50) return;
+  if (LOOP && bSpeed() >= 250 && $('#arena') && performance.now() - lastBDraw < 60) return;
   lastBDraw = performance.now();
   if (!B.built || !$('#arena')) {
     const me = B.units.filter(u => u.side === 'me');
@@ -10219,6 +10247,7 @@ const ACTIONS = {
   weekBonus: () => weekBonus(),
   music: () => toggleMusic(),
   firstAccOk: () => firstAccOk(),
+  krUnits: () => { S.krUnits = !S.krUnits; save(); UT_OPEN = true; openResInfo('gold'); UT_OPEN = false; render(); updateHud(); toast(S.krUnits ? '🇰🇷 이제 만 · 억 · 조 단위로 보여요' : '📏 K · M · B 단위로 돌아왔어요'); },
   lang: () => { tutFlag('lang', true); save(); window.setLang(window.LANG === 'en' ? 'ko' : 'en'); },
   mute: () => { toggleMute(); if ($('#modalBox .build-opt[data-act=mute]')) openAccountMenu(); },
   fullscreen: () => toggleFullscreen(),
