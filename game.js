@@ -629,7 +629,24 @@ const ISLANDS = [
   { name: '황금 섬', emoji: '👑', grass: ['#ffe066', '#d4a017'], sand: '#fff3c4', decor: ['👑', '💰', '🏆', '💎', '✨', '🏆'] },
   { name: '무지개 섬', emoji: '🌈', grass: ['#a0e7ff', '#ff9ad5'], sand: '#fff5d6', decor: ['🌈', '🦄', '☁️', '🎠', '🎈', '⭐'] },
 ];
-const PLOTS = ISLAND_PLOTS * ISLANDS.length;
+const PLOTS = ISLAND_PLOTS * ISLANDS.length;   // 처음부터 있는 섬 18개
+// 새로 살 수 있는 섬 (19번 ~ 100번). 저장된 S.plots 길이 = 가진 섬 수 × 25
+const ISL_BASE = ISLANDS.length, ISL_MAX = 100;
+{
+  const NEW_ISL = [['🏰', '성'], ['🌊', '파도'], ['🎃', '호박'], ['🍦', '아이스크림'], ['🎪', '서커스'], ['🦖', '공룡'], ['🐉', '용'], ['🌺', '꽃'],
+    ['⚡', '번개'], ['🧊', '빙하'], ['🌾', '들판'], ['🎵', '음악'], ['🤖', '로봇'], ['🧙', '마법'], ['🐼', '판다'], ['🦩', '홍학'], ['🍕', '피자'], ['🏯', '궁전'],
+    ['🐝', '꿀벌'], ['🌵', '선인장'], ['🎮', '게임'], ['🪐', '행성'], ['🧸', '장난감'], ['🐳', '고래'], ['🦚', '공작'], ['🍉', '수박'], ['🗻', '설산'], ['🕸️', '거미'],
+    ['🪸', '산호'], ['🌻', '해바라기'], ['🎄', '크리스마스'], ['🦁', '사바나']];
+  const EXTRA_DECOR = ['✨', '🌟', '🌿', '🪨', '🌼', '🍄'];
+  for (let k = ISL_BASE; k < ISL_MAX; k++) {
+    const n = k - ISL_BASE, [e, nm] = NEW_ISL[n % NEW_ISL.length], round = Math.floor(n / NEW_ISL.length);
+    const h = (n * 47) % 360;
+    ISLANDS.push({ name: `${nm} 섬${round ? ' ' + (round + 1) : ''}`, emoji: e, grass: [`hsl(${h}, 60%, 62%)`, `hsl(${h}, 55%, 36%)`], sand: `hsl(${(h + 40) % 360}, 55%, 82%)`,
+      decor: [e, e, ...EXTRA_DECOR.slice(n % 3, n % 3 + 4)] });
+  }
+}
+const islCount = () => Math.max(ISL_BASE, Math.min(ISL_MAX, Math.floor(((typeof S !== 'undefined' && S && S.plots) ? S.plots.length : PLOTS) / ISLAND_PLOTS)));
+const islPrice = () => Math.round(1e8 * Math.pow(5, islCount() - ISL_BASE));
 const islandOf = (i) => Math.floor(i / ISLAND_PLOTS);
 const islandRange = (k) => Array.from({ length: ISLAND_PLOTS }, (_, n) => k * ISLAND_PLOTS + n);
 const islandLabel = (i) => ISLANDS[islandOf(i)].emoji + (islandOf(i) + 1);
@@ -779,7 +796,9 @@ function load(id = ACC && ACC.id) {
     if (!raw) return null;
     const s = JSON.parse(raw);
     if (!s || !Array.isArray(s.monsters) || !Array.isArray(s.plots)) return null;
-    while (s.plots.length < PLOTS) s.plots.push(null);   // 예전(섬 1개) 저장도 이어 하기
+    while (s.plots.length < PLOTS) s.plots.push(null);
+    if (s.plots.length % ISLAND_PLOTS) while (s.plots.length % ISLAND_PLOTS) s.plots.push(null);
+    if ((s.isl || 0) * ISLAND_PLOTS >= s.plots.length) s.isl = 0;   // 예전(섬 1개) 저장도 이어 하기
     s.isl = s.isl || 0;
     // 예전 저장: 교배 상태가 하나(s.breed)였으면 첫 교배산으로 옮기기
     const firstMtn = s.plots.find(p => p && p.kind === 'mountain');
@@ -4096,13 +4115,29 @@ function renderIslandBar() {
   document.body.classList.toggle('ui-hidden', !!S.hideUI && tab === 'island');
 }
 function goIsland(k) {
-  S.isl = (Number(k) + ISLANDS.length) % ISLANDS.length;
+  S.isl = (Number(k) + islCount()) % islCount();
   save();
   closeModal();
   render();
 }
+function buyIsland() {
+  if (VISIT) return;
+  if (islCount() >= ISL_MAX) { toast(`🏝️ 섬은 ${ISL_MAX}개까지예요!`); return; }
+  const k = islCount(), th = ISLANDS[k], cost = islPrice();
+  if (!confirm(`🏝️ ${k + 1}번째 섬 "${th.emoji} ${th.name}"을 살까요?\n💰 ${shortNum(cost)}`)) return;
+  if (!spend(cost)) return;
+  for (let n = 0; n < ISLAND_PLOTS; n++) S.plots.push(null);
+  S.isl = k;
+  sfx('yay');
+  save(); closeModal(); render(); updateHud();
+  toast(`🏝️ 새 섬 ${th.emoji} ${th.name}이 생겼어요! 빈 땅 ${ISLAND_PLOTS}칸`);
+}
 function openIslandList() {
-  const rows = ISLANDS.map((th, k) => {
+  tutFlag('islBuy', true);
+  const buy = VISIT ? '' : islCount() < ISL_MAX
+    ? `<button class="btn green isl-buy" data-act="islBuy">🏝️ 새 섬 사기 · ${ISLANDS[islCount()].emoji} ${islCount() + 1}. ${ISLANDS[islCount()].name} (💰 ${shortNum(islPrice())})</button>`
+    : `<p class="muted">🏝️ 섬 ${ISL_MAX}개를 모두 가졌어요!</p>`;
+  const rows = ISLANDS.slice(0, islCount()).map((th, k) => {
     const r = islandRange(k), used = r.filter(i => S.plots[i]).length;
     const habs = r.filter(i => S.plots[i] && S.plots[i].kind === 'hab').length;
     const mons = S.monsters.filter(m => islandOf(m.hab) === k).length;
@@ -4111,7 +4146,7 @@ function openIslandList() {
       '<span class="bo-nm">' + (k + 1) + '. ' + th.name + '<br><small>서식지 ' + habs + ' · 몬스터 ' + mons + '</small></span>' +
       '<span class="bo-cost">' + used + '/' + ISLAND_PLOTS + '칸</span></button>';
   }).join('');
-  showModal('<h3>🗺️ 섬 지도</h3><div class="build-list">' + rows + '</div>' +
+  showModal('<h3>🗺️ 섬 지도 <small class="muted">' + islCount() + '/' + ISL_MAX + '개</small></h3>' + buy + '<div class="build-list">' + rows + '</div>' +
     '<div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>');
 }
 
@@ -8551,7 +8586,7 @@ async function openIslandShare() {
   });
   const payload = { v: 1, nick: S.nick || '친구', isl: S.isl || 0, plots, mons: S.monsters.map(m => [m.hab, m.type, m.lv]), dex: Object.keys(S.dex).length };
   const code = await packCode(ISLE_PREFIX, payload);
-  codeBox('🏝️ 내 섬 코드', code, `아래 <b>4자리 숫자</b>를 친구에게 알려 주면, 친구가 👀 친구 섬 구경에 넣어서 내 섬 ${ISLANDS.length}개를 구경해요. 창을 열어 둔 동안 여러 친구가 받아 갈 수 있어요.`, { once: false });
+  codeBox('🏝️ 내 섬 코드', code, `아래 <b>4자리 숫자</b>를 친구에게 알려 주면, 친구가 👀 친구 섬 구경에 넣어서 내 섬 ${islCount()}개를 구경해요. 창을 열어 둔 동안 여러 친구가 받아 갈 수 있어요.`, { once: false });
 }
 function openVisit() {
   tutFlag('friends', true);
@@ -8568,11 +8603,12 @@ async function visitOk() {
   try { raw = await resolveCode($('#isleCode').value); } catch (e) { shortCodeFail(e); return; }
   try { d = await unpackCode(ISLE_PREFIX, raw); } catch (e) { toast('❌ 올바른 섬 코드가 아니에요. 전부 복사했는지 확인해 주세요'); return; }
   if (!d || d.v !== 1 || !Array.isArray(d.plots)) { toast('❌ 올바른 섬 코드가 아니에요'); return; }
-  const plots = Array(PLOTS).fill(null);
+  const vMax = Math.min(ISL_MAX * ISLAND_PLOTS, Math.max(PLOTS, ...d.plots.map(p => Math.ceil((Number(p[0]) + 1) / ISLAND_PLOTS) * ISLAND_PLOTS).filter(x => x > 0)));
+  const plots = Array(vMax).fill(null);
   const n = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.floor(Number(v)) || lo));
   d.plots.forEach(([i, k, a, b]) => {
     i = Number(i);
-    if (!(i >= 0 && i < PLOTS)) return;
+    if (!(i >= 0 && i < vMax)) return;
     if (k === 'h' && (a === 'legend' || ELI[a] != null)) plots[i] = { kind: 'hab', el: a, lv: n(b, 1, HAB_MAX_LV), gold: 0 };
     else if (k === 'f') plots[i] = { kind: 'farm', crop: CROPS[a] ? Number(a) : null, lastCrop: null, end: 0 };
     else if (k === 'm') plots[i] = { kind: 'mountain', lv: n(a, 1, 50), breeds: [] };
@@ -8584,7 +8620,7 @@ async function visitOk() {
     .map(([h, t, lv]) => ({ uid: uid++, type: t, lv: n(lv, 1, MAX_LV), hab: Number(h), runes: [null, null] }));
   const real = S;
   VISIT = { nick: esc(String(d.nick || '친구').slice(0, 10)), real, count: mons.length, dex: n(d.dex, 0, 1e5) };
-  S = { ...real, plots, monsters: mons, hatch: [], team: [], isl: n(d.isl, 0, ISLANDS.length - 1), tutOff: true, hideUI: false, breedLog: [], giftBox: [] };
+  S = { ...real, plots, monsters: mons, hatch: [], team: [], isl: n(d.isl, 0, plots.length / ISLAND_PLOTS - 1), tutOff: true, hideUI: false, breedLog: [], giftBox: [] };
   Object.keys(walkers).forEach(k => delete walkers[k]);
   closeModal();
   tab = 'island';
@@ -9846,6 +9882,10 @@ TUT.push(
   { text: '🛒 상점 🥚 알 칸의 🛒 없는 몬스터 전부 사기 버튼으로 없는 몬스터를 한꺼번에 사 봐요', done: () => tutFlag('buyAll') || !buyAllList('egg').length,
     go: () => { closeModal(); tab = 'shop'; shopTab = 'egg'; render(); } },
 );
+TUT.push(
+  { text: '🏝️ 섬 이름(🗺️ 섬 지도)을 눌러 봐요. 💰 골드로 새 섬을 살 수 있어요 (최대 100개!)', done: () => tutFlag('islBuy'),
+    go: () => { closeModal(); tab = 'island'; render(); openIslandList(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -10073,6 +10113,10 @@ function tutPoint(k) {
       if (tab !== 'shop') return [bottomBtn('shop')];
       if (shopTab !== 'egg') return ['#view [data-act=shopJump][data-tab=egg]'];
       return ['#view [data-act=buyAllMons]'];
+    case 52: // 섬 사기
+      if (inModal) return ['#modalBox [data-act=close]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#islandBar [data-act=islList]'];
   }
   return null;
 }
@@ -10258,6 +10302,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🏝️', title: '새 섬 사기', text: '섬 이름(🗺️ 섬 지도)을 누르면 맨 위에 🏝️ 새 섬 사기 버튼이 있어요.<br>섬 18개는 처음부터 있고, 19번째부터는 💰 골드로 살 수 있어요 (최대 100개)!<br>섬 하나마다 빈 땅이 25칸씩 생기고, 살 때마다 값이 올라가요.' },
   { icon: '🛒', title: '몬스터 전부 사기', text: '상점 🥚 알 칸에서 🛒 없는 몬스터 전부 사기를 누르면<br>아직 없는 몬스터를 한 번에 모두 사서 바로 부화시켜요!<br>알맞은 서식지가 없으면 부화장에서 기다려요.' },
   { icon: '🧩', title: '새 미니게임 4가지', text: '🧩 몬스터 2048: 같은 몬스터를 밀어서 합치면 🥚→🐣→🐥→🐤→🐔→🦅로 진화!<br>🐤 날아라 몬스터: 눌러서 날아올라 기둥 사이를 통과!<br>🧱 탑 쌓기: 왔다 갔다 하는 블록을 딱 맞게 내려놓아 높이 쌓기!<br>🐍 먹보 몬스터: 🍖을 먹을수록 길어지고 빨라져요!' },
   { icon: '🇰🇷', title: '한국 돈 단위', text: '돈이 커지면 K · M · B · T 같은 단위로 줄여서 보여 줘요.<br>위쪽 💰를 누르고 📏 돈 단위 보기에서 🇰🇷 한국 단위를 켜면<br>만 · 억 · 조 · 경 · 해 … 무량대수까지 17가지 한국 단위로 보여요!' },
@@ -10569,6 +10614,7 @@ const ACTIONS = {
   monView: (d) => { monView()[d.k] = d.v; save(); renderMons(); },
   isl: (d) => goIsland((S.isl || 0) + Number(d.d)),
   islGo: (d) => goIsland(d.k),
+  islBuy: () => buyIsland(),
   islList: () => openIslandList(),
   bossFight: (d) => startBossBattle(d.i),
   daily: () => openDaily(),

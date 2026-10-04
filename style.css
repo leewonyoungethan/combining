@@ -1551,3 +1551,6 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .all-shop .chips { margin: 4px 0; }
 .as-search input { flex: 1; min-width: 0; }
 .as-pages { justify-content: center; align-items: center; gap: 8px; margin: 8px 0; }
+
+/* 🏝️ 섬 사기 */
+.isl-buy { display: block; width: 100%; margin: 6px 0 10px; font-weight: 900; }
