@@ -1602,3 +1602,10 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .card .nm-real { font-size: 10px; color: var(--muted); margin-top: -2px; }
 .nick-btn { margin-left: 6px; vertical-align: middle; }
 .nick-box input { width: 100%; margin: 8px 0; font-size: 18px; text-align: center; }
+
+/* 💖 최애 · 📸 사진 */
+.card { position: relative; }
+.card .fav-mark { position: absolute; top: 4px; right: 4px; font-size: 14px; z-index: 2; }
+.nick-btn.on { background: rgba(255, 105, 180, .25); border-color: #ff69b4; }
+.photo-box img { width: 100%; border-radius: 12px; margin: 8px 0; box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
+.photo-box a.btn { text-decoration: none; display: inline-flex; align-items: center; }

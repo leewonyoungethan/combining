@@ -3620,7 +3620,7 @@ function mmss(sec) {
 function card(m, attrs = '', cls = '', extra = '') {
   const c = CAT[m.type], r = RAR[c.rarity];
   return `<div class="card r-${c.rarity} ${cls}" style="--rc:${r.color}" ${attrs}>
-    ${extra}
+    ${extra}${m.fav ? '<div class="fav-mark">💖</div>' : ''}
     <div class="face" style="background:${grad(c)}">${c.face}</div>
     <div class="nm">${m.nick ? `💖 ${esc(m.nick)}` : c.name}</div>${m.nick ? `<div class="nm-real">${c.name}</div>` : ''}
     <div class="meta"><span class="rar" style="color:${r.color}">${r.name}</span> · Lv.${m.lv}</div>
@@ -5702,6 +5702,39 @@ function nickOk(uid) {
   openMon(uid);
   render();
 }
+function favToggle(uid) {
+  const m = byUid(uid);
+  if (!m) return;
+  tutFlag('fav', true);
+  if (m.fav) { delete m.fav; toast('🤍 최애에서 뺐어요'); }
+  else { m.fav = true; sfx('yay'); toast(`💖 ${m.nick || CAT[m.type].name}을(를) 최애로 정했어요! 🐾 몬스터 탭에서 💖 최애만 볼 수 있어요`); }
+  save(); openMon(uid); render();
+}
+// 섬이 막 그려진 다음 장면을 찍는다
+function takePhoto() { let done = false; const go = () => { if (!done) { done = true; snapPhoto(); } }; requestAnimationFrame(go); setTimeout(go, 120); }
+function snapPhoto() {
+  tutFlag('photo', true);
+  try {
+    const w = cv.width, h = cv.height, out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    const g = out.getContext('2d');
+    g.drawImage(cv, 0, 0);
+    // 아래쪽 이름표
+    const th = ISLANDS[S.isl || 0], d = new Date(), fz = Math.max(18, Math.round(h * 0.035));
+    const text = `${th.emoji} ${S.nick || '나'}의 ${th.name} · 몬스터 ${fmt(S.monsters.length)}마리 · ${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`;
+    g.fillStyle = 'rgba(10, 12, 40, .65)';
+    g.fillRect(0, h - fz * 2.2, w, fz * 2.2);
+    g.font = `900 ${fz}px "Segoe UI", "Malgun Gothic", sans-serif`;
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, w / 2, h - fz * 1.1);
+    const url = out.toDataURL('image/png');
+    sfx('coin');
+    showModal(`<div class="photo-box"><h3>📸 찰칵! 내 섬 사진</h3>
+      <img src="${url}" alt="내 섬 사진">
+      <p class="muted">마음에 들면 저장해서 친구에게 보여 줘요! (사진을 찍기 전에 + − 로 크기를 맞출 수 있어요)</p>
+      <div class="row"><a class="btn green" href="${url}" download="내섬-${d.getMonth() + 1}-${d.getDate()}.png">💾 사진 저장</a><button class="btn ghost" data-act="close">닫기</button></div></div>`);
+  } catch (e) { toast('📸 사진을 찍지 못했어요'); }
+}
 function nickDel(uid) {
   const m = byUid(uid);
   if (!m) return;
@@ -5724,7 +5757,7 @@ function openMon(uid) {
   };
   showModal(`
     <div class="face big" style="background:${grad(c)}">${c.face}</div>
-    <h3>${m.nick ? `💖 ${esc(m.nick)} <small class="muted">${c.name}</small>` : c.name} <button class="btn ghost small nick-btn" data-act="nickOpen" data-uid="${m.uid}">✏️ ${m.nick ? '이름 바꾸기' : '이름 지어 주기'}</button></h3>
+    <h3>${m.nick ? `💖 ${esc(m.nick)} <small class="muted">${c.name}</small>` : c.name} <button class="btn ghost small nick-btn" data-act="nickOpen" data-uid="${m.uid}">✏️ ${m.nick ? '이름 바꾸기' : '이름 지어 주기'}</button><button class="btn ghost small nick-btn ${m.fav ? 'on' : ''}" data-act="favToggle" data-uid="${m.uid}">${m.fav ? '💖 최애' : '🤍 최애로'}</button></h3>
     <div class="rar" style="color:${r.color}">${r.name} · Lv.${m.lv}${max ? ' (MAX)' : ''}</div>
     <div class="stars big">${'★'.repeat(m.star || 0)}<span class="dim">${'☆'.repeat(STAR_MAX - (m.star || 0))}</span></div>
     <div class="els">${elNames(c.els)}</div>
@@ -6072,7 +6105,7 @@ function renderMons() {
 }
 
 // ----- 내 몬스터 정리해서 보기 -----
-const MON_VIEW_DEFAULT = { group: 'rar', sort: 'lv', el: 'all' };
+const MON_VIEW_DEFAULT = { group: 'rar', sort: 'lv', el: 'all', fav: 'off' };
 const monView = () => (S.monView = { ...MON_VIEW_DEFAULT, ...(S.monView || {}) });
 
 function monSummaryHTML() {
@@ -6094,7 +6127,8 @@ function monControlsHTML() {
   return `
     <div class="chips"><span class="chip-label">묶어 보기</span>${chip('group', 'rar', '⭐ 등급')}${chip('group', 'el', '🔥 속성')}${chip('group', 'isl', '🏝️ 섬')}${chip('group', 'hab', '🏠 서식지')}${chip('group', 'none', '📋 전체')}</div>
     <div class="chips"><span class="chip-label">정렬</span>${chip('sort', 'lv', '⬆️ 레벨')}${chip('sort', 'rar', '⭐ 등급')}${chip('sort', 'name', '가나다')}${chip('sort', 'new', '🆕 최근')}</div>
-    <div class="chips"><span class="chip-label">속성</span>${chip('el', 'all', '전체')}${EL.filter(e => owned.has(e.id)).map(e => chip('el', e.id, e.emoji + e.name)).join('')}</div>`;
+    <div class="chips"><span class="chip-label">속성</span>${chip('el', 'all', '전체')}${EL.filter(e => owned.has(e.id)).map(e => chip('el', e.id, e.emoji + e.name)).join('')}</div>
+    <div class="chips"><span class="chip-label">보기</span>${chip('fav', 'off', '🐾 모두')}${chip('fav', 'on', `💖 최애만 (${fmt(S.monsters.filter(m => m.fav).length)})`)}</div>`;
 }
 
 // 가나다 순서는 한 번만 정해 두고 숫자로 비교 (몬스터가 많아도 빠르게)
@@ -6120,8 +6154,8 @@ function redrawKeepScroll() {
 }
 function monGroupsHTML() {
   const v = monView();
-  const list = S.monsters.filter(m => v.el === 'all' || CAT[m.type].els.includes(v.el)).sort(monSorter(v.sort));
-  if (!list.length) return '<p class="muted empty-note">아직 몬스터가 없어요. 상점에서 알을 사 보세요! 🥚</p>';
+  const list = S.monsters.filter(m => (v.el === 'all' || CAT[m.type].els.includes(v.el)) && (v.fav !== 'on' || m.fav)).sort(monSorter(v.sort));
+  if (!list.length) return v.fav === 'on' ? '<p class="muted empty-note">아직 💖 최애 몬스터가 없어요. 몬스터를 누르고 🤍 최애로를 눌러 봐요!</p>' : '<p class="muted empty-note">아직 몬스터가 없어요. 상점에서 알을 사 보세요! 🥚</p>';
   const groups = new Map();
   const add = (key, label, order, m) => {
     if (!groups.has(key)) groups.set(key, { label, order, items: [] });
@@ -10449,6 +10483,12 @@ TUT.push(
   { text: '✏️ 🐾 몬스터 탭에서 몬스터를 눌러 ✏️ 이름 지어 주기를 해 봐요 (내 몬스터만의 별명!)', done: () => tutFlag('nick'),
     go: () => { closeModal(); tab = 'mons'; render(); } },
 );
+TUT.push(
+  { text: '💖 몬스터를 눌러 🤍 최애로를 눌러 봐요. 🐾 몬스터 탭에서 💖 최애만 모아 볼 수 있어요', done: () => tutFlag('fav'),
+    go: () => { closeModal(); tab = 'mons'; render(); } },
+  { text: '📸 섬 오른쪽 📸 버튼으로 내 섬 사진을 찍어 봐요 (저장해서 친구에게 보여 줘요!)', done: () => tutFlag('photo'),
+    go: () => { closeModal(); tab = 'island'; render(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -10708,6 +10748,14 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=nickOpen]', '#modalBox [data-act=nickOk]', '#modalBox [data-act=close]'];
       if (tab !== 'mons') return [bottomBtn('mons')];
       return ['#view [data-act=openMon]'];
+    case 60: // 최애
+      if (inModal) return ['#modalBox [data-act=favToggle]', '#modalBox [data-act=close]'];
+      if (tab !== 'mons') return [bottomBtn('mons')];
+      return ['#view [data-act=openMon]'];
+    case 61: // 섬 사진
+      if (inModal) return ['#modalBox [data-act=close]'];
+      if (tab !== 'island') return [bottomBtn('island')];
+      return ['#zoomBtns [data-act=photo]'];
   }
   return null;
 }
@@ -10893,6 +10941,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '💖', title: '최애 몬스터 · 섬 사진', text: '몬스터를 누르고 🤍 최애로를 누르면 카드에 💖가 붙어요. 🐾 몬스터 탭의 💖 최애만으로 좋아하는 몬스터만 모아 봐요!<br>섬 오른쪽 📸 버튼을 누르면 내 섬 사진을 찍어서 💾 저장할 수 있어요.' },
   { icon: '✏️', title: '몬스터 이름 짓기', text: '내 몬스터를 누르고 ✏️ 이름 지어 주기를 누르면 별명을 지어 줄 수 있어요!<br>별명은 카드와 전투에서 💖 뭉치 처럼 보여요. 언제든 바꾸거나 지울 수 있어요.' },
   { icon: '🐾', title: '몬스터 100000마리', text: '이제 몬스터가 100000마리가 넘어요! 반짝 화염 무당벌레, 신나는 영겁 비버처럼 새 친구들이 잔뜩!<br>등급은 피라미드 모양: 근원 15 · 절대 22 · 신성 33 · 초월 50 · 신화 81 · 전설 120 … 일반이 가장 많아요.<br>📚 모든 몬스터 상점에서는 희귀할수록 값이 어마어마하게 올라가요 (근원은 3 뒤에 0이 107개!).' },
   { icon: '🏝️', title: '한 번에 키우기', text: '🗺️ 섬 지도에서 🏝️🏝️ 섬 여러 개 한 번에 사기를 누르면 1 · 5 · 10 · 25개나 돈 되는 만큼 섬을 사고, 서식지까지 꽉 채워 줘요.<br>⏫ 모든 서식지 돈 되는 만큼 올리기를 누르면 낮은 레벨부터 골고루 Lv.100까지 올려요!' },
@@ -11044,6 +11093,8 @@ const ACTIONS = {
   buyAny: (d) => buyAny(d.type),
   buyEveryEgg: () => buyEveryEgg(),
   nickOpen: (d) => openNick(d.uid),
+  favToggle: (d) => favToggle(d.uid),
+  photo: () => takePhoto(),
   nickOk: (d) => nickOk(d.uid),
   nickDel: (d) => nickDel(d.uid),
   showMore: (d) => { SHOW_MORE[d.k] = showN(d.k) + 240; redrawKeepScroll(); },
