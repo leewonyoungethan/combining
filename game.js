@@ -1053,7 +1053,13 @@ let S = load() || newState();
 const AWAY = { sec: (Date.now() - (S.last || Date.now())) / 1000, gold0: S.plots.reduce((s, p) => s + (p && p.kind === 'hab' ? p.gold || 0 : 0), 0) };
 
 // ===================== 계산 =====================
-const byUid = (uid) => S.monsters.find(m => m.uid === Number(uid));
+// 번호로 몬스터 찾기: 목록을 한 번 만들어 두고 바로 꺼낸다 (몬스터가 7만 마리여도 빠르게)
+let UIDX = null, UIDX_REF = null, UIDX_LEN = -1;
+const byUid = (uid) => {
+  const ms = S.monsters;
+  if (!UIDX || UIDX_REF !== ms || UIDX_LEN !== ms.length) { UIDX = new Map(); for (const m of ms) UIDX.set(m.uid, m); UIDX_REF = ms; UIDX_LEN = ms.length; }
+  return UIDX.get(Number(uid));
+};
 const monIncome = (m) => RAR[CAT[m.type].rarity].income * m.lv * (1 + 0.3 * (m.star || 0));
 let HABIDX = null, HABIDX_REF = null, HABIDX_LEN = -1;
 const habIdxDirty = () => { HABIDX = null; };
@@ -6956,7 +6962,7 @@ function nextFrame(fn) { let done = false; const go = () => { if (done) return; 
 let fastSliceStart = 0;
 function fastPump() {
   const sp = typeof B !== 'undefined' && B ? bSpeed() : 0;
-  const slice = sp >= 10000 ? 9 : sp >= 5000 ? 6 : sp >= 2500 ? 4 : 10, many = sp >= 2500;
+  const slice = sp >= 10000 ? 12 : sp >= 5000 ? 8 : sp >= 2500 ? 5 : 10, many = sp >= 2500;
   if (!fastSliceStart) fastSliceStart = performance.now();
   do { const f = FAST_Q.shift(); if (!f) break; try { f(); } catch (e) { console.error(e); } } while (many && FAST_Q.length && performance.now() - fastSliceStart < slice);
   if (!FAST_Q.length) { fastSliceStart = 0; return; }
