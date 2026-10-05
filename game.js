@@ -1868,48 +1868,6 @@ function evtGoldMult(el) {
   if (ev.id === 'element' && ev.el === el) return 2;
   return 1;
 }
-// ===================== 🌙 밤 (진짜 시계: 저녁 7시 ~ 아침 6시) =====================
-const isNight = (d = new Date()) => d.getHours() >= 19 || d.getHours() < 6;
-const wxDay = () => (S.wx && S.wx.day === dayKey() ? S.wx : (S.wx = { day: dayKey(), star: 0, ball: 0 }));
-const WX_CATCH_MAX = 10;
-let wxShown = '';
-function drawWeather() {
-  const L = $('#wxLayer');
-  if (!L) return;
-  const night = isNight(), on = tab === 'island' && !B && night;
-  L.classList.toggle('hidden', !on);
-  if (!on) { wxShown = ''; return; }
-  if (wxShown === 'night') return;
-  wxShown = 'night';
-  L.className = 'wx-layer night';
-  let parts = '';
-  for (let k = 0; k < 40; k++) parts += `<i class="star" style="left:${(k * 61) % 100}%;top:${(k * 29) % 45}%;animation-delay:-${(k % 7) * 0.5}s"></i>`;
-  L.innerHTML = `<div class="wx-tint"></div>${parts}<div id="wxFly"></div>`;
-}
-// 🌠 별똥별 (밤에만): 지나갈 때 누르면 💎 3
-function wxSpawn() {
-  if (!isNight() || tab !== 'island' || B || VISIT || !$('#modal').classList.contains('hidden') || document.hidden) return;
-  const fly = $('#wxFly');
-  if (!fly || fly.children.length) return;
-  const d = wxDay();
-  if (d.star >= WX_CATCH_MAX) return;
-  const b = document.createElement('button');
-  b.className = 'wx-shoot';
-  b.textContent = '🌠';
-  b.dataset.act = 'wxCatch';
-  b.style.setProperty('--y', (12 + Math.random() * 45) + '%');
-  fly.appendChild(b);
-  setTimeout(() => b.remove(), 3600);
-}
-function wxCatch(el) {
-  const d = wxDay();
-  if (d.star >= WX_CATCH_MAX) return;
-  if (el) { el.disabled = true; el.classList.add('got'); setTimeout(() => el.remove(), 400); }
-  d.star++; earn(3, 'gems'); toast(`🌠 별똥별을 잡았어요! 💎 3 (오늘 ${d.star}/${WX_CATCH_MAX})`);
-  sfx('coin'); save(); updateHud();
-}
-setInterval(() => { if (typeof S !== 'undefined' && S) drawWeather(); }, 5000);
-setInterval(() => { if (Math.random() < 0.5) wxSpawn(); }, 9000);
 const totalIncome = () => S.plots.reduce((s, p, i) => s + (p && p.kind === 'hab' ? habIncome(i) : 0), 0);
 function evtCycle() {
   const d = new Date(), days = Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
@@ -4408,7 +4366,6 @@ function renderIslandBar() {
     '<button class="ib-name" data-act="islList">' + th.emoji + ' ' + (k + 1) + '. ' + th.name + ' <small>' + used + '/' + ISLAND_PLOTS + '칸' + (decoPercent(k) ? ' · 🎨+' + decoPercent(k) + '%' : '') + ' · 🗺️</small></button>' +
     '<button class="ib-arrow" data-act="isl" data-d="1">▶</button>';
   bar.classList.toggle('hidden', tab !== 'island');
-  drawWeather();
   $('#zoomBtns').classList.toggle('hidden', tab !== 'island');
   const hb = $('#hideBtn');
   hb.classList.toggle('hidden', tab !== 'island');
@@ -10897,7 +10854,6 @@ const WELCOME = [
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
   { icon: '🐾', title: '몬스터 100000마리', text: '이제 몬스터가 100000마리가 넘어요! 반짝 화염 무당벌레, 신나는 영겁 비버처럼 새 친구들이 잔뜩!<br>등급은 피라미드 모양: 근원 15 · 절대 22 · 신성 33 · 초월 50 · 신화 81 · 전설 120 … 일반이 가장 많아요.<br>📚 모든 몬스터 상점에서는 희귀할수록 값이 어마어마하게 올라가요 (근원은 3 뒤에 0이 107개!).' },
-  { icon: '🌙', title: '밤과 별똥별', text: '저녁 7시부터 아침 6시까지는 밤이에요. 섬이 어두워지고 별이 반짝여요!<br>하늘을 지나가는 🌠 별똥별을 누르면 💎 3 (하루 10번까지).' },
   { icon: '🏝️', title: '한 번에 키우기', text: '🗺️ 섬 지도에서 🏝️🏝️ 섬 여러 개 한 번에 사기를 누르면 1 · 5 · 10 · 25개나 돈 되는 만큼 섬을 사고, 서식지까지 꽉 채워 줘요.<br>⏫ 모든 서식지 돈 되는 만큼 올리기를 누르면 낮은 레벨부터 골고루 Lv.100까지 올려요!' },
   { icon: '💾', title: '저장 버튼', text: '게임은 저절로 저장되지만, 위쪽 💾 버튼을 누르면 지금 바로 저장해요!<br>컴퓨터에서는 Ctrl + S 키로도 저장할 수 있어요.<br>저장이 잘 되면 시간과 크기를 알려 줘요.' },
   { icon: '⏫', title: '서식지 Lv.100', text: '서식지는 이제 Lv.100까지 올릴 수 있어요!<br>레벨만큼 몬스터가 살 수 있고 (Lv.100 = 100마리), 레벨마다 골드 수입 +25%.<br>서식지를 눌러 ⏫ 돈 되는 만큼 올리기를 누르면 한 번에 쭉 올라가요.' },
@@ -11223,7 +11179,6 @@ const ACTIONS = {
   islBuy: () => buyIsland(),
   fillIslOpen: () => openFillIsland(),
   islBulkOpen: () => openIslandBulk(),
-  wxCatch: (d, el) => wxCatch(el),
   islBulk: (d) => buyIslandsBulk(d.n),
   upAllHabsMax: () => upAllHabsMax(),
   fillIsl: (d) => fillIsland(d.el),
