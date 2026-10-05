@@ -1597,3 +1597,8 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .wx-row .wx-e { font-size: 26px; } .wx-row small { color: var(--muted); }
 
 .more-btn { margin: 6px auto 12px; }
+
+/* ✏️ 몬스터 별명 */
+.card .nm-real { font-size: 10px; color: var(--muted); margin-top: -2px; }
+.nick-btn { margin-left: 6px; vertical-align: middle; }
+.nick-box input { width: 100%; margin: 8px 0; font-size: 18px; text-align: center; }

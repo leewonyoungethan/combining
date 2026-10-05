@@ -3622,7 +3622,7 @@ function card(m, attrs = '', cls = '', extra = '') {
   return `<div class="card r-${c.rarity} ${cls}" style="--rc:${r.color}" ${attrs}>
     ${extra}
     <div class="face" style="background:${grad(c)}">${c.face}</div>
-    <div class="nm">${c.name}</div>
+    <div class="nm">${m.nick ? `💖 ${esc(m.nick)}` : c.name}</div>${m.nick ? `<div class="nm-real">${c.name}</div>` : ''}
     <div class="meta"><span class="rar" style="color:${r.color}">${r.name}</span> · Lv.${m.lv}</div>
     ${m.star ? `<div class="stars">${'★'.repeat(m.star)}</div>` : ''}
     <div class="els">${elBadges(c.els)}</div>
@@ -5677,6 +5677,38 @@ function sellEgg(idx) {
 }
 
 // ===================== 몬스터 상세 / 룬 =====================
+function openNick(uid) {
+  const m = byUid(uid);
+  if (!m) return;
+  tutFlag('nick', true);
+  const c = CAT[m.type];
+  showModal(`<div class="nick-box"><div class="face big" style="background:${grad(c)}">${c.face}</div>
+    <h3>✏️ ${c.name}에게 이름 지어 주기</h3>
+    <p class="muted">내 몬스터만의 별명이에요! 카드와 전투에서 💖 별명으로 보여요 (8글자까지)</p>
+    <input id="nickIn" maxlength="8" value="${esc(m.nick || '')}" placeholder="예: 뭉치, 불꽃이" autocomplete="off">
+    <div class="row"><button class="btn green" data-act="nickOk" data-uid="${m.uid}">💖 정하기</button>${m.nick ? `<button class="btn ghost" data-act="nickDel" data-uid="${m.uid}">이름 지우기</button>` : ''}<button class="btn ghost" data-act="openMon" data-uid="${m.uid}">취소</button></div></div>`);
+  const inp = $('#nickIn');
+  if (inp) { inp.focus(); inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) nickOk(uid); }); }
+}
+function nickOk(uid) {
+  const m = byUid(uid);
+  if (!m) return;
+  const v = (($('#nickIn') || {}).value || '').trim().slice(0, 8);
+  if (!v) { toast('이름을 적어 주세요'); return; }
+  if (nameProblem(v)) { toast(nameProblem(v)); return; }
+  m.nick = v;
+  sfx('yay'); save();
+  toast(`💖 이제 이 몬스터의 이름은 "${v}"예요!`);
+  openMon(uid);
+  render();
+}
+function nickDel(uid) {
+  const m = byUid(uid);
+  if (!m) return;
+  delete m.nick;
+  save(); toast('이름을 지웠어요');
+  openMon(uid); render();
+}
 function openMon(uid) {
   const m = byUid(uid);
   if (!m) return;
@@ -5692,7 +5724,7 @@ function openMon(uid) {
   };
   showModal(`
     <div class="face big" style="background:${grad(c)}">${c.face}</div>
-    <h3>${c.name}</h3>
+    <h3>${m.nick ? `💖 ${esc(m.nick)} <small class="muted">${c.name}</small>` : c.name} <button class="btn ghost small nick-btn" data-act="nickOpen" data-uid="${m.uid}">✏️ ${m.nick ? '이름 바꾸기' : '이름 지어 주기'}</button></h3>
     <div class="rar" style="color:${r.color}">${r.name} · Lv.${m.lv}${max ? ' (MAX)' : ''}</div>
     <div class="stars big">${'★'.repeat(m.star || 0)}<span class="dim">${'☆'.repeat(STAR_MAX - (m.star || 0))}</span></div>
     <div class="els">${elNames(c.els)}</div>
@@ -6806,7 +6838,7 @@ function mkUnit(m, side, idx) {
   // 내 몬스터는 함께하는 펫의 전투 보너스를 받는다
   if (side === 'me') { st.atk = Math.round(st.atk * (1 + (petPct('atk') + kdLv('army') * 5 + cosLv('war') * 25 + (S.potBattleOn ? 30 : 0)) / 100)); st.hp = Math.round(st.hp * (1 + (petPct('hp') + kdLv('army') * 5 + cosLv('war') * 25) / 100)); }
   return {
-    id: side + idx, side, c, lv: m.lv,
+    id: side + idx, side, c, lv: m.lv, nick: side === 'me' && m.nick ? m.nick : '',
     maxHp: st.hp, hp: st.hp, dispHp: st.hp, shownDead: false,
     atk: st.atk, spd: st.spd, sta: 2,
     fx: { burn: 0, burnDmg: 0, poison: 0, poisonDmg: 0, stun: 0, shield: 0, buff: 0, curse: 0 },
@@ -7331,7 +7363,7 @@ function unitHTML(u) {
     <div class="tgt-mark">🎯</div>
     ${u.ally ? '<div class="u-ally" title="친구 몬스터">🤝</div>' : ''}
     <div class="u-face" style="background:${grad(u.c)}"><span>${u.c.face}</span></div>
-    <div class="u-nm">${u.c.name}</div>
+    <div class="u-nm">${u.nick ? `💖 ${esc(u.nick)}` : u.c.name}</div>
     <div class="u-lv">Lv.${u.lv} ${elBadges(u.c.els)}</div>
     <div class="hp-label"><span>⚡ 에너지</span><span class="u-hp"></span></div>
     <div class="hp ${u.side === 'foe' ? 'enemy' : ''}"><div class="hp-fill"></div></div>
@@ -10413,6 +10445,10 @@ TUT.push(
   { text: '💰 상점 🥚 알 칸의 📚 모든 몬스터 상점에서 💰 등급별 값 보기를 열어 봐요 (희귀할수록 어마어마하게 비싸져요!)', done: () => tutFlag('priceTable'),
     go: () => { closeModal(); tab = 'shop'; shopTab = 'egg'; render(); const d = document.querySelector('.price-table'); if (d) { d.open = true; d.scrollIntoView({ block: 'center' }); } } },
 );
+TUT.push(
+  { text: '✏️ 🐾 몬스터 탭에서 몬스터를 눌러 ✏️ 이름 지어 주기를 해 봐요 (내 몬스터만의 별명!)', done: () => tutFlag('nick'),
+    go: () => { closeModal(); tab = 'mons'; render(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -10668,6 +10704,10 @@ function tutPoint(k) {
       if (tab !== 'shop') return [bottomBtn('shop')];
       if (shopTab !== 'egg') return ['#view [data-act=shopJump][data-tab=egg]'];
       return ['#view .price-table summary'];
+    case 59: // 이름 짓기
+      if (inModal) return ['#modalBox [data-act=nickOpen]', '#modalBox [data-act=nickOk]', '#modalBox [data-act=close]'];
+      if (tab !== 'mons') return [bottomBtn('mons')];
+      return ['#view [data-act=openMon]'];
   }
   return null;
 }
@@ -10853,6 +10893,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '✏️', title: '몬스터 이름 짓기', text: '내 몬스터를 누르고 ✏️ 이름 지어 주기를 누르면 별명을 지어 줄 수 있어요!<br>별명은 카드와 전투에서 💖 뭉치 처럼 보여요. 언제든 바꾸거나 지울 수 있어요.' },
   { icon: '🐾', title: '몬스터 100000마리', text: '이제 몬스터가 100000마리가 넘어요! 반짝 화염 무당벌레, 신나는 영겁 비버처럼 새 친구들이 잔뜩!<br>등급은 피라미드 모양: 근원 15 · 절대 22 · 신성 33 · 초월 50 · 신화 81 · 전설 120 … 일반이 가장 많아요.<br>📚 모든 몬스터 상점에서는 희귀할수록 값이 어마어마하게 올라가요 (근원은 3 뒤에 0이 107개!).' },
   { icon: '🏝️', title: '한 번에 키우기', text: '🗺️ 섬 지도에서 🏝️🏝️ 섬 여러 개 한 번에 사기를 누르면 1 · 5 · 10 · 25개나 돈 되는 만큼 섬을 사고, 서식지까지 꽉 채워 줘요.<br>⏫ 모든 서식지 돈 되는 만큼 올리기를 누르면 낮은 레벨부터 골고루 Lv.100까지 올려요!' },
   { icon: '💾', title: '저장 버튼', text: '게임은 저절로 저장되지만, 위쪽 💾 버튼을 누르면 지금 바로 저장해요!<br>컴퓨터에서는 Ctrl + S 키로도 저장할 수 있어요.<br>저장이 잘 되면 시간과 크기를 알려 줘요.' },
@@ -11002,6 +11043,9 @@ const ACTIONS = {
   buyAllMons: (d) => buyAllMons(d.kind),
   buyAny: (d) => buyAny(d.type),
   buyEveryEgg: () => buyEveryEgg(),
+  nickOpen: (d) => openNick(d.uid),
+  nickOk: (d) => nickOk(d.uid),
+  nickDel: (d) => nickDel(d.uid),
   showMore: (d) => { SHOW_MORE[d.k] = showN(d.k) + 240; redrawKeepScroll(); },
   allShopBuyAll: () => allShopBuyAll(),
   allShopSet: (d) => { tutFlag('allShop', true); ALL_SHOP[d.k] = d.v; ALL_SHOP.page = 0; allShopRedraw(); },
