@@ -6524,8 +6524,8 @@ function buyRankBox(r) {
 // 📚 모든 몬스터 상점: 게임에 있는 몬스터 전부를 등급 · 속성 · 이름으로 찾아서 산다
 const ALL_SHOP = { r: 'all', el: 'all', q: '', own: 'no', page: 0 };
 const ALL_PER = 48, ALL_BULK = 1000;
-// 💰 등급이 오를 때마다 10배씩, 전설보다 높으면 한 등급마다 100배가 더 (근원은 어마어마하게!)
-const rarityPrice = (r) => { const k = RANK[r]; return 300 * Math.pow(10, k) * Math.pow(100, Math.max(0, k - RANK.legendary)); };
+// 💰 등급이 오를수록 곱하는 수도 커진다: ×10 → ×100 → ×1000 → … (근원은 3 뒤에 0이 107개!)
+const rarityPrice = (r) => { const k = RANK[r]; return 300 * Math.pow(10, k * (k + 1) / 2); };
 const anyPrice = (t) => Math.round(rarityPrice(CAT[t].rarity) * (evtOn('hatchfest') ? 0.5 : 1));
 function allShopList() {
   const own = new Set([...S.monsters.map(m => m.type), ...S.hatch]), q = ALL_SHOP.q.trim();
