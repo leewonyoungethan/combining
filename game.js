@@ -748,7 +748,14 @@ DECOS.push(
 const DECO_CAP = 30;
 const decoById = (id) => DECOS.find(d => d.id === id);
 const decoPrice = (d) => d.gems ? `💎 ${d.gems}` : `💰 ${fmt(d.cost)}`;
+let DECO_MEMO = { t: -1e9, s: null, m: {} };
 function decoPercent(k) {
+  const now = performance.now();
+  if (DECO_MEMO.s !== S || now - DECO_MEMO.t > 1000) DECO_MEMO = { t: now, s: S, m: {} };
+  if (DECO_MEMO.m[k] == null) DECO_MEMO.m[k] = decoPercentRaw(k);
+  return DECO_MEMO.m[k];
+}
+function decoPercentRaw(k) {
   let sum = 0;
   for (let n = 0; n < ISLAND_PLOTS; n++) {
     const p = S.plots[k * ISLAND_PLOTS + n];
@@ -968,16 +975,43 @@ function compactAllSaves() {
 }
 // 저장은 1.5초 동안 모아서 한 번에 (압축이 오래 걸리지 않게). 창을 닫거나 숨길 때는 바로
 let SAVE_T = null, SAVE_ACC = null, SAVE_S = null, lastSaved = {}, lastFullWarn = 0;
-function flushSave() {
+let SAVE_SEQ = 0, ZIP_W, ZIP_BUSY = false;
+const savedSeq = {};
+const fullWarn = () => { if (Date.now() - lastFullWarn > 60000) { lastFullWarn = Date.now(); toast('⚠️ 저장 공간이 부족해요! 안 쓰는 계정을 지우면 자리가 생겨요'); } };
+function zipWorker() {
+  if (ZIP_W === undefined) {
+    try {
+      const src = lzPack.toString() + ';onmessage=(e)=>{const d=e.data;postMessage({acc:d.acc,seq:d.seq,json:d.json,z:lzPack(d.json)});};';
+      ZIP_W = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+      ZIP_W.onmessage = (e) => {
+        ZIP_BUSY = false;
+        const { acc, seq, json, z } = e.data;
+        if ((savedSeq[acc] || 0) > seq) return;   // 그사이 더 새것이 저장됐으면 버린다
+        let ok = lsSet(accKey(acc), 'Z1:' + z);
+        if (!ok) { freeStorage(); ok = lsSet(accKey(acc), 'Z1:' + z); }
+        if (ok) { savedSeq[acc] = seq; lastSaved[acc] = json; } else fullWarn();
+      };
+      ZIP_W.onerror = () => { ZIP_W = null; ZIP_BUSY = false; };
+    } catch (e) { ZIP_W = null; }
+  }
+  return ZIP_W;
+}
+// urgent: 지금 바로 (창을 닫을 때 등). 아니면 큰 저장은 도우미에게 맡긴다
+function flushSave(urgent = true) {
   clearTimeout(SAVE_T); SAVE_T = null;
   const acc = SAVE_ACC, s = SAVE_S;
   SAVE_ACC = SAVE_S = null;
   if (!acc || !s) return true;
   const json = JSON.stringify(s);
   if (lastSaved[acc] === json) return true;
+  const seq = ++SAVE_SEQ;
+  if (!urgent && json.length > SAVE_ZIP_AT) {
+    const w = zipWorker();
+    if (w && !ZIP_BUSY) { ZIP_BUSY = true; w.postMessage({ acc, seq, json }); return true; }
+    if (w && ZIP_BUSY) { SAVE_ACC = acc; SAVE_S = s; SAVE_T = setTimeout(() => flushSave(false), 800); return true; }
+  }
   const ok = writeSave(acc, json);
-  if (ok) lastSaved[acc] = json;
-  else if (Date.now() - lastFullWarn > 60000) { lastFullWarn = Date.now(); toast('⚠️ 저장 공간이 부족해요! 안 쓰는 계정을 지우면 자리가 생겨요'); }
+  if (ok) { lastSaved[acc] = json; savedSeq[acc] = seq; } else fullWarn();
   return !!ok;
 }
 function storageUsedKB() { let n = 0; try { for (let k = 0; k < localStorage.length; k++) { const key = localStorage.key(k); n += key.length + (localStorage.getItem(key) || '').length; } } catch (e) { /* 없음 */ } return Math.round(n * 2 / 1024); }
@@ -990,7 +1024,7 @@ function saveNow() {
   flushSave();
   const json = JSON.stringify(S), size = writeSave(ACC.id, json);
   const ok = size && readSave(ACC.id) === json;
-  if (ok) lastSaved[ACC.id] = json;
+  if (ok) { lastSaved[ACC.id] = json; savedSeq[ACC.id] = ++SAVE_SEQ; }
   const data = { length: size };
   if (!ok) { sfx('err'); toast('⚠️ 저장하지 못했어요! 저장 공간이 부족해요. 안 쓰는 계정을 지우면 자리가 생겨요'); return; }
   S.savedAt = Date.now();
@@ -1010,7 +1044,7 @@ function save() {
   // 다른 계정/섬으로 바뀌었으면 앞의 것부터 저장
   if (SAVE_ACC && (SAVE_ACC !== ACC.id || SAVE_S !== S)) flushSave();
   SAVE_ACC = ACC.id; SAVE_S = S;
-  if (!SAVE_T) SAVE_T = setTimeout(flushSave, 1500);
+  if (!SAVE_T) SAVE_T = setTimeout(() => flushSave(false), 1500);
 }
 
 let S = load() || newState();
@@ -1530,7 +1564,14 @@ function kdGemClaim() {
   render();
 }
 // 랜드마크 보너스 (모든 섬)
+let WONDER_MEMO = { t: -1e9, v: 0, s: null };
 function wonderPct() {
+  const now = performance.now();
+  if (WONDER_MEMO.s === S && now - WONDER_MEMO.t < 1000) return WONDER_MEMO.v;
+  WONDER_MEMO = { t: now, v: wonderPctRaw(), s: S };
+  return WONDER_MEMO.v;
+}
+function wonderPctRaw() {
   const got = new Set(S.plots.filter(p => p && p.kind === 'deco').map(p => p.id));
   return DECOS.filter(d => d.wonder && got.has(d.id)).reduce((s, d) => s + d.global, 0);
 }
@@ -3915,6 +3956,7 @@ function newTarget(w) {
   w.tx = a * TW * 0.3;
   w.ty = b * TH * 0.3;
 }
+const HAB_WALK_MAX = 8;
 function walkerFor(m, i) {
   let w = walkers[m.uid];
   if (!w || w.hab !== i) {
@@ -4085,8 +4127,13 @@ function drawPlot(p, i, x, y, t, dt) {
       emoji(habEmoji(p.el), x + hw * 0.62, y - 8, 30);
       emoji(habEmoji(p.el), x, y - hh * 0.72, 28);
     }
-    if (!S.hideUI) for (let k = 1; k < p.lv; k++) emoji('⭐', x - hw * 0.3 + (k - 1) * 22, y + hh * 0.72, 16);
-    habMons(i)
+    if (!S.hideUI) {
+      if (p.lv <= 6) for (let k = 1; k < p.lv; k++) emoji('⭐', x - hw * 0.3 + (k - 1) * 22, y + hh * 0.72, 16);
+      else label(`⭐${p.lv}`, x, y + hh * 0.72, 16);
+    }
+    const hm = habMons(i);
+    if (hm.length > HAB_WALK_MAX) label(`+${hm.length - HAB_WALK_MAX}`, x + hw * 0.55, y - hh * 0.2, 15);
+    hm.slice(0, HAB_WALK_MAX)
       .map(m => ({ m, w: walkerFor(m, i) }))
       .sort((a, b) => a.w.oy - b.w.oy)
       .forEach(({ m, w }) => {
@@ -5558,15 +5605,10 @@ const eggNeed = (t) => (isLegend(t) ? 'legend' : CAT[t].els[0]);
 const lvCost = (from, to) => { let c = 0; for (let l = from; l < to; l++) c += habUpCost(l); return c; };
 function roomPlan() {
   // 서식지마다 남은 칸 (속성별)
-  const left = {};
-  S.plots.forEach((p, i) => { if (p && p.kind === 'hab') left[i] = habCap(i) - habMons(i).length; });
-  const need = {};
+  const slots = habSlots(), need = {};
   for (const t of S.hatch) {
-    const els = isLegend(t) ? ['legend'] : CAT[t].els;
-    let home = null;
-    for (const [i, n] of Object.entries(left)) if (n > 0 && els.includes(S.plots[i].el)) { home = i; break; }
-    if (home != null) left[home]--;
-    else { const k = eggNeed(t); need[k] = (need[k] || 0) + 1; }
+    if (!CAT[t]) continue;
+    if (slotTake(slots, t) < 0) { const k = eggNeed(t); need[k] = (need[k] || 0) + 1; }
   }
   // 빈 서식지(몬스터 0마리) 중에서 바꿀 수 있는 것 (레벨 높은 것부터)
   const neededEls = new Set(Object.keys(need));
@@ -5599,30 +5641,51 @@ function makeRoom() {
   toast(`🏠 서식지 ${plan.acts.length}개를 준비했어요! 이제 부화시킬게요`);
   hatchAll();
 }
-function oldHatchAll() {
-  const born = [], stuck = [];
-  const eggs = S.hatch.slice();
-  S.hatch = [];
-  eggs.forEach(type => {
+// 속성별 빈칸 목록 (서식지 번호, 남은 칸)
+function habSlots() {
+  const slots = {};
+  S.plots.forEach((p, i) => { if (p && p.kind === 'hab') { const f = habCap(i) - habMons(i).length; if (f > 0) (slots[p.el] = slots[p.el] || []).push([i, f]); } });
+  return slots;
+}
+function slotTake(slots, type) {
+  const els = isLegend(type) ? ['legend'] : CAT[type].els;
+  for (const el of els) {
+    const arr = slots[el];
+    while (arr && arr.length && arr[0][1] <= 0) arr.shift();
+    if (arr && arr.length) { arr[0][1]--; return arr[0][0]; }
+  }
+  return -1;
+}
+// 알 여러 개를 한꺼번에 서식지로 (못 들어간 알은 돌려준다)
+function fastPlace(types) {
+  const slots = habSlots(), born = [], stuck = [];
+  let n = 0, news = 0;
+  for (const type of types) {
+    if (!CAT[type]) continue;
     const isNew = !S.dex[type];
     S.dex[type] = true;
-    const h = habsFor(type)[0];
-    if (h) {
-      S.monsters.push({ uid: S.nextUid++, type, lv: 1, hab: h.i, runes: [null, null] });
-      mission('hatch');
-      born.push({ type, isNew, where: habName(S.plots[h.i].el) });
-    } else {
-      S.hatch.push(type);
-      stuck.push(type);
-    }
-  });
+    const h = slotTake(slots, type);
+    if (h < 0) { stuck.push(type); continue; }
+    S.monsters.push({ uid: S.nextUid++, type, lv: 1, hab: h, runes: [null, null] });
+    n++; if (isNew) news++;
+    if (born.length < 60) born.push({ type, isNew });
+  }
+  if (n) mission('hatch', n);
+  habIdxDirty();
+  return { born, stuck, n, news };
+}
+function oldHatchAll() {
+  const eggs = S.hatch.slice();
+  S.hatch = [];
+  const r = fastPlace(eggs), born = r.born, stuck = r.stuck;
+  S.hatch.push(...stuck);
   save();
   render();
   showModal(`
     <h3>🐣 모두 부화!</h3>
     ${born.length ? `<div class="grid small">${born.slice(0, 60).map(b => card({ type: b.type, lv: 1 }, '', 'mini',
-      b.isNew ? '<div class="found-mark">🆕</div>' : '')).join('')}</div>${born.length > 60 ? `<p class="muted">… 외 ${fmt(born.length - 60)}마리</p>` : ''}
-      <p class="muted">${born.length}마리가 서식지로 이사했어요.</p>` : ''}
+      b.isNew ? '<div class="found-mark">🆕</div>' : '')).join('')}</div>${r.n > 60 ? `<p class="muted">… 외 ${fmt(r.n - 60)}마리</p>` : ''}
+      <p class="muted">${fmt(r.n)}마리가 서식지로 이사했어요.${r.news ? ` (🆕 도감 ${fmt(r.news)}마리)` : ''}</p>` : ''}
     ${stuck.length ? `<p class="warn">${stuck.slice(0, 20).map(t => `${CAT[t].face} ${CAT[t].name}`).join(', ')}${stuck.length > 20 ? ` 외 ${fmt(stuck.length - 20)}마리` : ''}<br>살 수 있는 빈 서식지가 없어서 부화장에 남아 있어요.${stuck.some(isLegend) ? '<br>⭐ 전설 이상 몬스터는 🏛️ 전설의 서식지에서만 살아요!' : ''}</p>
       <div class="row"><button class="btn green" data-act="makeRoom">🏠 남은 알 살 곳 만들기</button></div>` : ''}
     <div class="row"><button class="btn" data-act="close">좋아!</button></div>`);
@@ -6307,6 +6370,7 @@ function renderShop() {
       </div>
     </div>
     <h3 class="sub" id="shopEgg">🥚 몬스터 알 상점 <small class="muted">사면 부화장으로 가요. 알맞은 서식지가 있어야 키울 수 있어요</small></h3>
+    ${everyEggBtn()}
     ${ownSplitHTML(EGG_SHOP, t => card({ type: t, lv: 1 }, `data-act="buyMon" data-type="${t}"`, 'mini',
       `<div class="price-tag">💰 ${fmt(eggPrice(t))}</div>`), 'egg')}
     ${moreEggsHTML()}
@@ -6483,6 +6547,30 @@ function buyAny(type) {
   toast(`🥚 ${CAT[type].name} 알을 샀어요! 부화장에 있어요`);
   allShopRedraw(); updateHud();
 }
+// 게임에 있는 몬스터 중 아직 없는 것을 전부 (1000마리 제한 없이)
+function missingAll() {
+  const own = new Set([...S.monsters.map(m => m.type), ...S.hatch]);
+  return CAT_LIST.filter(c => !c.shop && !own.has(c.id)).map(c => c.id);
+}
+function buyEveryEgg() {
+  tutFlag('allShop', true);
+  const list = missingAll();
+  if (!list.length) { toast('🎉 모든 몬스터를 이미 가지고 있어요!'); return; }
+  const cost = list.reduce((s, t) => s + anyPrice(t), 0);
+  if (!confirm(`🥚 아직 없는 몬스터 ${fmt(list.length)}마리의 알을 모두 살까요?\n💰 ${shortNum(cost)}\n\n산 알은 바로 부화해서 알맞은 서식지로 가요.`)) return;
+  if (!spend(cost)) return;
+  mission('buyEgg', list.length);
+  const r = fastPlace(list);
+  S.hatch.push(...r.stuck);
+  sfx('yay');
+  save(); render(); updateHud();
+  showModal(`<h3>🥚 모든 알 사기 완료!</h3>
+    <p>🐣 ${fmt(r.n)}마리가 서식지로 이사했어요! 🆕 도감 ${fmt(r.news)}마리</p>
+    ${r.stuck.length ? `<p class="warn">🪺 ${fmt(r.stuck.length)}마리는 살 곳이 없어서 부화장에서 기다려요.</p>
+      <div class="row"><button class="btn green" data-act="makeRoom">🏠 남은 알 살 곳 만들기</button></div>` : '<p class="muted">🎉 모든 몬스터가 살 곳을 찾았어요!</p>'}
+    <div class="row"><button class="btn ghost" data-act="close">좋아!</button></div>`);
+}
+const everyEggBtn = () => { const n = missingAll().length; return n ? `<button class="btn green buy-all every-egg" data-act="buyEveryEgg">🥚 모든 알 사기 (없는 몬스터 ${fmt(n)}마리 전부 · 💰 ${shortNum(missingAll().reduce((s, t) => s + anyPrice(t), 0))})</button>` : ''; };
 function allShopBuyAll() {
   tutFlag('allShop', true);
   tutFlag('buyAll', true);
@@ -6492,7 +6580,7 @@ function allShopBuyAll() {
   if (!confirm(`🛒 없는 몬스터 ${list.length}마리를 모두 살까요?\n💰 ${shortNum(cost)}`)) return;
   if (!spend(cost)) return;
   S.hatch.push(...list);
-  mission('buyEgg');
+  mission('buyEgg', list.length);
   sfx('buy');
   toast(`🛒 ${list.length}마리를 샀어요! 바로 부화시킬게요`);
   hatchAll();
@@ -10962,6 +11050,7 @@ const ACTIONS = {
   buyMon: (d) => buyMon(d.type),
   buyAllMons: (d) => buyAllMons(d.kind),
   buyAny: (d) => buyAny(d.type),
+  buyEveryEgg: () => buyEveryEgg(),
   allShopBuyAll: () => allShopBuyAll(),
   allShopSet: (d) => { tutFlag('allShop', true); ALL_SHOP[d.k] = d.v; ALL_SHOP.page = 0; allShopRedraw(); },
   allShopFind: () => { tutFlag('allShop', true); ALL_SHOP.q = (($('#allShopQ') || {}).value || '').trim().slice(0, 20); ALL_SHOP.page = 0; allShopRedraw(); },
@@ -11444,7 +11533,7 @@ async function hardRefresh() {
 }
 window.addEventListener('offline', () => toast('📴 오프라인이에요. 실시간 친구 대전 말고는 그대로 할 수 있어요'));
 window.addEventListener('online', () => toast('📶 다시 연결됐어요'));
-setInterval(save, 10000);   // 중요한 행동은 그때그때 저장하므로 자동 저장은 10초마다
+setInterval(save, 10000);   // (큰 저장은 도우미가 압축해서 게임이 멈추지 않아요)   // 중요한 행동은 그때그때 저장하므로 자동 저장은 10초마다
 document.addEventListener('visibilitychange', () => { if (document.hidden) { save(); flushSave(); } });
 setInterval(updateFinger, 250);
 window.addEventListener('beforeunload', () => { save(); flushSave(); });
