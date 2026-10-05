@@ -5342,7 +5342,7 @@ function openHatchery(i = curHatch, slot) {
       <div class="egg-row">${leftover.map(x => `<button class="egg-slot" data-act="crack" data-i="${x.k}" data-s="${x.s}"><span class="egg small ready">🥚</span><span>🐣 깨우기</span></button>`).join('')}</div>` : ''}
     <h4 class="sub">🥚 알 <small class="muted">${S.hatch.length}/${hatchCap()}</small></h4>
     <div class="egg-row">${S.hatch.length
-      ? S.hatch.map((t, k) => `<button class="egg-slot" data-act="incubate" data-idx="${k}"><span class="egg small ${eggLv(t)}">🥚</span><span>🐣 부화!</span></button>`).join('')
+      ? S.hatch.slice(0, 120).map((t, k) => `<button class="egg-slot" data-act="incubate" data-idx="${k}"><span class="egg small ${eggLv(t)}">🥚</span><span>🐣 부화!</span></button>`).join('') + (S.hatch.length > 120 ? `<p class="muted">… 외 ${fmt(S.hatch.length - 120)}개 (🐣 모두 부화로 한 번에!)</p>` : '')
       : '<p class="muted">알이 없어요. 교배산이나 상점에서 알을 가져오세요!</p>'}</div>
     ${S.hatch.length + leftover.length > 1 ? '<div class="all-box"><button class="btn green" data-act="hatchAll">🐣 모두 부화 (알맞은 서식지로 자동 이사)</button></div>' : ''}
     ${S.hatch.length ? '<div class="all-box"><button class="btn" data-act="makeRoom">🏠 남은 알 살 곳 만들기 (빈 서식지 바꾸기 · 새로 짓기)</button></div>' : ''}
@@ -6141,16 +6141,27 @@ function monControlsHTML() {
     <div class="chips"><span class="chip-label">속성</span>${chip('el', 'all', '전체')}${EL.filter(e => owned.has(e.id)).map(e => chip('el', e.id, e.emoji + e.name)).join('')}</div>`;
 }
 
+// 가나다 순서는 한 번만 정해 두고 숫자로 비교 (몬스터가 많아도 빠르게)
+let NAME_RANK = null;
+const nameRank = (t) => { if (!NAME_RANK) { NAME_RANK = {}; const col = new Intl.Collator('ko'); CAT_LIST.slice().sort((x, y) => col.compare(x.name, y.name)).forEach((c, i) => { NAME_RANK[c.id] = i; }); } return NAME_RANK[t] ?? 0; };
 function monSorter(sort) {
   const byRar = (a, b) => rIdx(b.type) - rIdx(a.type);
   const byLv = (a, b) => b.lv - a.lv;
-  const byName = (a, b) => CAT[a.type].name.localeCompare(CAT[b.type].name, 'ko');
+  const byName = (a, b) => nameRank(a.type) - nameRank(b.type);
   if (sort === 'rar') return (a, b) => byRar(a, b) || byLv(a, b) || byName(a, b);
   if (sort === 'name') return (a, b) => byName(a, b) || byLv(a, b);
   if (sort === 'new') return (a, b) => b.uid - a.uid;
   return (a, b) => byLv(a, b) || byRar(a, b) || byName(a, b);
 }
 
+const SHOW_N = 60, SHOW_MORE = {};
+const showN = (k) => SHOW_MORE[k] || SHOW_N;
+const moreBtn = (k, total) => total > showN(k) ? `<div class="row"><button class="btn ghost small more-btn" data-act="showMore" data-k="${esc(String(k))}">⬇️ 더 보기 (${fmt(total - showN(k))}마리 더)</button></div>` : '';
+function redrawKeepScroll() {
+  const p = $('#panel'), py = p ? p.scrollTop : 0, wy = window.scrollY;
+  render();
+  if (p) p.scrollTop = py; window.scrollTo(0, wy);
+}
 function monGroupsHTML() {
   const v = monView();
   const list = S.monsters.filter(m => v.el === 'all' || CAT[m.type].els.includes(v.el)).sort(monSorter(v.sort));
@@ -6175,10 +6186,11 @@ function monGroupsHTML() {
     } else add('all', '📋 전체', 0, m);
   });
   return [...groups.values()].sort((a, b) => a.order - b.order).map(g => {
-    const inc = g.items.reduce((s, m) => s + monIncome(m), 0);
+    const inc = g.items.reduce((s, m) => s + monIncome(m), 0), k = 'mon:' + v.group + ':' + g.label;
     return `<div class="mon-group">
-      <h3 class="mg-head">${g.label} <span class="mg-count">${g.items.length}마리 · 초당 💰${fmt(inc)}</span></h3>
-      <div class="grid">${g.items.map(m => card(m, `data-act="openMon" data-uid="${m.uid}"`)).join('')}</div>
+      <h3 class="mg-head">${g.label} <span class="mg-count">${fmt(g.items.length)}마리 · 초당 💰${fmt(inc)}</span></h3>
+      <div class="grid">${g.items.slice(0, showN(k)).map(m => card(m, `data-act="openMon" data-uid="${m.uid}"`)).join('')}</div>
+      ${moreBtn(k, g.items.length)}
     </div>`;
   }).join('');
 }
@@ -6570,7 +6582,7 @@ function buyEveryEgg() {
       <div class="row"><button class="btn green" data-act="makeRoom">🏠 남은 알 살 곳 만들기</button></div>` : '<p class="muted">🎉 모든 몬스터가 살 곳을 찾았어요!</p>'}
     <div class="row"><button class="btn ghost" data-act="close">좋아!</button></div>`);
 }
-const everyEggBtn = () => { const n = missingAll().length; return n ? `<button class="btn green buy-all every-egg" data-act="buyEveryEgg">🥚 모든 알 사기 (없는 몬스터 ${fmt(n)}마리 전부 · 💰 ${shortNum(missingAll().reduce((s, t) => s + anyPrice(t), 0))})</button>` : ''; };
+const everyEggBtn = () => { const miss = missingAll(), n = miss.length; return n ? `<button class="btn green buy-all every-egg" data-act="buyEveryEgg">🥚 모든 알 사기 (없는 몬스터 ${fmt(n)}마리 전부 · 💰 ${shortNum(miss.reduce((s, t) => s + anyPrice(t), 0))})</button>` : ''; };
 function allShopBuyAll() {
   tutFlag('allShop', true);
   tutFlag('buyAll', true);
@@ -6797,14 +6809,16 @@ function teamPickHTML(foeEls) {
   const owned = new Set(S.monsters.flatMap(m => CAT[m.type].els));
   // 이 몬스터의 속성 중 하나라도 상대 팀 속성에게 강하면 ▲
   const strongVs = (m) => CAT[m.type].els.some(e => BEATS[e].some(x => foeEls.includes(x)));
-  const powerOf = (m) => { const st = stats(m); return Math.round(st.atk * 3 + st.hp / 4 + st.spd); };
+  const POW = new Map();
+  const powerOf = (m) => { let p = POW.get(m.uid); if (p == null) { const st = stats(m); p = Math.round(st.atk * 3 + st.hp / 4 + st.spd); POW.set(m.uid, p); } return p; };
   const sorter = v.sort === 'lv' ? (a, b) => b.lv - a.lv || rIdx(b.type) - rIdx(a.type)
     : v.sort === 'rar' ? (a, b) => rIdx(b.type) - rIdx(a.type) || b.lv - a.lv
     : (a, b) => powerOf(b) - powerOf(a);
-  const list = S.monsters
+  const list0 = S.monsters
     .filter(m => v.el === 'all' || CAT[m.type].els.includes(v.el))
-    .filter(m => !v.strong || strongVs(m))
-    .sort(sorter);
+    .filter(m => !v.strong || strongVs(m));
+  if (v.sort !== 'lv' && v.sort !== 'rar') list0.forEach(powerOf);
+  const list = list0.sort(sorter);
   const cardOf = (m) => {
     const i = S.team.indexOf(m.uid);
     const tag = `${i >= 0 ? `<div class="check">${i + 1}</div>` : ''}${strongVs(m) ? '<div class="strong-tag">▲ 강함</div>' : ''}<div class="power-tag">⚔️${fmt(powerOf(m))}</div>`;
@@ -6823,8 +6837,9 @@ function teamPickHTML(foeEls) {
   const body = list.length
     ? [...groups.values()].sort((a, b) => a.order - b.order).map(g => `
         <div class="bp-group">
-          <div class="bp-head">${g.label} <span class="muted">${g.items.length}마리 · ▲ 강함 ${g.items.filter(strongVs).length}</span></div>
-          <div class="grid">${g.items.map(cardOf).join('')}</div>
+          <div class="bp-head">${g.label} <span class="muted">${fmt(g.items.length)}마리 · ▲ 강함 ${fmt(g.items.filter(strongVs).length)}</span></div>
+          <div class="grid">${g.items.slice(0, showN('team:' + v.group + ':' + g.label)).map(cardOf).join('')}</div>
+          ${moreBtn('team:' + v.group + ':' + g.label, g.items.length)}
         </div>`).join('')
     : '<p class="muted">조건에 맞는 몬스터가 없어요.</p>';
   return `<div class="team-pick">
@@ -6837,7 +6852,7 @@ function teamPickHTML(foeEls) {
 
 // 가장 센 몬스터 3마리로 팀 짜기
 function teamAuto() {
-  S.team = S.monsters.slice().sort((a, b) => monPower(b) - monPower(a)).slice(0, 3).map(m => m.uid);
+  S.team = S.monsters.map(m => [m, monPower(m)]).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m]) => m.uid);
   save();
   toast(`⚡ 가장 센 ${S.team.length}마리로 팀을 짰어요!`);
   const p = $('#panel'), y = p.scrollTop;
@@ -11051,6 +11066,7 @@ const ACTIONS = {
   buyAllMons: (d) => buyAllMons(d.kind),
   buyAny: (d) => buyAny(d.type),
   buyEveryEgg: () => buyEveryEgg(),
+  showMore: (d) => { SHOW_MORE[d.k] = showN(d.k) + 240; redrawKeepScroll(); },
   allShopBuyAll: () => allShopBuyAll(),
   allShopSet: (d) => { tutFlag('allShop', true); ALL_SHOP[d.k] = d.v; ALL_SHOP.page = 0; allShopRedraw(); },
   allShopFind: () => { tutFlag('allShop', true); ALL_SHOP.q = (($('#allShopQ') || {}).value || '').trim().slice(0, 20); ALL_SHOP.page = 0; allShopRedraw(); },

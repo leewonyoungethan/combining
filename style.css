@@ -1595,3 +1595,5 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .wx-row { display: grid; grid-template-columns: 40px 70px 70px 1fr; align-items: center; gap: 6px; padding: 6px 8px; margin: 4px 0; border-radius: 10px; background: rgba(255, 255, 255, .06); text-align: left; }
 .wx-row.now { background: rgba(255, 224, 102, .18); border: 1px solid rgba(255, 224, 102, .5); }
 .wx-row .wx-e { font-size: 26px; } .wx-row small { color: var(--muted); }
+
+.more-btn { margin: 6px auto 12px; }
