@@ -6524,7 +6524,9 @@ function buyRankBox(r) {
 // 📚 모든 몬스터 상점: 게임에 있는 몬스터 전부를 등급 · 속성 · 이름으로 찾아서 산다
 const ALL_SHOP = { r: 'all', el: 'all', q: '', own: 'no', page: 0 };
 const ALL_PER = 48, ALL_BULK = 1000;
-const anyPrice = (t) => Math.round(300 * Math.pow(3, RANK[CAT[t].rarity]) * (evtOn('hatchfest') ? 0.5 : 1));
+// 💰 등급이 오를 때마다 10배씩, 전설보다 높으면 한 등급마다 100배가 더 (근원은 어마어마하게!)
+const rarityPrice = (r) => { const k = RANK[r]; return 300 * Math.pow(10, k) * Math.pow(100, Math.max(0, k - RANK.legendary)); };
+const anyPrice = (t) => Math.round(rarityPrice(CAT[t].rarity) * (evtOn('hatchfest') ? 0.5 : 1));
 function allShopList() {
   const own = new Set([...S.monsters.map(m => m.type), ...S.hatch]), q = ALL_SHOP.q.trim();
   return CAT_LIST.filter(c => (ALL_SHOP.r === 'all' || c.rarity === ALL_SHOP.r) && (ALL_SHOP.el === 'all' || c.els.includes(ALL_SHOP.el))
@@ -6538,6 +6540,7 @@ function allShopHTML() {
   const miss = ALL_SHOP.own === 'yes' ? [] : allShopMissing(), bulk = miss.slice(0, ALL_BULK);
   const chip = (k, v, label) => `<button class="chip ${ALL_SHOP[k] === v ? 'on' : ''}" data-act="allShopSet" data-k="${k}" data-v="${v}">${label}</button>`;
   return `<h3 class="sub" id="shopAll">📚 모든 몬스터 상점 <small class="muted">게임에 있는 몬스터 ${fmt(CAT_LIST.length)}마리를 전부 살 수 있어요</small></h3>
+    <details class="price-table"><summary>💰 등급별 값 보기 (희귀할수록 어마어마하게 비싸요!)</summary><div class="ut-grid">${RAR_ORDER.map(r => `<span><b style="color:${RAR[r].color}">${RAR[r].name}</b><small>💰 ${shortNum(rarityPrice(r))}</small></span>`).join('')}</div></details>
     <div class="all-shop">
       <div class="chips">${chip('own', 'no', '🆕 없는 몬스터')}${chip('own', 'yes', '✅ 있는 몬스터')}${chip('own', 'all', '📚 전체')}</div>
       <div class="chips">${chip('r', 'all', '모든 등급')}${RAR_ORDER.map(r => chip('r', r, RAR[r].name)).join('')}</div>
