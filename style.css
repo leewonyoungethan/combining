@@ -1609,3 +1609,7 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .nick-btn.on { background: rgba(255, 105, 180, .25); border-color: #ff69b4; }
 .photo-box img { width: 100%; border-radius: 12px; margin: 8px 0; box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
 .photo-box a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+
+/* 🌟 MAX */
+.max-badge { padding: 6px 12px; border-radius: 12px; font-weight: 900; color: #3a2a00; background: linear-gradient(135deg, #ffe066, #ffb020); box-shadow: 0 0 12px rgba(255, 210, 60, .6); white-space: nowrap; }
+.cos-row.maxed { border-color: rgba(255, 224, 102, .6); background: rgba(255, 224, 102, .08); }

@@ -1556,6 +1556,9 @@ const COSMOS = [
 const COS_BASE = 1e21, COS_MULT = 1000;
 const cosLv = (id) => (S.cos && S.cos[id]) || 0;
 const cosCost = (id) => COS_BASE * Math.pow(COS_MULT, cosLv(id));
+// 최고 레벨: 값이 최대 돈(100Ce)을 넘기 바로 전까지
+const COS_MAX = Math.ceil(Math.log10(MONEY_CAP / COS_BASE) / Math.log10(COS_MULT));
+const cosMaxed = (id) => cosCost(id) >= MONEY_CAP;
 const cosTotal = () => COSMOS.reduce((s, c) => s + cosLv(c.id), 0);
 function cosUp(id) {
   const c = COSMOS.find(x => x.id === id);
@@ -1570,11 +1573,11 @@ function cosUp(id) {
   const p = $('#panel'), y = p ? p.scrollTop : 0; render(); if (p) $('#panel').scrollTop = y;
 }
 function cosmosShopHTML() {
-  return `<h3 class="sub" id="shopCosmos">🌌 우주 발전 <small class="muted">엄청난 골드를 쓰는 곳 · 💰1Sx부터, 레벨마다 1000배 · 끝없음</small></h3>
-    <div class="kd-list cosmos-list">${COSMOS.map(c => { const lv = cosLv(c.id), cost = cosCost(c.id); return `<div class="kd-row cos-row">
+  return `<h3 class="sub" id="shopCosmos">🌌 우주 발전 <small class="muted">엄청난 골드를 쓰는 곳 · 💰1Sx부터, 레벨마다 1000배 · 최고 Lv.${COS_MAX}</small></h3>
+    <div class="kd-list cosmos-list">${COSMOS.map(c => { const lv = cosLv(c.id), cost = cosCost(c.id), mx = cosMaxed(c.id); return `<div class="kd-row cos-row ${mx ? 'maxed' : ''}">
         <span class="kd-ico">${c.e}</span>
-        <span class="kd-info"><b>${c.name} <small>Lv.${lv}</small></b><small>지금: ${lv ? c.desc(lv) : '없음'} → 다음: ${c.desc(lv + 1)}</small></span>
-        <button class="btn small ${S.gold >= cost || S.infinite ? 'green' : ''}" data-act="cosUp" data-id="${c.id}">💰 ${shortNum(cost)}</button>
+        <span class="kd-info"><b>${c.name} <small>Lv.${lv}${mx ? ' · 최고!' : ''}</small></b><small>${mx ? `지금: ${c.desc(lv)} · 🌌 우주 끝까지 올렸어요!` : `지금: ${lv ? c.desc(lv) : '없음'} → 다음: ${c.desc(lv + 1)}`}</small></span>
+        ${mx ? '<span class="max-badge">🌟 MAX</span>' : `<button class="btn small ${S.gold >= cost || S.infinite ? 'green' : ''}" data-act="cosUp" data-id="${c.id}">💰 ${shortNum(cost)}</button>`}
       </div>`; }).join('')}</div>`;
 }
 const dailyGemAmt = () => kdLv('gem') * 5 + cosLv('gem') * 20;
