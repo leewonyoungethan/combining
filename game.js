@@ -512,6 +512,23 @@ function addHybrid6(i, j, n) {
 }
 EL.forEach(e => { for (let n = 0; n < PURE_6; n++) addPure6(e, n); });
 PAIRS.forEach(([i, j]) => { for (let n = 0; n < HYB_6; n++) addHybrid6(i, j, n); });
+// ---- 8차: 100000마리까지 (새 꾸밈말 30개) ----
+const PURE_7 = 150, HYB_7 = 300;
+const MOD7 = ['반짝', '배고픈', '웃는', '화난', '신나는', '부끄러운', '씩씩한', '느긋한', '엉뚱한', '똑똑한', '튼튼한', '말랑', '보송', '뾰족', '동글',
+  '길쭉', '작은', '커다란', '은빛', '보라', '하늘', '초록', '빨간', '파란', '노란', '하얀', '까만', '분홍', '주황', '무지갯빛'];
+const adj7 = (elId, n) => `${MOD7[n % MOD7.length]} ${EL[ELI[elId]].adj}`;
+function addPure7(e, n) {
+  const group = 'p:' + e.id, id = `${group}:x${n}`, seed = hashStr(group + '#7') + n * 29;
+  const look = freshCreature2(adj7(e.id, n), id, seed);
+  addMon({ id, group, variant: 2000 + n, ...look, els: [e.id], rarity: RAR_ORDER[rankOfVariant(n, PURE_7, frac(group + '#7'))], mod: variantMod(id) });
+}
+function addHybrid7(i, j, n) {
+  const a = EL[i], b = EL[j], group = `h:${a.id}+${b.id}`, id = `${group}:x${n}`, seed = hashStr(group + '#7') + n * 29;
+  const look = freshCreature2(adj7(n % 2 ? b.id : a.id, Math.floor(n / 2) + i * 7 + j * 3), id, seed);
+  addMon({ id, group, variant: 2000 + n, ...look, els: [a.id, b.id], rarity: RAR_ORDER[rankOfVariant(n, HYB_7, frac(group + '#7'))], mod: variantMod(id) });
+}
+EL.forEach(e => { for (let n = 0; n < PURE_7; n++) addPure7(e, n); });
+PAIRS.forEach(([i, j]) => { for (let n = 0; n < HYB_7; n++) addHybrid7(i, j, n); });
 LEGENDS.forEach(l => addMon({ ...l, rarity: 'legendary' }));
 MYTHICS.forEach(m => addMon({ ...m, rarity: 'mythic' }));
 SHOP_LEGENDS.forEach(l => addMon({ ...l, rarity: l.rank || 'divine', shop: true }));
@@ -3411,7 +3428,7 @@ function unitTableHTML() {
 }
 let UT_OPEN = false;
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing && e.target && e.target.id === 'allShopQ') { ALL_SHOP.q = e.target.value.trim().slice(0, 20); ALL_SHOP.page = 0; allShopRedraw(); } });
-document.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('unit-table') && e.target.open) tutFlag('unitTable', true); }, true);
+document.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('unit-table') && e.target.open) tutFlag('unitTable', true); if (e.target.classList && e.target.classList.contains('price-table') && e.target.open) tutFlag('priceTable', true); }, true);
 function openResInfo(r) {
   tutFlag('res', true);
   const x = RES_INFO[r];
@@ -10086,6 +10103,7 @@ function dexMatches(c) {
 
 let dexShow = 120;
 function renderDex() {
+  tutFlag('dex100k', true);
   const found = CAT_LIST.filter(c => S.dex[c.id]).length;
   const all = CAT_LIST.filter(dexMatches);
   const list = all.slice(0, dexShow);
@@ -10490,6 +10508,12 @@ TUT.push(
   { text: '🌦️ 섬 이름 옆 날씨 버튼을 눌러 날씨 예보를 봐요 (날씨에 맞는 서식지는 골드 ×2! 밤엔 🌠, 낮엔 🎈를 잡아요)', done: () => tutFlag('wx'),
     go: () => { closeModal(); tab = 'island'; render(); openWeather(); } },
 );
+TUT.push(
+  { text: '📖 아래 📖 도감 탭을 눌러 봐요. 이제 몬스터가 100000마리나 있어요! 근원 15마리부터 피라미드 모양이에요', done: () => tutFlag('dex100k'),
+    go: () => { closeModal(); tab = 'dex'; render(); } },
+  { text: '💰 상점 🥚 알 칸의 📚 모든 몬스터 상점에서 💰 등급별 값 보기를 열어 봐요 (희귀할수록 어마어마하게 비싸져요!)', done: () => tutFlag('priceTable'),
+    go: () => { closeModal(); tab = 'shop'; shopTab = 'egg'; render(); const d = document.querySelector('.price-table'); if (d) { d.open = true; d.scrollIntoView({ block: 'center' }); } } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -10741,6 +10765,14 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#islandBar [data-act=wxInfo]'];
+    case 58: // 도감 10만 마리
+      if (inModal) return ['#modalBox [data-act=close]'];
+      return [bottomBtn('dex')];
+    case 59: // 등급별 값
+      if (inModal) return ['#modalBox [data-act=close]'];
+      if (tab !== 'shop') return [bottomBtn('shop')];
+      if (shopTab !== 'egg') return ['#view [data-act=shopJump][data-tab=egg]'];
+      return ['#view .price-table summary'];
   }
   return null;
 }
@@ -10926,6 +10958,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🐾', title: '몬스터 100000마리', text: '이제 몬스터가 100000마리가 넘어요! 반짝 화염 무당벌레, 신나는 영겁 비버처럼 새 친구들이 잔뜩!<br>등급은 피라미드 모양: 근원 15 · 절대 22 · 신성 33 · 초월 50 · 신화 81 · 전설 120 … 일반이 가장 많아요.<br>📚 모든 몬스터 상점에서는 희귀할수록 값이 어마어마하게 올라가요 (근원은 3 뒤에 0이 107개!).' },
   { icon: '🌦️', title: '날씨와 낮 · 밤', text: '섬의 날씨가 3시간마다 바뀌어요! 🌧️ 비엔 물·자연, ❄️ 눈엔 얼음·수정, ⛈️ 천둥번개엔 전기·바람 서식지 골드 ×2, 🌈 무지개엔 모두 ×1.5!<br>저녁 7시부터는 밤이 돼서 섬이 어두워지고 🌠 별똥별이 지나가요 (누르면 💎 3). 낮에는 🎈 풍선을 잡으면 💰!<br>섬 이름 옆 날씨 버튼을 누르면 앞으로의 날씨 예보도 볼 수 있어요.' },
   { icon: '🏝️', title: '한 번에 키우기', text: '🗺️ 섬 지도에서 🏝️🏝️ 섬 여러 개 한 번에 사기를 누르면 1 · 5 · 10 · 25개나 돈 되는 만큼 섬을 사고, 서식지까지 꽉 채워 줘요.<br>⏫ 모든 서식지 돈 되는 만큼 올리기를 누르면 낮은 레벨부터 골고루 Lv.100까지 올려요!' },
   { icon: '💾', title: '저장 버튼', text: '게임은 저절로 저장되지만, 위쪽 💾 버튼을 누르면 지금 바로 저장해요!<br>컴퓨터에서는 Ctrl + S 키로도 저장할 수 있어요.<br>저장이 잘 되면 시간과 크기를 알려 줘요.' },
