@@ -7719,7 +7719,7 @@ let rankRelayAt = 0;
 // 다시 올릴 때의 모양 (서버에 올라온 시간 대신 원래 시간 t를 같이)
 const rankPack = (p) => ({ v: 1, id: p.id, n: p.n, f: p.f, tr: p.tr, dex: p.dex, st: p.st, pw: p.pw, tt: p.tt, g: p.g, gn: p.gn, ge: p.ge, gl: p.gl, dt: p.dt, del: p.del, t: Math.floor(p.t) });
 async function rankFetch() {
-  const r = await fetch(RANK_URL + '/json?poll=1&since=12h');
+  const r = await fetch(RANK_URL + '/json?poll=1&since=all');
   if (!r.ok) throw new Error('http ' + r.status);
   const txt = await r.text();
   const best = {}, carrier = {};
@@ -7885,7 +7885,7 @@ async function frAddByCode() {
 async function frPoll() {
   if (VISIT || !ACC || !navigator.onLine || !S.rankId) return;
   let txt;
-  try { const r = await fetch(FR_BOX(S.rankId) + '/json?poll=1&since=12h'); if (!r.ok) return; txt = await r.text(); } catch (e) { return; }
+  try { const r = await fetch(FR_BOX(S.rankId) + '/json?poll=1&since=all'); if (!r.ok) return; txt = await r.text(); } catch (e) { return; }
   S.frSeen = S.frSeen || [];
   const seen = new Set(S.frSeen);
   let news = 0;
@@ -8406,7 +8406,7 @@ async function guildChatLoad() {
   const box = $('#gChat');
   if (!box || !S.guild) return;
   try {
-    const txt = await (await fetch(GUILD_TOPIC(S.guild.id) + '/json?poll=1&since=12h')).text();
+    const txt = await (await fetch(GUILD_TOPIC(S.guild.id) + '/json?poll=1&since=all')).text();
     const evs = txt.split('\n').filter(Boolean).map(l => { try { const e = JSON.parse(l); const d = JSON.parse(e.message); return { ...d, t: e.time }; } catch (e) { return null; } })
       .filter(d => d && d.v === 1 && typeof d.id === 'string');
     const me = S.rankId;
@@ -9375,7 +9375,7 @@ function syncStop() { const s = SYNC; SYNC = null; try { s && s.conn && s.conn.c
 function syncSnapshot() {
   S.last = Date.now();
   const json = JSON.stringify(S);
-  return { t: 'save', z: lzPack(json), last: S.last, name: ACC ? ACC.name : '', sum: syncSum(S) };
+  return { t: 'save', z: lzPack(json), last: S.last, name: ACC ? ACC.name : '', sum: syncSum(S), key: S.syncKey || (S.syncKey = cloudNewKey()) };
 }
 function syncSum(s) {
   const isl = Math.floor((s.plots || []).length / ISLAND_PLOTS);
@@ -9391,7 +9391,8 @@ function openSync() {
       <button class="build-opt" data-act="syncHost" style="--hc:#2bd9a8"><span class="bo-ico">📡</span><span class="bo-nm">이 기기에서 숫자 만들기<br><small>예: 컴퓨터에서 누르기</small></span></button>
       <button class="build-opt" data-act="syncJoinOpen" style="--hc:#6f8cff"><span class="bo-ico">🔢</span><span class="bo-nm">숫자 넣기<br><small>예: 핸드폰에서 누르기</small></span></button>
     </div>
-    <p class="muted small-note">💡 계정을 새로 만들지 않고 지금 계정이 그대로 맞춰져요.</p>
+    <p class="muted small-note">💡 계정을 새로 만들지 않고 지금 계정이 그대로 맞춰져요. 한 번 맞추면 그다음부터는 <b>☁️ 자동으로</b> 맞춰져요!</p>
+    ${S.syncKey ? `<div class="cloud-on">☁️ 자동 맞추기 <b>켜짐</b> · 게임을 켜면 다른 기기에서 한 것을 가져오고, 하는 동안 몇 분마다 올려요 (3시간 안에 다른 기기를 켜야 해요)<div class="row"><button class="btn small" data-act="cloudNow">☁️ 지금 맞추기</button><button class="btn ghost small" data-act="cloudOff">끄기</button></div></div>` : ''}
     <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
 }
 function syncHook(conn) {
@@ -9448,7 +9449,7 @@ function syncData(d) {
     else syncStatus('📨 상대 섬을 받았어요! 다른 기기에서 어느 섬으로 맞출지 고르고 있어요…');
   } else if (d.t === 'pick') {
     // 상대(숫자 넣은 쪽)가 고른 것: keep = 'host' | 'join'
-    if (d.keep === 'join') syncApply(me.theirs); else syncFinish('✅ 이 기기의 섬으로 두 기기를 맞췄어요!');
+    if (d.keep === 'join') syncApply(me.theirs); else { cloudPaired(false); syncFinish('✅ 이 기기의 섬으로 두 기기를 맞췄어요! ☁️ 이제 자동으로 맞춰져요'); }
   }
 }
 function syncChoose() {
@@ -9469,7 +9470,7 @@ function syncPick(keep) {
   if (!confirm(keep === 'host' ? '다른 기기의 섬으로 이 기기를 바꿀까요?\n(이 기기의 지금 섬은 사라져요)' : '이 기기의 섬을 다른 기기에도 보낼까요?\n(다른 기기의 지금 섬은 사라져요)')) return;
   me.conn.send({ t: 'pick', keep });
   if (keep === 'host') syncApply(me.theirs);
-  else setTimeout(() => syncFinish('✅ 이 기기의 섬으로 두 기기를 맞췄어요!'), 600);
+  else { S.syncKey = me.theirs.key; cloudPaired(true); setTimeout(() => syncFinish('✅ 이 기기의 섬으로 두 기기를 맞췄어요! ☁️ 이제 자동으로 맞춰져요'), 600); }
 }
 // 받은 섬으로 지금 계정을 바꾼다 (계정은 그대로, 섬만)
 function syncApply(d) {
@@ -9478,15 +9479,120 @@ function syncApply(d) {
   if (B) { clearTimeout(B.timer); B = null; $('#battle').classList.add('hidden'); }
   if (typeof LOOP !== 'undefined' && LOOP) LOOP = null;
   clearTimeout(SAVE_T); SAVE_T = null; SAVE_ACC = SAVE_S = null;
-  if (!writeSave(ACC.id, json)) { toast('⚠️ 저장 공간이 부족해요'); return; }
+  const hostKey = SYNC && SYNC.role === 'host' ? S.syncKey : null;
+  applySaveJson(json);
+  if (hostKey) S.syncKey = hostKey;
+  cloudPaired(SYNC && SYNC.role === 'join');
+  syncFinish('✅ 다른 기기의 섬으로 맞췄어요! (💰 ' + d.sum.gold + ' · 🐾 ' + fmt(d.sum.mons) + '마리)');
+}
+// 받은 섬 JSON으로 지금 계정의 섬을 바꾼다 (계정은 그대로)
+function applySaveJson(json) {
+  if (B) { clearTimeout(B.timer); B = null; $('#battle').classList.add('hidden'); }
+  if (typeof LOOP !== 'undefined' && LOOP) LOOP = null;
+  clearTimeout(SAVE_T); SAVE_T = null; SAVE_ACC = SAVE_S = null;
+  if (!writeSave(ACC.id, json)) { toast('⚠️ 저장 공간이 부족해요'); return false; }
   lastSaved[ACC.id] = json; savedSeq[ACC.id] = ++SAVE_SEQ;
   S = load(ACC.id) || S;
   S.nick = S.nick || ACC.name;
   sel = [];
   Object.keys(walkers).forEach(k => delete walkers[k]);
   render(); updateHud();
-  syncFinish('✅ 다른 기기의 섬으로 맞췄어요! (💰 ' + d.sum.gold + ' · 🐾 ' + fmt(d.sum.mons) + '마리)');
+  return true;
 }
+// ===================== ☁️ 자동 맞추기 (한 번 짝을 맺으면 저절로) =====================
+// 섬을 인터넷(ntfy)에 올려 두고, 다른 기기가 켜질 때 받아 간다. 올린 섬은 3시간 동안 남아요.
+const CLOUD_URL = (k) => 'https://ntfy.sh/monhap-cloud-v1-' + k;
+const cloudNewKey = () => Array.from({ length: 18 }, () => 'abcdefghijkmnpqrstuvwxyz23456789'[Math.floor(Math.random() * 32)]).join('');
+const myDev = () => { let d = lsGet('combining-dev'); if (!d) { d = Math.random().toString(36).slice(2, 10); lsSet('combining-dev', d); } return d; };
+// 진짜로 놀았는지 보는 지문 (돈은 저절로 늘어나니까 빼고)
+const cloudFp = (s = S) => [s.monsters.length, Object.keys(s.dex || {}).length, s.stage || 1, s.plots.filter(Boolean).length,
+  s.plots.reduce((n, p) => n + (p && p.kind === 'hab' ? p.lv : 0), 0), Object.values(s.cos || {}).reduce((a, b) => a + b, 0), (s.hatch || []).length].join('|');
+const CLOUD = { busy: false, lastUp: 0, lastCheck: 0, asking: false };
+function cloudPaired(upload) {
+  S.rev = S.rev || 0; S.revBase = S.rev; S.cloudFp = cloudFp();
+  save();
+  if (upload) setTimeout(() => cloudUpload(true), 1500);
+}
+async function cloudUpload(force) {
+  if (!S || !S.syncKey || VISIT || CLOUD.busy || !navigator.onLine || !ACC) return false;
+  const fp = cloudFp();
+  const keepAlive = Date.now() - CLOUD.lastUp > 150 * 60 * 1000;   // 2시간 반마다 다시 올려서 3시간 안에 안 사라지게
+  if (!force && fp === S.cloudFp && !keepAlive) return false;
+  if (!force && Date.now() - CLOUD.lastUp < 4 * 60 * 1000) return false;
+  if (!ntfyBgOk()) return false;
+  CLOUD.busy = true;
+  try {
+    const rev = (S.rev || 0) + 1, s0 = S;
+    S.rev = rev; S.revBase = rev; S.cloudFp = fp;
+    const json = JSON.stringify(S);
+    const meta = { rev, dev: myDev(), at: Date.now(), sum: syncSum(S) };
+    const r = await fetch(CLOUD_URL(S.syncKey), { method: 'PUT', body: 'Z1:' + lzPack(json), headers: { Filename: 'save.txt', Message: JSON.stringify(meta) } });
+    const d = ntfyDay(); d.n++; lsSet('combining-ntfy', JSON.stringify(d));
+    if (r.ok && S === s0) { CLOUD.lastUp = Date.now(); save(); return true; }
+  } catch (e) { /* 인터넷 문제: 다음에 다시 */ } finally { CLOUD.busy = false; }
+  return false;
+}
+async function cloudCheck() {
+  if (!S || !S.syncKey || VISIT || CLOUD.busy || CLOUD.asking || !navigator.onLine || !ACC || B) return;
+  CLOUD.lastCheck = Date.now();
+  CLOUD.busy = true;
+  try {
+    const txt = await (await fetch(CLOUD_URL(S.syncKey) + '/json?poll=1&since=all')).text();
+    let best = null;
+    txt.split('\n').forEach(l => {
+      let m, meta; try { m = JSON.parse(l); meta = JSON.parse(m.message); } catch (e) { return; }
+      if (!m.attachment || m.attachment.expires * 1000 < Date.now() + 30000 || !meta || !meta.rev) return;
+      if (!best || meta.rev > best.meta.rev || (meta.rev === best.meta.rev && meta.at > best.meta.at)) best = { m, meta };
+    });
+    if (!best || best.meta.dev === myDev() || best.meta.rev <= (S.revBase || 0)) return;
+    const z = await (await fetch(best.m.attachment.url)).text();
+    if (!z.startsWith('Z1:')) return;
+    const json = lzUnpack(z.slice(3));
+    JSON.parse(json);
+    CLOUD.busy = false;
+    const playedHere = (S.cloudFp || '') !== cloudFp();
+    if (!playedHere) { cloudTake(json, best.meta, true); return; }
+    // 두 기기에서 모두 놀았으면 물어본다
+    CLOUD.asking = true;
+    CLOUD.pending = { json, meta: best.meta };
+    showModal(`<div class="sync-box"><h3>☁️ 다른 기기에서 한 섬이 있어요!</h3>
+      <p class="muted">이 기기와 다른 기기에서 <b>둘 다</b> 놀았어요. 어느 섬을 쓸까요? 고르지 않은 섬은 사라져요.</p>
+      <div class="build-list">
+        <button class="build-opt sync-pick" data-act="cloudPick" data-k="here"><span class="bo-ico">📱</span><span class="bo-nm">이 기기 섬<br><small>💰 ${syncSum(S).gold} · 🐾 ${fmt(S.monsters.length)}마리 · 📖 ${fmt(Object.keys(S.dex || {}).length)} · 🏝️ ${syncSum(S).isl}개 · ⚔️ ${fmt(S.stage || 1)}</small></span></button>
+        <button class="build-opt sync-pick newer" data-act="cloudPick" data-k="there"><span class="bo-ico">💻</span><span class="bo-nm">다른 기기 섬 (${syncWhen(best.meta.at)})<br><small>💰 ${best.meta.sum.gold} · 🐾 ${fmt(best.meta.sum.mons)}마리 · 📖 ${fmt(best.meta.sum.dex)} · 🏝️ ${best.meta.sum.isl}개 · ⚔️ ${fmt(best.meta.sum.stage)}</small></span></button>
+      </div></div>`);
+  } catch (e) { /* 인터넷 문제 */ } finally { CLOUD.busy = false; }
+}
+function cloudTake(json, meta, quiet) {
+  const key = S.syncKey;
+  if (!applySaveJson(json)) return;
+  S.syncKey = key; S.rev = meta.rev; S.revBase = meta.rev; S.cloudFp = cloudFp();
+  save();
+  toast(`☁️ 다른 기기에서 한 것을 가져왔어요! (💰 ${meta.sum.gold} · 🐾 ${fmt(meta.sum.mons)}마리)`);
+}
+function cloudPick(k) {
+  const p = CLOUD.pending;
+  CLOUD.asking = false; CLOUD.pending = null;
+  closeModal();
+  if (!p) return;
+  if (k === 'there') cloudTake(p.json, p.meta);
+  else { S.rev = Math.max(S.rev || 0, p.meta.rev); S.revBase = S.rev; cloudUpload(true).then(ok => toast(ok ? '☁️ 이 기기 섬을 다른 기기에도 올렸어요' : '☁️ 올리지 못했어요. 잠시 뒤에 다시 올려요')); }
+}
+function cloudOff() {
+  if (!confirm('☁️ 자동 맞추기를 끌까요? (다시 켜려면 🔄 다른 기기와 맞추기를 한 번 더 해요)')) return;
+  delete S.syncKey; save(); toast('☁️ 자동 맞추기를 껐어요'); openSync();
+}
+// 1분마다: 2분에 한 번 받아 보고, 바뀐 게 있으면 4분에 한 번 올린다. 숨기면 바로 올리기
+setInterval(() => {
+  if (typeof S === 'undefined' || !S || !S.syncKey || document.hidden) return;
+  if (Date.now() - CLOUD.lastCheck > 2 * 60 * 1000) cloudCheck().then(() => cloudUpload(false));
+  else cloudUpload(false);
+}, 60 * 1000);
+document.addEventListener('visibilitychange', () => {
+  if (typeof S === 'undefined' || !S || !S.syncKey) return;
+  if (document.hidden) cloudUpload(true);
+  else setTimeout(cloudCheck, 800);
+});
 function syncFinish(msg) {
   if (SYNC) SYNC.done = true;
   sfx('yay');
@@ -9585,7 +9691,7 @@ function openAccountMenu() {
       <button class="build-opt" data-act="guildOpen" style="--hc:#7dff8f"><span class="bo-ico">🛡️</span><span class="bo-nm">길드<br><small>${S.guild ? `${esc(S.guild.emblem)} ${esc(S.guild.name)}` : '길드에 들어가거나 만들기'}</small></span></button>
       <button class="build-opt" data-act="ranking" style="--hc:#ffd24a"><span class="bo-ico">🏆</span><span class="bo-nm">전 세계 랭킹<br><small>${tierOf(S.trophies).icon} ${tierOf(S.trophies).name} · 🏆 ${fmt(S.trophies || 0)}</small></span></button>
       <button class="build-opt" data-act="accSwitch" style="--hc:#6f8cff"><span class="bo-ico">🔄</span><span class="bo-nm">계정 바꾸기 / 새 계정</span></button>
-      <button class="build-opt" data-act="syncOpen" style="--hc:#2bd9a8"><span class="bo-ico">🔄</span><span class="bo-nm">다른 기기와 맞추기 (컴퓨터 ↔ 핸드폰)<br><small>두 기기에서 게임을 켜고 4자리 숫자를 넣으면 더 최근 섬으로 똑같이 맞춰요</small></span></button>
+      <button class="build-opt" data-act="syncOpen" style="--hc:#2bd9a8"><span class="bo-ico">🔄</span><span class="bo-nm">다른 기기와 맞추기 (컴퓨터 ↔ 핸드폰)<br><small>${S.syncKey ? '☁️ 자동 맞추기 켜짐' : '한 번 4자리 숫자로 연결하면 그다음부터 자동으로 맞춰져요'}</small></span></button>
       <button class="build-opt" data-act="accExport" style="--hc:#3fd6a4"><span class="bo-ico">📤</span><span class="bo-nm">이 계정 옮기기 코드<br><small>다른 기기에서 📥 가져오기에 붙여 넣으면 내 섬이 그대로 가요</small></span></button>
       <button class="build-opt" data-act="accRename" style="--hc:#ffb020"><span class="bo-ico">✏️</span><span class="bo-nm">이름 바꾸기</span></button>
       <button class="build-opt" data-act="accPinSet" style="--hc:#ff5ce1"><span class="bo-ico">🔒</span><span class="bo-nm">비밀번호 ${ACC.pin ? '바꾸기 / 없애기' : '만들기'}</span></button>
@@ -9681,6 +9787,7 @@ function firstAccOk() {
   setTimeout(afterEnter, 300);
 }
 function afterEnter() {
+  if (S && S.syncKey) setTimeout(cloudCheck, 2500);
   countLoginDay();
   // 처음 온 사람은 계정부터 (자동으로 만든 계정이면)
   if (ACC && ACC.auto) { openFirstAccount(); return; }
@@ -11393,6 +11500,9 @@ const ACTIONS = {
   syncJoin: () => syncJoin(),
   syncPick: (d) => syncPick(d.keep),
   syncCancel: () => { syncStop(); closeModal(); },
+  cloudPick: (d) => cloudPick(d.k),
+  cloudOff: () => cloudOff(),
+  cloudNow: () => { toast('☁️ 맞추는 중…'); cloudCheck().then(() => cloudUpload(true)).then(ok => { if (ok) toast('☁️ 다 맞췄어요!'); }); },
   accRename: () => accRename(),
   accRenameOk: () => accRenameOk(),
   accPinSet: () => accPinSet(),

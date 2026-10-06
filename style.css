@@ -1635,3 +1635,6 @@ body.ui-hidden .todo-btn { opacity: .55; }
 /* 🔄 기기 맞추기 */
 .sync-box input { width: 100%; font-size: 24px; text-align: center; letter-spacing: 8px; margin: 8px 0; }
 .sync-pick.newer { border-color: #ffe066; box-shadow: 0 0 10px rgba(255, 224, 102, .4); }
+
+/* ☁️ 자동 맞추기 */
+.cloud-on { margin: 8px 0; padding: 10px; border-radius: 12px; background: rgba(43, 217, 168, .15); border: 1px solid rgba(43, 217, 168, .5); font-size: 13px; }
