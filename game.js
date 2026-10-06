@@ -5745,6 +5745,70 @@ function nickDel(uid) {
   save(); toast('이름을 지웠어요');
   openMon(uid); render();
 }
+// ===================== 🧪 합체 실험실 (재미로만! 진짜 몬스터는 그대로) =====================
+const LAB_SAY = ['엄청 졸려 보여요 😴', '배가 고프대요 🍖', '노래를 잘 불러요 🎵', '춤추는 걸 좋아해요 💃', '부끄러움을 많이 타요 😳', '세상에서 제일 빨라요 💨',
+  '간지럼을 잘 타요 🤭', '방귀를 뀌면 무지개가 나와요 🌈', '몰래 과자를 숨겨 둬요 🍪', '목소리가 엄청 커요 📢', '잠꼬대를 해요 💤', '거울 보는 걸 좋아해요 🪞',
+  '수영을 못해요 🏊', '친구를 잘 사귀어요 🤝', '비밀이 많아요 🤫', '아침마다 체조를 해요 🤸'];
+const LAB = { a: null, b: null, r: null };
+const labPickPool = () => { const fav = S.monsters.filter(m => m.fav); return fav.length >= 2 ? fav : S.monsters; };
+const labRand = () => { const p = labPickPool(); return p.length ? p[Math.floor(Math.random() * p.length)].uid : null; };
+const labName = (m) => m.nick || CAT[m.type].name;
+function labMix(a, b) {
+  const ca = CAT[a.type], cb = CAT[b.type];
+  const wa = labName(a).split(' '), wb = labName(b).split(' ');
+  const na = wa[wa.length - 1], nb = wb[wb.length - 1];
+  const front = wa.length > 1 ? wa.slice(0, -1).join(' ') + ' ' : '';
+  const mid = na.slice(0, Math.ceil(na.length / 2)) + nb.slice(Math.floor(nb.length / 2));
+  const els = [...new Set([...ca.els, ...cb.els])].slice(0, 3);
+  const seed = hashStr(a.type + '+' + b.type);
+  return { fa: ca.face, fb: cb.face, name: front + mid, els, say: LAB_SAY[seed % LAB_SAY.length], power: Math.round((monPower(a) + monPower(b)) / 2 * (1 + (seed % 50) / 100)), at: Date.now() };
+}
+function labCardHTML(r, k) {
+  return `<div class="lab-card">
+    <div class="lab-face"><span>${r.fa}</span><span>${r.fb}</span></div>
+    <b>${esc(r.name)}</b>
+    <div class="els">${elBadges(r.els)}</div>
+    <small>⚔️ ${fmt(r.power)} · ${r.say}</small>
+    ${k != null ? `<button class="btn ghost small" data-act="labDel" data-k="${k}">🗑️</button>` : ''}
+  </div>`;
+}
+function openLab() {
+  tutFlag('lab', true);
+  if (S.monsters.length < 2) { toast('몬스터가 2마리 이상 있어야 해요'); return; }
+  if (!byUid(LAB.a)) LAB.a = labRand();
+  if (!byUid(LAB.b) || LAB.b === LAB.a) { LAB.b = labRand(); for (let t = 0; t < 5 && LAB.b === LAB.a; t++) LAB.b = labRand(); }
+  const a = byUid(LAB.a), b = byUid(LAB.b);
+  const slot = (m, k) => `<div class="lab-slot">${card(m, '', 'mini')}<button class="btn ghost small" data-act="labRoll" data-k="${k}">🎲 바꾸기</button></div>`;
+  showModal(`<div class="lab-box"><h3>🧪 몬스터 합체 실험실</h3>
+    <p class="muted">두 몬스터를 합체하면 어떤 모습일까요? (재미로만 해 보는 거라 진짜 몬스터는 그대로예요!)${S.monsters.some(m => m.fav) ? ' 💖 최애 몬스터 중에서 골라요.' : ''}</p>
+    <div class="lab-pair">${slot(a, 'a')}<span class="lab-plus">＋</span>${slot(b, 'b')}</div>
+    <div class="row"><button class="btn big green" data-act="labGo">🧪 합체!</button></div>
+    <div id="labOut">${LAB.r ? labCardHTML(LAB.r) + '<div class="row"><button class="btn" data-act="labSave">📒 앨범에 저장</button></div>' : ''}</div>
+    <div class="row"><button class="btn ghost small" data-act="labAlbum">📒 합체 앨범 (${(S.labAlbum || []).length})</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
+function labGo() {
+  const a = byUid(LAB.a), b = byUid(LAB.b);
+  if (!a || !b) { openLab(); return; }
+  LAB.r = labMix(a, b);
+  sfx('yay');
+  openLab();
+  const o = $('#labOut .lab-card'); if (o) o.classList.add('pop');
+}
+function labSave() {
+  if (!LAB.r) return;
+  S.labAlbum = S.labAlbum || [];
+  if (S.labAlbum.length >= 40) { toast('📒 앨범이 가득 찼어요 (40장). 🗑️로 지우고 저장해요'); return; }
+  S.labAlbum.unshift(LAB.r);
+  LAB.r = null;
+  save(); sfx('coin'); toast('📒 합체 앨범에 저장했어요!');
+  openLab();
+}
+function openLabAlbum() {
+  const list = S.labAlbum || [];
+  showModal(`<div class="lab-box"><h3>📒 합체 앨범 <small class="muted">${list.length}/40</small></h3>
+    ${list.length ? `<div class="lab-album">${list.map((r, k) => labCardHTML(r, k)).join('')}</div>` : '<p class="muted">아직 저장한 합체 몬스터가 없어요. 🧪 합체 실험실에서 만들어 봐요!</p>'}
+    <div class="row"><button class="btn" data-act="labOpen">🧪 실험실로</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
 function openMon(uid) {
   const m = byUid(uid);
   if (!m) return;
@@ -6101,6 +6165,7 @@ function renderMons() {
     <div class="fuse-bar">
       <button class="btn fuse-btn" data-act="altar"><span>🔮</span><b>합성 제단</b><small>같은 등급 ${ALTAR_N}마리 → 한 등급 위</small></button>
       <button class="btn fuse-btn star ${starReady().length ? 'ready' : ''}" data-act="starList"><span>⭐</span><b>별 합성</b><small>${starReady().length ? `지금 ${starReady().length}종류 가능!` : '같은 몬스터 3마리 → ★+1'}</small></button>
+      <button class="btn fuse-btn lab" data-act="labOpen"><span>🧪</span><b>합체 실험실</b><small>두 마리를 합체하면? (재미로!)</small></button>
     </div>
     ${monSummaryHTML()}
     ${monControlsHTML()}
@@ -10492,6 +10557,10 @@ TUT.push(
   { text: '📸 섬 오른쪽 📸 버튼으로 내 섬 사진을 찍어 봐요 (저장해서 친구에게 보여 줘요!)', done: () => tutFlag('photo'),
     go: () => { closeModal(); tab = 'island'; render(); } },
 );
+TUT.push(
+  { text: '🧪 🐾 몬스터 탭의 🧪 합체 실험실에서 두 몬스터를 합체해 봐요 (재미로만! 진짜 몬스터는 그대로)', done: () => tutFlag('lab'),
+    go: () => { closeModal(); tab = 'mons'; render(); openLab(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -10759,6 +10828,10 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#zoomBtns [data-act=photo]'];
+    case 62: // 합체 실험실
+      if (inModal) return ['#modalBox [data-act=labGo]', '#modalBox [data-act=close]'];
+      if (tab !== 'mons') return [bottomBtn('mons')];
+      return ['#view [data-act=labOpen]'];
   }
   return null;
 }
@@ -10944,6 +11017,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🧪', title: '합체 실험실', text: '🐾 몬스터 탭의 🧪 합체 실험실에서 내 몬스터 두 마리를 합체해 봐요!<br>살라맨더 + 거북 = 살라북?! 웃긴 이름과 모습, 성격이 나와요. 마음에 들면 📒 앨범에 저장!<br>재미로만 하는 거라 진짜 몬스터는 그대로예요.' },
   { icon: '💖', title: '최애 몬스터 · 섬 사진', text: '몬스터를 누르고 🤍 최애로를 누르면 카드에 💖가 붙어요. 🐾 몬스터 탭의 💖 최애만으로 좋아하는 몬스터만 모아 봐요!<br>섬 오른쪽 📸 버튼을 누르면 내 섬 사진을 찍어서 💾 저장할 수 있어요.' },
   { icon: '✏️', title: '몬스터 이름 짓기', text: '내 몬스터를 누르고 ✏️ 이름 지어 주기를 누르면 별명을 지어 줄 수 있어요!<br>별명은 카드와 전투에서 💖 뭉치 처럼 보여요. 언제든 바꾸거나 지울 수 있어요.' },
   { icon: '🐾', title: '몬스터 100000마리', text: '이제 몬스터가 100000마리가 넘어요! 반짝 화염 무당벌레, 신나는 영겁 비버처럼 새 친구들이 잔뜩!<br>등급은 피라미드 모양: 근원 15 · 절대 22 · 신성 33 · 초월 50 · 신화 81 · 전설 120 … 일반이 가장 많아요.<br>📚 모든 몬스터 상점에서는 희귀할수록 값이 어마어마하게 올라가요 (근원은 3 뒤에 0이 107개!).' },
@@ -11096,6 +11170,12 @@ const ACTIONS = {
   buyAny: (d) => buyAny(d.type),
   buyEveryEgg: () => buyEveryEgg(),
   nickOpen: (d) => openNick(d.uid),
+  labOpen: () => openLab(),
+  labRoll: (d) => { LAB[d.k] = labRand(); LAB.r = null; openLab(); },
+  labGo: () => labGo(),
+  labSave: () => labSave(),
+  labAlbum: () => openLabAlbum(),
+  labDel: (d) => { (S.labAlbum || []).splice(Number(d.k), 1); save(); openLabAlbum(); },
   favToggle: (d) => favToggle(d.uid),
   photo: () => takePhoto(),
   nickOk: (d) => nickOk(d.uid),
