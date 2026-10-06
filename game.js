@@ -529,6 +529,25 @@ function addHybrid7(i, j, n) {
 }
 EL.forEach(e => { for (let n = 0; n < PURE_7; n++) addPure7(e, n); });
 PAIRS.forEach(([i, j]) => { for (let n = 0; n < HYB_7; n++) addHybrid7(i, j, n); });
+// ---- 9차: 200000마리까지 (꾸밈말 60개 더) ----
+const PURE_8 = 250, HYB_8 = 500;
+const MOD8 = ['귀여운', '멋진', '용맹한', '수줍은', '명랑한', '심술궂은', '다정한', '엉금엉금', '깡총', '반들반들', '폭신', '쫀득', '바삭', '촉촉', '따끈',
+  '시원', '번쩍', '살금살금', '뒤뚱', '방긋', '꾸벅', '데굴데굴', '팔랑', '쌩쌩', '느릿', '부릉', '콩콩', '몽글', '빙글', '토실',
+  '쪼꼬미', '왕눈이', '긴꼬리', '짧은다리', '큰귀', '왕발', '뿔난', '날개달린', '줄무늬', '점박이', '별무늬', '하트무늬', '구름', '이슬', '새벽',
+  '노을', '한밤', '봄', '여름', '가을', '겨울', '바닷가', '산꼭대기', '동굴', '숲속의', '사막의', '설원의', '하늘섬', '꿈나라', '장난감'];
+const adj8 = (elId, n) => `${MOD8[n % MOD8.length]} ${EL[ELI[elId]].adj}`;
+function addPure8(e, n) {
+  const group = 'p:' + e.id, id = `${group}:y${n}`, seed = hashStr(group + '#8') + n * 31;
+  const look = freshCreature2(adj8(e.id, n), id, seed);
+  addMon({ id, group, variant: 3000 + n, ...look, els: [e.id], rarity: RAR_ORDER[rankOfVariant(n, PURE_8, frac(group + '#8'))], mod: variantMod(id) });
+}
+function addHybrid8(i, j, n) {
+  const a = EL[i], b = EL[j], group = `h:${a.id}+${b.id}`, id = `${group}:y${n}`, seed = hashStr(group + '#8') + n * 31;
+  const look = freshCreature2(adj8(n % 2 ? b.id : a.id, Math.floor(n / 2) + i * 11 + j * 5), id, seed);
+  addMon({ id, group, variant: 3000 + n, ...look, els: [a.id, b.id], rarity: RAR_ORDER[rankOfVariant(n, HYB_8, frac(group + '#8'))], mod: variantMod(id) });
+}
+EL.forEach(e => { for (let n = 0; n < PURE_8; n++) addPure8(e, n); });
+PAIRS.forEach(([i, j]) => { for (let n = 0; n < HYB_8; n++) addHybrid8(i, j, n); });
 LEGENDS.forEach(l => addMon({ ...l, rarity: 'legendary' }));
 MYTHICS.forEach(m => addMon({ ...m, rarity: 'mythic' }));
 SHOP_LEGENDS.forEach(l => addMon({ ...l, rarity: l.rank || 'divine', shop: true }));
@@ -710,7 +729,7 @@ const islandOf = (i) => Math.floor(i / ISLAND_PLOTS);
 const islandRange = (k) => Array.from({ length: ISLAND_PLOTS }, (_, n) => k * ISLAND_PLOTS + n);
 const islandLabel = (i) => ISLANDS[islandOf(i)].emoji + (islandOf(i) + 1);
 const HATCH_CAP = 3;
-const EGG_MULT = 10;   // 부화장 한 칸에 알 10개씩 (알을 더 많이 둘 수 있게)
+const EGG_MULT = 1;    // 부화장 한 칸에 알 1개
 const BREED_LV = 4;
 const MAX_LV = 20;
 const HAB_MAX_LV = 100;
@@ -10482,7 +10501,14 @@ function submitCode() {
   if (v === CE_CODE) { openRichGift(); return; }
   if (v === SECRET_CODE) {
     closeModal();
-    if (S.infinite) { toast('이미 돈 무한이에요 💰'); return; }
+    // 한 번 더 넣으면 돈 무한을 끈다
+    if (S.infinite) {
+      if (!confirm('🛡️ 방탄유리(돈 무한)를 끌까요?\n끄면 돈이 다시 줄어들어요. 다시 켜고 싶으면 방탄유리를 또 넣으면 돼요.')) return;
+      S.infinite = false;
+      save(); updateHud(); render();
+      toast(`🛡️ 돈 무한을 껐어요 (지금 💰 ${shortNum(S.gold)})`);
+      return;
+    }
     S.infinite = true;
     save();
     updateHud();
@@ -10671,7 +10697,7 @@ TUT.push(
 TUT.push(
 );
 TUT.push(
-  { text: '📖 아래 📖 도감 탭을 눌러 봐요. 이제 몬스터가 100000마리나 있어요! 근원 15마리부터 피라미드 모양이에요', done: () => tutFlag('dex100k'),
+  { text: '📖 아래 📖 도감 탭을 눌러 봐요. 이제 몬스터가 200000마리나 있어요! 근원 15마리부터 피라미드 모양이에요', done: () => tutFlag('dex100k'),
     go: () => { closeModal(); tab = 'dex'; render(); } },
   { text: '💰 상점 🥚 알 칸의 📚 모든 몬스터 상점에서 💰 등급별 값 보기를 열어 봐요 (희귀할수록 어마어마하게 비싸져요!)', done: () => tutFlag('priceTable'),
     go: () => { closeModal(); tab = 'shop'; shopTab = 'egg'; render(); const d = document.querySelector('.price-table'); if (d) { d.open = true; d.scrollIntoView({ block: 'center' }); } } },
@@ -11149,7 +11175,7 @@ const WELCOME = [
   { icon: '🧪', title: '합체 실험실', text: '🐾 몬스터 탭의 🧪 합체 실험실에서 내 몬스터 두 마리를 합체해 봐요!<br>살라맨더 + 거북 = 살라북?! 웃긴 이름과 모습, 성격이 나와요. 마음에 들면 📒 앨범에 저장!<br>재미로만 하는 거라 진짜 몬스터는 그대로예요.' },
   { icon: '💖', title: '최애 몬스터 · 섬 사진', text: '몬스터를 누르고 🤍 최애로를 누르면 카드에 💖가 붙어요. 🐾 몬스터 탭의 💖 최애만으로 좋아하는 몬스터만 모아 봐요!<br>섬 오른쪽 📸 버튼을 누르면 내 섬 사진을 찍어서 💾 저장할 수 있어요.' },
   { icon: '✏️', title: '몬스터 이름 짓기', text: '내 몬스터를 누르고 ✏️ 이름 지어 주기를 누르면 별명을 지어 줄 수 있어요!<br>별명은 카드와 전투에서 💖 뭉치 처럼 보여요. 언제든 바꾸거나 지울 수 있어요.' },
-  { icon: '🐾', title: '몬스터 100000마리', text: '이제 몬스터가 100000마리가 넘어요! 반짝 화염 무당벌레, 신나는 영겁 비버처럼 새 친구들이 잔뜩!<br>등급은 피라미드 모양: 근원 15 · 절대 22 · 신성 33 · 초월 50 · 신화 81 · 전설 120 … 일반이 가장 많아요.<br>📚 모든 몬스터 상점에서는 희귀할수록 값이 어마어마하게 올라가요 (근원은 3 뒤에 0이 107개!).' },
+  { icon: '🐾', title: '몬스터 200000마리', text: '이제 몬스터가 200000마리가 넘어요! 반짝 화염 무당벌레, 신나는 영겁 비버처럼 새 친구들이 잔뜩!<br>등급은 피라미드 모양: 근원 15 · 절대 22 · 신성 33 · 초월 50 · 신화 81 · 전설 120 … 일반이 가장 많아요.<br>📚 모든 몬스터 상점에서는 희귀할수록 값이 어마어마하게 올라가요 (근원은 3 뒤에 0이 107개!).' },
   { icon: '🏝️', title: '한 번에 키우기', text: '🗺️ 섬 지도에서 🏝️🏝️ 섬 여러 개 한 번에 사기를 누르면 1 · 5 · 10 · 25개나 돈 되는 만큼 섬을 사고, 서식지까지 꽉 채워 줘요.<br>⏫ 모든 서식지 돈 되는 만큼 올리기를 누르면 낮은 레벨부터 골고루 Lv.100까지 올려요!' },
   { icon: '💾', title: '저장 버튼', text: '게임은 저절로 저장되지만, 위쪽 💾 버튼을 누르면 지금 바로 저장해요!<br>컴퓨터에서는 Ctrl + S 키로도 저장할 수 있어요.<br>저장이 잘 되면 시간과 크기를 알려 줘요.' },
   { icon: '⏫', title: '서식지 Lv.100', text: '서식지는 이제 Lv.100까지 올릴 수 있어요!<br>레벨만큼 몬스터가 살 수 있고 (Lv.100 = 100마리), 레벨마다 골드 수입 +25%.<br>서식지를 눌러 ⏫ 돈 되는 만큼 올리기를 누르면 한 번에 쭉 올라가요.' },
