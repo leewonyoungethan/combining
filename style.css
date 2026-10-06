@@ -1638,3 +1638,17 @@ body.ui-hidden .todo-btn { opacity: .55; }
 
 /* ☁️ 자동 맞추기 */
 .cloud-on { margin: 8px 0; padding: 10px; border-radius: 12px; background: rgba(43, 217, 168, .15); border: 1px solid rgba(43, 217, 168, .5); font-size: 13px; }
+
+/* ⚡ 배속 상점 */
+.ls-sp.locked { opacity: .55; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.ls-sp.locked small { font-size: 11px; color: #ffe066; }
+.ls-sp.locked.next { opacity: 1; border-color: #ffe066; box-shadow: 0 0 10px rgba(255, 224, 102, .4); }
+
+/* ⚡ 100000배속 계산 화면 */
+.quick-run { text-align: center; padding: 24px 16px; }
+.quick-run .qr-stage { font-size: 40px; font-weight: 900; margin: 12px 0; color: #ffe066; text-shadow: 0 0 18px rgba(255, 224, 102, .6); }
+.quick-run .qr-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+.quick-run .qr-grid div { display: flex; flex-direction: column; padding: 10px 4px; border-radius: 12px; background: rgba(255, 255, 255, .08); }
+.quick-run .qr-grid b { font-size: 18px; }
+.quick-run .qr-pow { font-weight: 800; }
+@media (max-width: 520px) { .quick-run .qr-grid { grid-template-columns: repeat(2, 1fr); } }
