@@ -710,6 +710,7 @@ const islandOf = (i) => Math.floor(i / ISLAND_PLOTS);
 const islandRange = (k) => Array.from({ length: ISLAND_PLOTS }, (_, n) => k * ISLAND_PLOTS + n);
 const islandLabel = (i) => ISLANDS[islandOf(i)].emoji + (islandOf(i) + 1);
 const HATCH_CAP = 3;
+const EGG_MULT = 10;   // 부화장 한 칸에 알 10개씩 (알을 더 많이 둘 수 있게)
 const BREED_LV = 4;
 const MAX_LV = 20;
 const HAB_MAX_LV = 100;
@@ -3640,6 +3641,7 @@ function showModal(html) {
   refreshLive();
 }
 function closeModal() {
+  if (typeof SYNC !== 'undefined' && SYNC && !SYNC.theirs) syncStop();
   if (typeof SHARE !== 'undefined' && SHARE) stopShare();
   if (typeof FISH !== 'undefined' && FISH) fishStop();
   if (typeof MG !== 'undefined' && MG) mgStop();
@@ -4545,7 +4547,7 @@ function openBuild(i) {
         <span class="bo-ico">🏔️</span><span class="bo-nm">교배산 <small>(${mountains().length}개 보유 · 동시에 교배)</small></span><span class="bo-cost">💰 ${fmt(MOUNTAIN_COST)}</span>
       </button>
       <button class="build-opt" data-act="build" data-i="${i}" data-what="hatchery" style="--hc:#c9953a">
-        <span class="bo-ico">🪺</span><span class="bo-nm">부화장 <small>(${hatcheries().length}개 보유 · 알 ${HATCH_CAP}칸 더)</small></span><span class="bo-cost">💰 ${fmt(HATCHERY_COST)}</span>
+        <span class="bo-ico">🪺</span><span class="bo-nm">부화장 <small>(${hatcheries().length}개 보유 · 알 ${HATCH_CAP * EGG_MULT}개 더)</small></span><span class="bo-cost">💰 ${fmt(HATCHERY_COST)}</span>
       </button>
       ${EL.map(e => habBtn(e.id)).join('')}
       ${habBtn('legend')}
@@ -4670,7 +4672,7 @@ function demolish(i) {
   if (p.kind === 'hatchery') {
     if (hatcheries().length <= 1) { toast('하나뿐인 부화장은 철거할 수 없어요'); return; }
     if (hatchIncs(p).some(Boolean)) { toast('부화 중인 알이 있는 부화장은 철거할 수 없어요'); return; }
-    if (S.hatch.length > hatchCap() - (p.cap || HATCH_CAP)) { toast('알이 너무 많아서 철거할 수 없어요. 먼저 부화시켜 주세요'); return; }
+    if (S.hatch.length > hatchCap() - (p.cap || HATCH_CAP) * EGG_MULT) { toast('알이 너무 많아서 철거할 수 없어요. 먼저 부화시켜 주세요'); return; }
   }
   if (p.kind === 'mountain' && (mtnBusy(p).length || mountains().length <= 1)) { toast('교배 중이거나 하나뿐인 교배산은 철거할 수 없어요'); return; }
   if (p.kind === 'hab' && habMons(i).length) {
@@ -4972,7 +4974,7 @@ const mtnSlots = (p) => { if (!Array.isArray(p.breeds)) p.breeds = [p.breed || n
 const mtnBusy = (p) => mtnSlots(p).filter(Boolean);
 const mtnFreeSlot = (p) => mtnSlots(p).findIndex(b => !b);
 let curSlot = 0;
-const hatchCap = () => Math.max(HATCH_CAP, hatcheries().reduce((s, k) => s + (S.plots[k].cap || HATCH_CAP), 0)) + 2 * Math.max(0, mtnPower() - 1);
+const hatchCap = () => (Math.max(HATCH_CAP, hatcheries().reduce((s, k) => s + (S.plots[k].cap || HATCH_CAP), 0)) + 2 * Math.max(0, mtnPower() - 1)) * EGG_MULT;
 
 function mountainFooter(i) {
   const n = mountains().length;
@@ -5274,7 +5276,7 @@ function openHatchery(i = curHatch, slot) {
     ${S.hatch.length + leftover.length > 1 ? '<div class="all-box"><button class="btn green" data-act="hatchAll">🐣 모두 부화 (알맞은 서식지로 자동 이사)</button></div>' : ''}
     ${S.hatch.length ? '<div class="all-box"><button class="btn" data-act="makeRoom">🏠 남은 알 살 곳 만들기 (빈 서식지 바꾸기 · 새로 짓기)</button></div>' : ''}
     ${S.hatch.length + leftover.length ? `<div class="all-box"><button class="btn ghost small danger" data-act="dumpEggs">🗑️ 알 모두 버리기 (${fmt(S.hatch.length + leftover.length)}개)</button></div>` : ''}
-    <p class="muted small-note">부화장 ${n}개가 알을 같이 보관해요 (${hatcheries().map(k => (S.plots[k].cap || HATCH_CAP) + '칸').join(' + ')}${mtnPower() > 1 ? ` + 교배산 추가분 ${2 * (mtnPower() - 1)}칸` : ''})</p>
+    <p class="muted small-note">부화장 ${n}개가 알을 같이 보관해요 (${hatcheries().map(k => (S.plots[k].cap || HATCH_CAP) * EGG_MULT + '개').join(' + ')}${mtnPower() > 1 ? ` + 교배산 추가분 ${2 * (mtnPower() - 1) * EGG_MULT}개` : ''})</p>
     <div class="row">
       ${(p.lv || 1) > 1 ? `<button class="btn ghost small" data-act="splitHatch" data-i="${i}">🔓 합치기 취소 (${p.lv}개로 나누기)</button>` : ''}
       ${n > 1 && !busy ? `<button class="btn ghost small danger" data-act="demolish" data-i="${i}">🗑️ 이 부화장 철거 (+💰 ${fmt(demolishRefund(p))})</button>` : ''}
@@ -5466,7 +5468,7 @@ function splitHatchery(i) {
   // 합칠 때 받은 보너스 칸(합친 횟수만큼)을 빼고 똑같이 나눈다
   const base = Math.max(N * HATCH_CAP, (p.cap || HATCH_CAP) - (N - 1));
   const each = Math.floor(base / N), extra = base - each * N;
-  if (S.hatch.length > hatchCap() - ((p.cap || HATCH_CAP) - base)) { toast('대기 중인 알이 너무 많아서 나눌 수 없어요. 먼저 부화시켜 주세요'); return; }
+  if (S.hatch.length > hatchCap() - ((p.cap || HATCH_CAP) - base) * EGG_MULT) { toast('대기 중인 알이 너무 많아서 나눌 수 없어요. 먼저 부화시켜 주세요'); return; }
   if (!confirm(`큰 부화장(Lv.${N})을 부화장 ${N}개로 나눌까요? 보관 중인 알은 그대로 있어요.`)) return;
   const incs = hatchIncs(p).slice();
   p.lv = 1;
@@ -9347,6 +9349,132 @@ function accPinOk(id) {
   closeModal();
   enterAccount(a);
 }
+// ===================== 🔄 기기끼리 맞추기 (두 기기에서 동시에 켜고 4자리 숫자) =====================
+const SYNC_PREFIX = 'monhap-sync-';
+let SYNC = null;   // { peer, conn, role, mine, theirs, done }
+function syncStop() { const s = SYNC; SYNC = null; try { s && s.conn && s.conn.close(); } catch (e) { /* 닫힘 */ } try { s && s.peer && s.peer.destroy(); } catch (e) { /* 닫힘 */ } }
+function syncSnapshot() {
+  S.last = Date.now();
+  const json = JSON.stringify(S);
+  return { t: 'save', z: lzPack(json), last: S.last, name: ACC ? ACC.name : '', sum: syncSum(S) };
+}
+function syncSum(s) {
+  const isl = Math.floor((s.plots || []).length / ISLAND_PLOTS);
+  return { gold: s.infinite ? '∞' : shortNum(s.gold || 0), mons: (s.monsters || []).length, dex: Object.keys(s.dex || {}).length, isl, stage: s.stage || 1 };
+}
+const syncWhen = (t) => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+function openSync() {
+  syncStop();
+  if (VISIT) { toast('👀 친구 섬 구경 중에는 맞출 수 없어요'); return; }
+  showModal(`<div class="sync-box"><h3>🔄 다른 기기와 맞추기</h3>
+    <p class="muted">컴퓨터와 핸드폰에서 <b>둘 다 게임을 켜고</b> 하나는 숫자를 만들고, 다른 하나는 그 숫자를 넣어요.<br>두 섬을 비교해서 <b>고른 쪽</b>으로 두 기기가 똑같아져요.</p>
+    <div class="build-list">
+      <button class="build-opt" data-act="syncHost" style="--hc:#2bd9a8"><span class="bo-ico">📡</span><span class="bo-nm">이 기기에서 숫자 만들기<br><small>예: 컴퓨터에서 누르기</small></span></button>
+      <button class="build-opt" data-act="syncJoinOpen" style="--hc:#6f8cff"><span class="bo-ico">🔢</span><span class="bo-nm">숫자 넣기<br><small>예: 핸드폰에서 누르기</small></span></button>
+    </div>
+    <p class="muted small-note">💡 계정을 새로 만들지 않고 지금 계정이 그대로 맞춰져요.</p>
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
+function syncHook(conn) {
+  SYNC.conn = conn;
+  conn.on('open', () => { if (SYNC && SYNC.conn === conn) { conn.send(syncSnapshot()); syncStatus('📨 내 섬을 보냈어요. 상대 섬을 기다리는 중…'); } });
+  conn.on('data', (d) => syncData(d));
+  conn.on('close', () => { if (SYNC && SYNC.conn === conn && !SYNC.done) syncStatus('⚠️ 연결이 끊겼어요. 다시 해 주세요'); });
+  conn.on('error', () => syncStatus('⚠️ 연결에 문제가 생겼어요. 다시 해 주세요'));
+}
+function syncStatus(h) { const e = $('#syncStatus'); if (e) e.innerHTML = h; }
+function syncHost(retry = 0) {
+  syncStop();
+  if (!window.Peer || !navigator.onLine) { toast('📴 인터넷이 필요해요'); return; }
+  const code = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+  const peer = new Peer(SYNC_PREFIX + code);
+  SYNC = { peer, role: 'host', code };
+  const me = SYNC;
+  showModal(`<div class="sync-box"><h3>📡 이 숫자를 다른 기기에 넣어요</h3>
+    <div class="short-code">${code}</div>
+    <p class="muted" id="syncStatus">📡 준비 중…</p>
+    <p class="muted small-note">다른 기기에서: 👤 계정 → 🔄 다른 기기와 맞추기 → 🔢 숫자 넣기. 다 될 때까지 <b>이 창을 열어 두세요</b>.</p>
+    <div class="row"><button class="btn ghost small" data-act="syncCancel">취소</button></div></div>`);
+  peer.on('open', () => { if (SYNC === me) syncStatus('✅ 준비됐어요! 다른 기기에서 숫자를 넣어 주세요'); });
+  peer.on('connection', (conn) => { if (SYNC !== me || me.conn) { conn.close(); return; } syncHook(conn); syncStatus('🔗 연결됐어요! 섬을 주고받는 중…'); });
+  peer.on('error', (e) => { if (SYNC !== me) return; if (e.type === 'unavailable-id' && retry < 5) { syncHost(retry + 1); return; } syncStatus('⚠️ 숫자를 만들지 못했어요. 다시 해 주세요'); });
+}
+function syncJoinOpen() {
+  syncStop();
+  showModal(`<div class="sync-box"><h3>🔢 다른 기기의 숫자 넣기</h3>
+    <input id="syncCode" inputmode="numeric" maxlength="4" placeholder="4자리 숫자" autocomplete="off">
+    <p class="muted" id="syncStatus">&nbsp;</p>
+    <div class="row"><button class="btn green" data-act="syncJoin">🔗 연결하기</button><button class="btn ghost small" data-act="syncCancel">취소</button></div></div>`);
+  const i = $('#syncCode'); if (i) { i.focus(); i.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) syncJoin(); }); }
+}
+function syncJoin() {
+  const code = (($('#syncCode') || {}).value || '').trim();
+  if (!/^\d{4}$/.test(code)) { toast('숫자 4자리를 넣어 주세요'); return; }
+  if (!window.Peer || !navigator.onLine) { toast('📴 인터넷이 필요해요'); return; }
+  syncStop();
+  const peer = new Peer();
+  SYNC = { peer, role: 'join' };
+  const me = SYNC;
+  syncStatus('📡 연결하는 중…');
+  const tm = setTimeout(() => { if (SYNC === me && !me.theirs) syncStatus('⚠️ 찾을 수 없어요. 숫자와, 다른 기기의 창이 열려 있는지 확인해 주세요'); }, 15000);
+  peer.on('open', () => { if (SYNC !== me) return; syncHook(peer.connect(SYNC_PREFIX + code, { reliable: true })); });
+  peer.on('error', () => { if (SYNC !== me) return; clearTimeout(tm); syncStatus('⚠️ 찾을 수 없어요. 숫자를 다시 확인해 주세요'); });
+}
+function syncData(d) {
+  const me = SYNC;
+  if (!me || !d) return;
+  if (d.t === 'save') {
+    me.theirs = d;
+    if (me.role === 'join') syncChoose();
+    else syncStatus('📨 상대 섬을 받았어요! 다른 기기에서 어느 섬으로 맞출지 고르고 있어요…');
+  } else if (d.t === 'pick') {
+    // 상대(숫자 넣은 쪽)가 고른 것: keep = 'host' | 'join'
+    if (d.keep === 'join') syncApply(me.theirs); else syncFinish('✅ 이 기기의 섬으로 두 기기를 맞췄어요!');
+  }
+}
+function syncChoose() {
+  const me = SYNC, mine = { last: Date.now(), name: ACC.name, sum: syncSum(S) }, th = me.theirs;
+  const newer = th.last > (S.savedAt || S.last || 0) ? 'host' : 'join';
+  const box = (who, x, label) => `<button class="build-opt sync-pick ${newer === who ? 'newer' : ''}" data-act="syncPick" data-keep="${who}">
+      <span class="bo-ico">${who === 'join' ? '📱' : '💻'}</span>
+      <span class="bo-nm">${label}${newer === who ? ' <b>⭐ 더 최근</b>' : ''}<br><small>💰 ${x.sum.gold} · 🐾 ${fmt(x.sum.mons)}마리 · 📖 도감 ${fmt(x.sum.dex)} · 🏝️ 섬 ${x.sum.isl}개 · ⚔️ 스테이지 ${fmt(x.sum.stage)}</small></span></button>`;
+  showModal(`<div class="sync-box"><h3>🔄 어느 섬으로 맞출까요?</h3>
+    <p class="muted">고른 섬이 두 기기 모두에 들어가요. 고르지 않은 섬은 사라져요!</p>
+    <div class="build-list">${box('join', mine, '이 기기 섬 (' + esc(ACC.name) + ')')}${box('host', th, '다른 기기 섬 (' + esc(th.name || '') + ' · 마지막 ' + syncWhen(th.last) + ')')}</div>
+    <p class="muted" id="syncStatus">&nbsp;</p>
+    <div class="row"><button class="btn ghost small" data-act="syncCancel">취소</button></div></div>`);
+}
+function syncPick(keep) {
+  const me = SYNC;
+  if (!me || !me.conn || !me.theirs) return;
+  if (!confirm(keep === 'host' ? '다른 기기의 섬으로 이 기기를 바꿀까요?\n(이 기기의 지금 섬은 사라져요)' : '이 기기의 섬을 다른 기기에도 보낼까요?\n(다른 기기의 지금 섬은 사라져요)')) return;
+  me.conn.send({ t: 'pick', keep });
+  if (keep === 'host') syncApply(me.theirs);
+  else setTimeout(() => syncFinish('✅ 이 기기의 섬으로 두 기기를 맞췄어요!'), 600);
+}
+// 받은 섬으로 지금 계정을 바꾼다 (계정은 그대로, 섬만)
+function syncApply(d) {
+  let json;
+  try { json = lzUnpack(d.z); JSON.parse(json); } catch (e) { syncStatus('⚠️ 받은 섬이 깨졌어요. 다시 해 주세요'); return; }
+  if (B) { clearTimeout(B.timer); B = null; $('#battle').classList.add('hidden'); }
+  if (typeof LOOP !== 'undefined' && LOOP) LOOP = null;
+  clearTimeout(SAVE_T); SAVE_T = null; SAVE_ACC = SAVE_S = null;
+  if (!writeSave(ACC.id, json)) { toast('⚠️ 저장 공간이 부족해요'); return; }
+  lastSaved[ACC.id] = json; savedSeq[ACC.id] = ++SAVE_SEQ;
+  S = load(ACC.id) || S;
+  S.nick = S.nick || ACC.name;
+  sel = [];
+  Object.keys(walkers).forEach(k => delete walkers[k]);
+  render(); updateHud();
+  syncFinish('✅ 다른 기기의 섬으로 맞췄어요! (💰 ' + d.sum.gold + ' · 🐾 ' + fmt(d.sum.mons) + '마리)');
+}
+function syncFinish(msg) {
+  if (SYNC) SYNC.done = true;
+  sfx('yay');
+  setTimeout(syncStop, 1500);
+  closeModal();
+  toast(msg);
+}
 // 계정으로 들어가기: 지금 섬을 저장하고, 그 계정의 섬을 불러온다
 function enterAccount(a) {
   if (accLocked(a)) { lockToast(a, accLocked(a)); openLogin(); return; }
@@ -9438,6 +9566,7 @@ function openAccountMenu() {
       <button class="build-opt" data-act="guildOpen" style="--hc:#7dff8f"><span class="bo-ico">🛡️</span><span class="bo-nm">길드<br><small>${S.guild ? `${esc(S.guild.emblem)} ${esc(S.guild.name)}` : '길드에 들어가거나 만들기'}</small></span></button>
       <button class="build-opt" data-act="ranking" style="--hc:#ffd24a"><span class="bo-ico">🏆</span><span class="bo-nm">전 세계 랭킹<br><small>${tierOf(S.trophies).icon} ${tierOf(S.trophies).name} · 🏆 ${fmt(S.trophies || 0)}</small></span></button>
       <button class="build-opt" data-act="accSwitch" style="--hc:#6f8cff"><span class="bo-ico">🔄</span><span class="bo-nm">계정 바꾸기 / 새 계정</span></button>
+      <button class="build-opt" data-act="syncOpen" style="--hc:#2bd9a8"><span class="bo-ico">🔄</span><span class="bo-nm">다른 기기와 맞추기 (컴퓨터 ↔ 핸드폰)<br><small>두 기기에서 게임을 켜고 4자리 숫자를 넣으면 더 최근 섬으로 똑같이 맞춰요</small></span></button>
       <button class="build-opt" data-act="accExport" style="--hc:#3fd6a4"><span class="bo-ico">📤</span><span class="bo-nm">이 계정 옮기기 코드<br><small>다른 기기에서 📥 가져오기에 붙여 넣으면 내 섬이 그대로 가요</small></span></button>
       <button class="build-opt" data-act="accRename" style="--hc:#ffb020"><span class="bo-ico">✏️</span><span class="bo-nm">이름 바꾸기</span></button>
       <button class="build-opt" data-act="accPinSet" style="--hc:#ff5ce1"><span class="bo-ico">🔒</span><span class="bo-nm">비밀번호 ${ACC.pin ? '바꾸기 / 없애기' : '만들기'}</span></button>
@@ -11232,6 +11361,12 @@ const ACTIONS = {
   accImport: () => openAccImport(),
   accImportOk: () => accImportOk(),
   accExport: () => accExport(),
+  syncOpen: () => openSync(),
+  syncHost: () => syncHost(),
+  syncJoinOpen: () => syncJoinOpen(),
+  syncJoin: () => syncJoin(),
+  syncPick: (d) => syncPick(d.keep),
+  syncCancel: () => { syncStop(); closeModal(); },
   accRename: () => accRename(),
   accRenameOk: () => accRenameOk(),
   accPinSet: () => accPinSet(),

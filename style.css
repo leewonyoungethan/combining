@@ -1631,3 +1631,7 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .lab-card [data-act=labDel] { position: absolute; top: 4px; right: 4px; padding: 2px 6px; }
 .lab-album { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
 .lab-album .lab-card { margin: 0; max-width: none; }
+
+/* 🔄 기기 맞추기 */
+.sync-box input { width: 100%; font-size: 24px; text-align: center; letter-spacing: 8px; margin: 8px 0; }
+.sync-pick.newer { border-color: #ffe066; box-shadow: 0 0 10px rgba(255, 224, 102, .4); }
