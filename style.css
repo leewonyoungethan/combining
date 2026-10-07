@@ -1652,3 +1652,10 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .quick-run .qr-grid b { font-size: 18px; }
 .quick-run .qr-pow { font-weight: 800; }
 @media (max-width: 520px) { .quick-run .qr-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* 📊 내 기록 */
+.rec-time { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 8px 0 12px; padding: 14px; border-radius: 16px; background: linear-gradient(135deg, rgba(255, 210, 74, .22), rgba(123, 92, 255, .2)); border: 1px solid rgba(255, 210, 74, .5); }
+.rec-time b { font-size: 30px; color: #ffe066; }
+.rec-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.rec-row { display: grid; grid-template-columns: 26px 1fr; grid-template-rows: auto auto; align-items: center; padding: 8px; border-radius: 10px; background: rgba(255, 255, 255, .07); text-align: left; }
+.rec-row span { grid-row: 1 / 3; font-size: 20px; } .rec-row b { font-size: 12px; color: var(--muted); } .rec-row em { font-style: normal; font-weight: 900; }

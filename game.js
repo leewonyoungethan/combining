@@ -3756,6 +3756,7 @@ function liveBar(key) {
   return 0;
 }
 function refreshLive() {
+  const pt = document.querySelector('[data-pt]'); if (pt) { const s = playTimeText(S.playSec); if (pt.textContent !== s) pt.textContent = s; }
   document.querySelectorAll('[data-live]').forEach(el => { const s = liveText(el.dataset.live); if (el.textContent !== s) el.textContent = s; });
   document.querySelectorAll('[data-bar]').forEach(el => { const w = `${liveBar(el.dataset.bar) * 100}%`; if (el.style.width !== w) el.style.width = w; });
   document.querySelectorAll('[data-plot]').forEach(el => el.classList.toggle('ready', plotReady(Number(el.dataset.plot))));
@@ -5830,6 +5831,33 @@ function openLabAlbum() {
     ${list.length ? `<div class="lab-album">${list.map((r, k) => labCardHTML(r, k)).join('')}</div>` : '<p class="muted">아직 저장한 합체 몬스터가 없어요. 🧪 합체 실험실에서 만들어 봐요!</p>'}
     <div class="row"><button class="btn" data-act="labOpen">🧪 실험실로</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
 }
+// ===================== 📊 내 기록 =====================
+const playTimeText = (sec) => { sec = Math.floor(sec || 0); const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
+  return (d ? `${d}일 ` : '') + (d || h ? `${h}시간 ` : '') + `${m}분`; };
+function openRecords() {
+  tutFlag('records', true);
+  const since = S.playSince ? new Date(S.playSince) : null, made = ACC && ACC.created ? new Date(ACC.created) : null;
+  const ymd = (d) => `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+  const row = (ico, name, val) => `<div class="rec-row"><span>${ico}</span><b>${name}</b><em>${val}</em></div>`;
+  showModal(`<div class="rec-box"><h3>📊 내 기록</h3>
+    <div class="rec-time"><small>⏱️ 지금까지 게임한 시간</small><b data-pt="1">${playTimeText(S.playSec)}</b>
+      <small class="muted">${since ? `${ymd(since)}부터 셌어요 · 게임 화면을 보고 있는 동안만 세요` : '게임 화면을 보고 있는 동안만 세요'}</small></div>
+    <div class="rec-list">
+      ${made ? row('🎂', '계정 만든 날', ymd(made)) : ''}
+      ${row('📅', '게임한 날', fmt(S.loginDays || 1) + '일')}
+      ${row('🐾', '몬스터', fmt(S.monsters.length) + '마리')}
+      ${row('📖', '도감', fmt(Object.keys(S.dex || {}).length) + ' / ' + fmt(CAT_LIST.length))}
+      ${row('🏝️', '섬', Math.floor(S.plots.length / ISLAND_PLOTS) + '개')}
+      ${row('⚔️', '모험 스테이지', fmt(S.stage || 1))}
+      ${row('🔁', '가장 긴 연승', fmt(S.bestStreak || 0) + '연승')}
+      ${row('🏆', '이긴 전투', fmt(stat('win')) + '번')}
+      ${row('🐣', '부화한 몬스터', fmt(stat('hatch')) + '마리')}
+      ${row('🎮', '미니게임', fmt(stat('mgPlay')) + '판')}
+      ${row('💰', '걷은 골드', shortNum(stat('gold')))}
+      ${row('🏆', '트로피', fmt(S.trophies || 0))}
+    </div>
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
 function openMon(uid) {
   const m = byUid(uid);
   if (!m) return;
@@ -7048,6 +7076,7 @@ function stopLoop(reason) {
   if (!LOOP) return;
   const l = LOOP;
   LOOP = null;
+  if (l.wins > (S.bestStreak || 0)) S.bestStreak = l.wins;
   save(); updateHud();
   if (l.quick) { $('#battle').classList.add('hidden'); render(); }
   toast(`⏹ 연속 전투 끝! ${l.wins}연승 (스테이지 ${l.start} → ${S.stage})${reason ? ' · ' + reason : ''}`);
@@ -9769,6 +9798,7 @@ function openAccountMenu() {
       <button class="build-opt" data-act="guildOpen" style="--hc:#7dff8f"><span class="bo-ico">🛡️</span><span class="bo-nm">길드<br><small>${S.guild ? `${esc(S.guild.emblem)} ${esc(S.guild.name)}` : '길드에 들어가거나 만들기'}</small></span></button>
       <button class="build-opt" data-act="ranking" style="--hc:#ffd24a"><span class="bo-ico">🏆</span><span class="bo-nm">전 세계 랭킹<br><small>${tierOf(S.trophies).icon} ${tierOf(S.trophies).name} · 🏆 ${fmt(S.trophies || 0)}</small></span></button>
       <button class="build-opt" data-act="accSwitch" style="--hc:#6f8cff"><span class="bo-ico">🔄</span><span class="bo-nm">계정 바꾸기 / 새 계정</span></button>
+      <button class="build-opt" data-act="records" style="--hc:#ffd24a"><span class="bo-ico">📊</span><span class="bo-nm">내 기록<br><small>⏱️ 게임한 시간 ${playTimeText(S.playSec)} · 몬스터 · 연승 기록</small></span></button>
       <button class="build-opt" data-act="syncOpen" style="--hc:#2bd9a8"><span class="bo-ico">🔄</span><span class="bo-nm">다른 기기와 맞추기 (컴퓨터 ↔ 핸드폰)<br><small>${S.syncKey ? '☁️ 자동 맞추기 켜짐' : '한 번 4자리 숫자로 연결하면 그다음부터 자동으로 맞춰져요'}</small></span></button>
       <button class="build-opt" data-act="accExport" style="--hc:#3fd6a4"><span class="bo-ico">📤</span><span class="bo-nm">이 계정 옮기기 코드<br><small>다른 기기에서 📥 가져오기에 붙여 넣으면 내 섬이 그대로 가요</small></span></button>
       <button class="build-opt" data-act="accRename" style="--hc:#ffb020"><span class="bo-ico">✏️</span><span class="bo-nm">이름 바꾸기</span></button>
@@ -10901,6 +10931,10 @@ TUT.push(
   { text: '🧪 🐾 몬스터 탭의 🧪 합체 실험실에서 두 몬스터를 합체해 봐요 (재미로만! 진짜 몬스터는 그대로)', done: () => tutFlag('lab'),
     go: () => { closeModal(); tab = 'mons'; render(); openLab(); } },
 );
+TUT.push(
+  { text: '📊 위쪽 👤 계정에서 📊 내 기록을 눌러 봐요 (지금까지 게임한 시간이 나와요!)', done: () => tutFlag('records'),
+    go: () => { closeModal(); openRecords(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -11172,6 +11206,9 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=labGo]', '#modalBox [data-act=close]'];
       if (tab !== 'mons') return [bottomBtn('mons')];
       return ['#view [data-act=labOpen]'];
+    case 63: // 내 기록
+      if (inModal) return ['#modalBox [data-act=records]', '#modalBox [data-act=close]'];
+      return ['[data-act=account]'];
   }
   return null;
 }
@@ -11357,6 +11394,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '📊', title: '내 기록', text: '위쪽 👤 계정에서 📊 내 기록을 누르면 ⏱️ 지금까지 게임한 시간이 나와요!<br>몬스터 수, 도감, 가장 긴 연승, 이긴 전투, 미니게임 판수 같은 기록도 한눈에 볼 수 있어요.' },
   { icon: '🧪', title: '합체 실험실', text: '🐾 몬스터 탭의 🧪 합체 실험실에서 내 몬스터 두 마리를 합체해 봐요!<br>살라맨더 + 거북 = 살라북?! 웃긴 이름과 모습, 성격이 나와요. 마음에 들면 📒 앨범에 저장!<br>재미로만 하는 거라 진짜 몬스터는 그대로예요.' },
   { icon: '💖', title: '최애 몬스터 · 섬 사진', text: '몬스터를 누르고 🤍 최애로를 누르면 카드에 💖가 붙어요. 🐾 몬스터 탭의 💖 최애만으로 좋아하는 몬스터만 모아 봐요!<br>섬 오른쪽 📸 버튼을 누르면 내 섬 사진을 찍어서 💾 저장할 수 있어요.' },
   { icon: '✏️', title: '몬스터 이름 짓기', text: '내 몬스터를 누르고 ✏️ 이름 지어 주기를 누르면 별명을 지어 줄 수 있어요!<br>별명은 카드와 전투에서 💖 뭉치 처럼 보여요. 언제든 바꾸거나 지울 수 있어요.' },
@@ -11448,8 +11486,11 @@ function updateHud() {
   $('#food').parentElement.title = fmt(S.food);
 }
 
+let playLast = 0;
 function tick() {
   const now = Date.now();
+  if (!VISIT && !document.hidden) { const pd = playLast ? (now - playLast) / 1000 : 0; if (pd > 0 && pd < 5) S.playSec = (S.playSec || 0) + pd; if (!S.playSince) S.playSince = now; }
+  playLast = document.hidden ? 0 : now;
   const dt = Math.min(8 * 3600, Math.max(0, (now - S.last) / 1000));
   S.last = now;
   S.plots.forEach((p, i) => {
@@ -11573,6 +11614,7 @@ const ACTIONS = {
   accImportOk: () => accImportOk(),
   accExport: () => accExport(),
   syncOpen: () => openSync(),
+  records: () => openRecords(),
   syncHost: () => syncHost(),
   syncJoinOpen: () => syncJoinOpen(),
   syncJoin: () => syncJoin(),
