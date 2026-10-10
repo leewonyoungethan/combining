@@ -3345,10 +3345,14 @@ const RES_INFO = {
     btns: '<button class="btn green" data-act="resGo" data-to="mons">🐾 몬스터 키우기</button>' },
 };
 function unitTableHTML() {
-  const kr = window.LANG === 'en' ? '' : `<div class="ut-kr"><button class="btn small ${S.krUnits ? 'green' : 'ghost'}" data-act="krUnits">🇰🇷 한국 단위로 보기 ${S.krUnits ? '켜짐' : '꺼짐'}</button>
-    <p class="muted">켜면 숫자를 만 · 억 · 조 · 경…으로 보여 줘요 (1만 배마다 바뀌어요)</p>
-    <div class="ut-grid">${KR_UNITS.map(([u, s], i) => `<span><b>${s}</b><small>10<sup>${4 * (i + 1)}</sup></small></span>`).join('')}</div></div>`;
-  return `<details class="unit-table" ${UT_OPEN ? 'open' : ''}><summary>${window.LANG === 'en' ? `📏 돈 단위 보기 (K → Ce, ${NUM_UNITS.length}가지)` : `📏 돈 단위 보기 (K → Ce ${NUM_UNITS.length}가지 + 만 → 무량대수 ${KR_UNITS.length}가지)`}</summary>${kr}
+  const st = numStyle(), ex = 3.2e180;
+  const pick = (s, label) => `<button class="btn small ${st === s ? 'green' : 'ghost'}" data-act="numStyle" data-s="${s}">${label}</button>`;
+  const kr = `<div class="ut-kr"><p class="muted">💰 돈을 어떤 단위로 볼까요? (예: ${shortNumAs(ex, 'en')} · ${window.LANG === 'en' ? '' : shortNumAs(ex, 'kr') + ' · '}${shortNumAs(ex, 'abc')} · ${shortNumAs(ex, 'sci')})</p>
+    <div class="row ut-pick">${pick('en', '📏 K · M · B')}${window.LANG === 'en' ? '' : pick('kr', '🇰🇷 만 · 억 · 조')}${pick('abc', '🔤 aa · ab · ac')}${pick('sci', '🔬 1.2e45')}</div>
+    ${st === 'kr' ? `<p class="muted">1만 배마다 바뀌어요. 무량대수보다 크면 "3천양 무량대수²"처럼 무량대수를 겹쳐 써요</p><div class="ut-grid">${KR_UNITS.map(([u, s], i) => `<span><b>${s}</b><small>10<sup>${4 * (i + 1)}</sup></small></span>`).join('')}<span><b>무량대수²</b><small>10<sup>136</sup></small></span><span><b>무량대수³</b><small>10<sup>204</sup></small></span><span><b>무량대수⁴</b><small>10<sup>272</sup></small></span></div>` : ''}
+    ${st === 'abc' ? `<p class="muted">K · M · B · T 다음부터는 1000배마다 aa → ab → ac … 로 바뀌어요</p><div class="ut-grid">${Array.from({ length: 97 }, (_, i) => `<span><b>${abcUnit(i)}</b><small>10<sup>${15 + 3 * i}</sup></small></span>`).join('')}</div>` : ''}
+    ${st === 'sci' ? '<p class="muted">1.2e45 = 1.2 뒤에 0이 45개라는 뜻이에요 (1.2 × 10<sup>45</sup>)</p>' : ''}</div>`;
+  return `<details class="unit-table" ${UT_OPEN ? 'open' : ''}><summary>${window.LANG === 'en' ? `📏 돈 단위 보기 (K → Ce, ${NUM_UNITS.length}가지)` : `📏 돈 단위 보기 (4가지 단위 · K → Ce ${NUM_UNITS.length}가지 + 만 → 무량대수 + aa → ds)`}</summary>${kr}
     <p class="muted">1000배마다 단위가 바뀌어요. 예) 1K = 1,000 · 1M = 1,000K</p>
     <div class="ut-grid">${NUM_UNITS.slice().reverse().map(([u, s], i) => `<span><b>${s}</b><small>10<sup>${3 * (i + 1)}</sup></small></span>`).join('')}</div></details>`;
 }
@@ -3604,18 +3608,34 @@ const NUM_UNITS = (() => {
   return out.reverse();
 })();
 const KR_UNITS = ['만', '억', '조', '경', '해', '자', '양', '구', '간', '정', '재', '극', '항하사', '아승기', '나유타', '불가사의', '무량대수'].map((s, i) => [Math.pow(10, 4 * (i + 1)), s]);
-const krOn = () => S.krUnits && window.LANG !== 'en';
+const numStyle = () => { const s = (typeof S !== 'undefined' && S && (S.numStyle || (S.krUnits ? 'kr' : 'en'))) || 'en'; return s === 'kr' && window.LANG === 'en' ? 'en' : s; };
+const krOn = () => numStyle() === 'kr';
+const SUP = (k) => String(k).split('').map(d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d]).join('');
+const numTrim = (v) => { v *= 1 + 1e-12; const d = Math.abs(v) >= 100 ? 0 : 1, p = Math.pow(10, d); return (Math.floor(v * p) / p).toFixed(d).replace(/\.0$/, ''); };
+const ABC = 'abcdefghijklmnopqrstuvwxyz';
+const abcUnit = (i) => ABC[Math.floor(i / 26) % 26] + ABC[i % 26];
+// 한국 단위 (만 ~ 무량대수) 하나로
+function krPart(n) {
+  if (Math.abs(n) < 1e4) return numTrim(n);
+  for (let i = KR_UNITS.length - 1; i >= 0; i--) { const [u, s] = KR_UNITS[i]; if (Math.abs(n) >= u) return numTrim(n / u) + s; }
+  return numTrim(n);
+}
+function shortNumAs(n, s) { const o = S.numStyle; S.numStyle = s; try { return shortNum(n); } finally { S.numStyle = o; } }
 const shortNum = (n) => {
   n = Math.floor(n);
   if (Math.abs(n) < 1e4) return fmt(n);
   if (!isFinite(n)) return '∞';
-  // 한국 단위: 무량대수(10^68)의 1만 배까지는 만 · 억 · 조 …로 (그보다 크면 영어 단위)
-  if (krOn() && Math.abs(n) < 1e72) {
-    for (let i = KR_UNITS.length - 1; i >= 0; i--) {
-      const [u, s] = KR_UNITS[i];
-      if (Math.abs(n) >= u) { const v = n / u * (1 + 1e-12), d = Math.abs(v) >= 100 ? 0 : 1, p = Math.pow(10, d); return (Math.floor(v * p) / p).toFixed(d).replace(/\.0$/, '') + s; }
-    }
+  const style = numStyle(), a = Math.abs(n);
+  // 🔬 과학 표기: 1.23e45
+  if (style === 'sci') { const e = Math.floor(Math.log10(a)); return (Math.floor(n / Math.pow(10, e) * 100 * (1 + 1e-12)) / 100) + 'e' + e; }
+  // 🇰🇷 한국 단위: 무량대수(10^68)보다 크면 "○○ 무량대수²"처럼 무량대수를 겹쳐 쓴다
+  if (style === 'kr') {
+    if (a < 1e72) return krPart(n);
+    const p = Math.floor(Math.log10(a) / 68), rest = n / Math.pow(1e68, p);
+    return krPart(rest) + ' 무량대수' + (p > 1 ? SUP(p) : '');
   }
+  // 🔤 알파벳 단위: K · M · B · T 다음은 aa · ab · ac …
+  if (style === 'abc' && a >= 1e15) { const i = Math.floor((Math.log10(a) - 15) / 3 + 1e-9); return numTrim(n / Math.pow(10, 15 + 3 * i)) + abcUnit(i); }
   if (Math.abs(n) >= 1e306) { const e = Math.floor(Math.log10(Math.abs(n))); return (Math.floor(n / Math.pow(10, e) * 10) / 10) + 'e' + e; }
   for (const [u, s] of NUM_UNITS) {
     if (Math.abs(n) >= u) {
@@ -11191,7 +11211,7 @@ function tutPoint(k) {
     case 49: { // 한국 돈 단위
       const ut = document.querySelector('#modalBox .unit-table');
       if (ut && !ut.open) return ['#modalBox .unit-table summary'];
-      if (ut) return [window.LANG === 'en' ? '#modalBox [data-act=close]' : '#modalBox [data-act=krUnits]'];
+      if (ut) return [window.LANG === 'en' ? '#modalBox [data-act=close]' : '#modalBox [data-act=numStyle][data-s=kr]'];
       if (inModal) return ['#modalBox [data-act=close]'];
       return ['[data-act=resInfo][data-r=gold]'];
     }
@@ -11449,7 +11469,7 @@ const WELCOME = [
   { icon: '🏝️', title: '새 섬 사기', text: '섬 이름(🗺️ 섬 지도)을 누르면 맨 위에 🏝️ 새 섬 사기 버튼이 있어요.<br>섬 18개는 처음부터 있고, 19번째부터는 💰 골드로 살 수 있어요 (최대 100개)!<br>섬 하나마다 빈 땅이 25칸씩 생기고, 살 때마다 값이 올라가요.' },
   { icon: '🛒', title: '몬스터 전부 사기', text: '상점 🥚 알 칸에서 🛒 없는 몬스터 전부 사기를 누르면<br>아직 없는 몬스터를 한 번에 모두 사서 바로 부화시켜요!<br>알맞은 서식지가 없으면 부화장에서 기다려요.' },
   { icon: '🧩', title: '새 미니게임 4가지', text: '🧩 몬스터 2048: 같은 몬스터를 밀어서 합치면 🥚→🐣→🐥→🐤→🐔→🦅로 진화!<br>🐤 날아라 몬스터: 눌러서 날아올라 기둥 사이를 통과!<br>🧱 탑 쌓기: 왔다 갔다 하는 블록을 딱 맞게 내려놓아 높이 쌓기!<br>🐍 먹보 몬스터: 🍖을 먹을수록 길어지고 빨라져요!' },
-  { icon: '🇰🇷', title: '한국 돈 단위', text: '돈이 커지면 K · M · B · T 같은 단위로 줄여서 보여 줘요.<br>위쪽 💰를 누르고 📏 돈 단위 보기에서 🇰🇷 한국 단위를 켜면<br>만 · 억 · 조 · 경 · 해 … 무량대수까지 17가지 한국 단위로 보여요!' },
+  { icon: '🇰🇷', title: '한국 돈 단위', text: '돈이 커지면 K · M · B · T 같은 단위로 줄여서 보여 줘요.<br>위쪽 💰를 누르고 📏 돈 단위 보기에서 🇰🇷 한국 단위를 켜면<br>만 · 억 · 조 · 경 · 해 … 무량대수까지 17가지 한국 단위로 보여요!<br>🔤 aa · ab · ac 알파벳 단위나 🔬 1.2e45 과학 표기로도 볼 수 있어요.' },
   { icon: '⏩', title: '전투 배속', text: '전투 화면 위쪽 <b>⏩ 배속</b> 버튼을 누를 때마다 빨라져요!<br>보통 전투는 <b>4배</b>까지, <b>🔁 연속 전투</b>는 시작할 때 배속을 골라요: 1 · 2 · 4배는 무료, 10배부터는 <b>💰로 한 단계씩 열어요</b> … 10000 · <b>100000배</b>까지!<br>25배부터는 움직이는 장면을 건너뛰고 결과만 빠르게 보여 줘요. 전투 중에 <b>Esc</b> 키를 누르면 바로 나가요.' },
   { icon: '🛒', title: '상점 칸', text: '상점이 <b>6칸</b>으로 나뉘었어요! 위쪽 버튼으로 바꿔요.<br>🏠 건물 · 🥚 알 · 🎁 특가·상자 · 🧪 아이템 · 🏛️ 강해지기 · 💎 보석<br>새로 생긴 것: <b>🎁 미스터리 상자</b>(골드/보석) · 🪱 미끼 ×10 · 🍖 먹이 10,000 · 🎟️ 미니게임 티켓 · 🔥 레이드 도전권 · ⚔️ 길드전 공격권 · 📦 룬 상자 ×10' },
   { icon: '📅', title: '오늘 할 일', text: '섬 왼쪽의 <b>📅 할 일</b>에 매일 받을 것들이 모여 있어요!<br>🎁 일일 보상 · 📋 미션 · 🎡 룰렛 · 🏁 경주 응원권 · 🎮 미니게임 · 🔥 레이드 · ⚔️ 길드전 · 💌 하트 …<br>남은 개수가 버튼에 숫자로 보이고, <b>가기 →</b>를 누르면 바로 가요. 다 하면 <b>💎 10</b> 보너스!' },
@@ -11849,6 +11869,8 @@ const ACTIONS = {
   weekBonus: () => weekBonus(),
   music: () => toggleMusic(),
   firstAccOk: () => firstAccOk(),
+  numStyle: (d) => { S.numStyle = d.s; S.krUnits = d.s === 'kr'; if (d.s === 'kr') tutFlag('krunit', true); save(); UT_OPEN = true; openResInfo('gold'); UT_OPEN = false; render(); updateHud();
+    toast({ en: '📏 K · M · B 단위로 보여요', kr: '🇰🇷 만 · 억 · 조 단위로 보여요', abc: '🔤 aa · ab · ac 단위로 보여요', sci: '🔬 과학 표기(1.2e45)로 보여요' }[d.s] || ''); },
   krUnits: () => { S.krUnits = !S.krUnits; tutFlag('krunit', true); save(); UT_OPEN = true; openResInfo('gold'); UT_OPEN = false; render(); updateHud(); toast(S.krUnits ? '🇰🇷 이제 만 · 억 · 조 단위로 보여요' : '📏 K · M · B 단위로 돌아왔어요'); },
   richCur: (d) => { RICH_CUR = d.k; const v = ($('#richAmt') || {}).value || ''; openRichGift(); const i = $('#richAmt'); if (i) { i.value = v; i.dispatchEvent(new Event('input')); } },
   richQuick: (d) => { const i = $('#richAmt'); if (i) { i.value = d.q; i.dispatchEvent(new Event('input')); } },
