@@ -3589,7 +3589,7 @@ const view = $('#view');
 let tab = 'island';
 let sel = [];
 
-const fmt = (n) => Math.floor(n).toLocaleString('ko-KR');
+const fmt = (n) => (Math.abs(n) >= 1e15 && isFinite(n) ? shortNum(n) : Math.floor(n).toLocaleString('ko-KR'));
 // 짧은 숫자: 9,999까지는 그대로, 만 넘으면 12.5K · 3.4M · 1.2B · 5T (100 넘으면 소수점 없이: 125K)
 // 1000배마다 새 단위: K M B T Qa Qi Sx Sp Oc No → Dc(10^33) · UDc · DDc … → Vg(10^63) → Tg(10^93) → Qag → Qig → Sxg → Spg → Ocg → Nog → Ce(10^303)
 const NUM_UNITS = (() => {
@@ -3794,9 +3794,10 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 function resize() {
   // 작은 화면은 해상도를 조금 낮춰도 티가 안 나고 훨씬 가볍다
-  DPR = Math.min(window.innerWidth < 760 ? 1.5 : 2, window.devicePixelRatio || 1);
-  W = window.innerWidth;
-  H = window.innerHeight;
+  const box = cv.getBoundingClientRect();
+  W = Math.round(box.width) || window.innerWidth;
+  H = Math.round(box.height) || window.innerHeight;
+  DPR = Math.min(W < 760 ? 1.5 : 2, window.devicePixelRatio || 1);
   cv.width = Math.round(W * DPR);
   cv.height = Math.round(H * DPR);
   // 가로 폭이 바뀔 때(처음·회전)만 확대 배율을 다시 정한다. 주소창이 생겼다 사라지는 건 그대로 둔다
@@ -4381,6 +4382,8 @@ window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 250));
 window.addEventListener('pageshow', resize);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 300));
+window.addEventListener('pageshow', () => setTimeout(resize, 100));
 resize();
 
 function renderIslandBar() {
@@ -6419,11 +6422,25 @@ function buyExtra(k) {
   const p = $('#panel'), y = p ? p.scrollTop : 0; render(); if (p) $('#panel').scrollTop = y;
 }
 
+// 가진 몬스터 종류 (몬스터·알이 바뀔 때만 새로 만든다)
+let OWN_MEMO = { m: null, ml: -1, h: null, hl: -1, set: null };
+function ownedSet() {
+  const o = OWN_MEMO;
+  if (o.set && o.m === S.monsters && o.ml === S.monsters.length && o.h === S.hatch && o.hl === S.hatch.length) return o.set;
+  const set = new Set();
+  for (const m of S.monsters) set.add(m.type);
+  for (const t of S.hatch) set.add(t);
+  OWN_MEMO = { m: S.monsters, ml: S.monsters.length, h: S.hatch, hl: S.hatch.length, set };
+  return set;
+}
+// 등급별 몬스터 수 (한 번만 센다)
+let RAR_COUNT = null;
+const rarCount = (r) => { if (!RAR_COUNT) { RAR_COUNT = {}; for (const c of CAT_LIST) if (!c.shop) RAR_COUNT[c.rarity] = (RAR_COUNT[c.rarity] || 0) + 1; } return RAR_COUNT[r] || 0; };
 // 알 상점에서 "아직 없는 몬스터"와 "이미 있는 몬스터"를 나눠 보여 준다 (부화장에 있는 알도 "있음")
 // 사는 값 (알 상점 · 혼합 알)
 const buyAllPrice = (kind, t) => (kind === 'hyb' ? Math.round(HYB_EGG_PRICE * (evtOn('hatchfest') ? 0.5 : 1)) : eggPrice(t));
 const buyAllList = (kind) => {
-  const own = new Set([...S.monsters.map(m => m.type), ...S.hatch]);
+  const own = ownedSet();
   const types = kind === 'hyb' ? HYB_EGGS.filter(t => hybEggEl === 'all' || CAT[t].els.includes(hybEggEl)) : EGG_SHOP;
   return types.filter(t => !own.has(t));
 };
@@ -6441,7 +6458,7 @@ function buyAllMons(kind) {
   hatchAll();
 }
 function ownSplitHTML(types, cardFn, kind) {
-  const own = new Set([...S.monsters.map(m => m.type), ...S.hatch]);
+  const own = ownedSet();
   const no = types.filter(t => !own.has(t)), yes = types.filter(t => own.has(t));
   const allBtn = kind && no.length ? `<button class="btn green buy-all" data-act="buyAllMons" data-kind="${kind}">🛒 없는 몬스터 전부 사기 (${no.length}마리 · 💰 ${shortNum(no.reduce((s, t) => s + buyAllPrice(kind, t), 0))})</button>` : '';
   return (no.length ? `<h4 class="own-h new">🆕 아직 없는 몬스터 <small>${no.length}종</small></h4>${allBtn}<div class="grid small">${no.map(cardFn).join('')}</div>` : '<p class="muted own-all">🎉 여기 있는 몬스터는 모두 가지고 있어요!</p>')
@@ -6629,11 +6646,14 @@ const ALL_PER = 48, ALL_BULK = 1000;
 const rarityPrice = (r) => { const k = RANK[r]; return 300 * Math.pow(10, k * (k + 1) / 2); };
 const anyPrice = (t) => Math.round(rarityPrice(CAT[t].rarity) * (evtOn('hatchfest') ? 0.5 : 1));
 function allShopList() {
-  const own = new Set([...S.monsters.map(m => m.type), ...S.hatch]), q = ALL_SHOP.q.trim();
-  return CAT_LIST.filter(c => (ALL_SHOP.r === 'all' || c.rarity === ALL_SHOP.r) && (ALL_SHOP.el === 'all' || c.els.includes(ALL_SHOP.el))
-    && (!q || c.name.includes(q)) && (ALL_SHOP.own === 'all' || (ALL_SHOP.own === 'yes') === own.has(c.id))).map(c => c.id);
+  const own = ownedSet(), q = ALL_SHOP.q.trim(), key = [ALL_SHOP.r, ALL_SHOP.el, ALL_SHOP.own, q].join('|');
+  if (ALLSHOP_MEMO.set === own && ALLSHOP_MEMO.key === key) return ALLSHOP_MEMO.list;
+  ALLSHOP_MEMO = { set: own, key, list: null };
+  return (ALLSHOP_MEMO.list = CAT_LIST.filter(c => (ALL_SHOP.r === 'all' || c.rarity === ALL_SHOP.r) && (ALL_SHOP.el === 'all' || c.els.includes(ALL_SHOP.el))
+    && (!q || c.name.includes(q)) && (ALL_SHOP.own === 'all' || (ALL_SHOP.own === 'yes') === own.has(c.id))).map(c => c.id));
 }
-const allShopMissing = () => { const own = new Set([...S.monsters.map(m => m.type), ...S.hatch]); return allShopList().filter(t => !own.has(t)); };
+let ALLSHOP_MEMO = { set: null, key: '', list: null };
+const allShopMissing = () => { const own = ownedSet(); return ALL_SHOP.own === 'no' ? allShopList() : allShopList().filter(t => !own.has(t)); };
 function allShopHTML() {
   const list = allShopList(), pages = Math.max(1, Math.ceil(list.length / ALL_PER));
   ALL_SHOP.page = Math.max(0, Math.min(ALL_SHOP.page, pages - 1));
@@ -6670,10 +6690,15 @@ function buyAny(type) {
   allShopRedraw(); updateHud();
 }
 // 게임에 있는 몬스터 중 아직 없는 것을 전부 (1000마리 제한 없이)
+let MISS_MEMO = { set: null, list: null, cost: 0 };
 function missingAll() {
-  const own = new Set([...S.monsters.map(m => m.type), ...S.hatch]);
-  return CAT_LIST.filter(c => !c.shop && !own.has(c.id)).map(c => c.id);
+  const own = ownedSet();
+  if (MISS_MEMO.set === own) return MISS_MEMO.list;
+  const list = CAT_LIST.filter(c => !c.shop && !own.has(c.id)).map(c => c.id);
+  MISS_MEMO = { set: own, list, cost: -1 };
+  return list;
 }
+const missingCost = () => { const l = missingAll(); if (MISS_MEMO.cost < 0) MISS_MEMO.cost = l.reduce((s, t) => s + anyPrice(t), 0); return MISS_MEMO.cost; };
 function buyEveryEgg() {
   tutFlag('allShop', true);
   const list = missingAll();
@@ -6692,7 +6717,7 @@ function buyEveryEgg() {
       <div class="row"><button class="btn green" data-act="makeRoom">🏠 남은 알 살 곳 만들기</button></div>` : '<p class="muted">🎉 모든 몬스터가 살 곳을 찾았어요!</p>'}
     <div class="row"><button class="btn ghost" data-act="close">좋아!</button></div>`);
 }
-const everyEggBtn = () => { const miss = missingAll(), n = miss.length; return n ? `<button class="btn green buy-all every-egg" data-act="buyEveryEgg">🥚 모든 알 사기 (없는 몬스터 ${fmt(n)}마리 전부 · 💰 ${shortNum(miss.reduce((s, t) => s + anyPrice(t), 0))})</button>` : ''; };
+const everyEggBtn = () => { const n = missingAll().length; return n ? `<button class="btn green buy-all every-egg" data-act="buyEveryEgg">🥚 모든 알 사기 (없는 몬스터 ${fmt(n)}마리 전부 · 💰 ${shortNum(missingCost())})</button>` : ''; };
 function allShopBuyAll() {
   tutFlag('allShop', true);
   tutFlag('buyAll', true);
@@ -6716,7 +6741,7 @@ function moreEggsHTML() {
     ${allShopHTML()}
     <h3 class="sub" id="shopBox">🎲 등급 알 상자 <small class="muted">고른 등급의 몬스터가 무작위로! 도감 채우기에 딱</small></h3>
     <div class="rank-boxes">${RANK_BOXES.map(b => `<button class="rank-box" data-act="buyRankBox" data-r="${b.r}" style="--rc:${RAR[b.r].color}">
-        <span>🎲</span><b>${RAR[b.r].name} 알</b><small>${CAT_LIST.filter(c => c.rarity === b.r && !c.shop).length}종 중 하나</small><span class="rb-cost">💰 ${shortNum(b.cost * disc)}</span></button>`).join('')}</div>`;
+        <span>🎲</span><b>${RAR[b.r].name} 알</b><small>${fmt(rarCount(b.r))}종 중 하나</small><span class="rb-cost">💰 ${shortNum(b.cost * disc)}</span></button>`).join('')}</div>`;
 }
 function buyMon(type) {
   if (CAT[type] && HYB_EGGS.includes(type)) {
@@ -7020,6 +7045,15 @@ function startLoop() {
 // 전투력 = 체력/5 + 공격×2 + 속도 (내 팀은 펫·왕국·우주 보너스까지)
 const unitsPower = (us) => us.reduce((s, u) => s + u.maxHp / 5 + u.atk * 2 + u.spd, 0);
 const foePower = (st) => unitsPower(enemyTeam(st).map((f, i) => mkUnit(f, 'foe', i)));
+// 나올 수 있는 가장 센 적 (몇 천 스테이지를 살펴보고 조금 넉넉하게)
+let FOE_CAP = 0;
+function foeCap() {
+  if (FOE_CAP) return FOE_CAP;
+  let mx = 0;
+  for (let k = 0; k < 3000; k++) mx = Math.max(mx, foePower(60 + k * 37));
+  FOE_CAP = mx * 1.3;
+  return FOE_CAP;
+}
 function quickLoop() {
   const team = S.team.map(byUid).filter(Boolean);
   if (!team.length || !LOOP) return;
@@ -7028,7 +7062,7 @@ function quickLoop() {
   const L = LOOP;
   const bt = $('#battle');
   bt.innerHTML = `<div class="b-inner quick-run">
-    <h2>⚡ 100000배속 · 전투력으로 바로 계산!</h2>
+    <h2>⚡ ${fmt(bSpeed())}배속 · 전투력으로 바로 계산!</h2>
     <p class="muted">싸우는 장면 없이 내 팀 전투력과 적 전투력을 비교해서 이기면 바로 다음 스테이지로!</p>
     <div class="qr-stage" id="qrStage"></div>
     <div class="qr-grid"><div><small>연승</small><b id="qrWins">0</b></div><div><small>1초에</small><b id="qrRate">0</b></div><div><small>번 돈</small><b id="qrGold">0</b></div><div><small>번 보석</small><b id="qrGems">0</b></div></div>
@@ -7047,6 +7081,14 @@ function quickLoop() {
     if (LOOP !== L) return;
     const t0 = performance.now();
     let n = 0, g = 0, gm = 0, fp = 0;
+    // 1000000배부터: 내 팀이 어떤 적보다도 세면 몰아서 (1프레임에 몇 십만 스테이지)
+    if (bSpeed() >= 1000000 && S.stage > 60 && myPow >= foeCap()) {
+      const tour = evtOn('tourney') ? 2 : 1, chunk = bSpeed() >= 10000000 ? 50000 : 5000;
+      while (performance.now() - t0 < 12) {
+        for (let k = 0; k < chunk; k++) { const st = S.stage; g += stageGold(st) * tour; gm += st % 5 === 0 ? 20 : 5; S.stage++; n++; }
+      }
+      fp = foeCap() / 1.3;
+    } else
     while (performance.now() - t0 < 12) {
       for (let k = 0; k < 10; k++) {
         const st = S.stage;
@@ -7116,9 +7158,9 @@ function logB(msg) {
   if (B.log.length > 30) B.log.shift();
 }
 // 배속: 보통 전투 1·2·4배, 🔁 연속 전투는 10·25·50·100배까지
-const SPEEDS_LOOP = [1, 2, 4, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 100000], SPEEDS = [1, 2, 4];
-// 값: 10배 1M → 단계마다 1000배씩 → 10000배 1Dc, 100000배는 어마어마하게 10Ce!
-const speedPrice = (sp) => { const i = SPEEDS_LOOP.indexOf(sp); if (i < 3) return 0; if (sp >= 100000) return 1e304; return Math.pow(10, 6 + 3 * (i - 3)); };
+const SPEEDS_LOOP = [1, 2, 4, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 100000, 1000000, 10000000], SPEEDS = [1, 2, 4];
+// 값: 10배 1M → 단계마다 1000배씩 → 10000배 1Dc, 100000배 10Ce, 1000000배 30Ce, 10000000배는 최대 돈 전부(100Ce)!
+const speedPrice = (sp) => { const i = SPEEDS_LOOP.indexOf(sp); if (i < 3) return 0; if (sp >= 10000000) return MONEY_CAP; if (sp >= 1000000) return 3e304; if (sp >= 100000) return 1e304; return Math.pow(10, 6 + 3 * (i - 3)); };
 const spOwned = (sp) => speedPrice(sp) === 0 || (S.spdOwn || []).includes(sp);
 const spTop = () => SPEEDS_LOOP.filter(spOwned).pop() || 1;
 const spNextLocked = () => SPEEDS_LOOP.find(sp => !spOwned(sp));
