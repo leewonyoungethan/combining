@@ -614,8 +614,16 @@ const shuffle = (arr) => {
 };
 
 const SHOP_BREED_CHANCE = [0.15, 0.08, 0.02];   // 전설 상점 몬스터: 약한 부모와 같은 등급 / 한 단계 위 / 두 단계 위
-// 등급별로 더 낮추기: 근원은 위 확률의 1/10만 (15% → 1.5%, 8% → 0.8%, 2% → 0.2%)
-const SHOP_BREED_MUL = { origin: 0.1 };
+// 근원은 교배 확률표에서 빼고, 아래 "근원의 문"으로만 아주아주 드물게 나온다
+const SHOP_BREED_MUL = { origin: 0 };
+// 🌌 근원의 문: 게임한 시간 1000시간(하루 1시간씩 약 3년)에 한 번쯤 열린다.
+// 기회가 올 때마다 "지난 기회부터 게임한 시간 ÷ 1000시간" 확률이라, 아무리 많이 눌러도 더 자주 열리지 않는다
+const ORIGIN_EVERY_SEC = 1000 * 3600;
+function originLuck() {
+  const now = S.playSec || 0, last = S.oriLuckAt == null ? 0 : S.oriLuckAt;
+  S.oriLuckAt = now;
+  return Math.random() < Math.min(1, Math.max(0, now - last) / ORIGIN_EVERY_SEC);
+}
 const LEGEND_RECIPE_CHANCE = 0.4;               // 족보를 맞췄을 때 레전더리 한 마리당 확률
 const LUCKY_LEGEND = { rare: 0.04, epic: 0.1 }; // 두 부모가 모두 레어 이상 / 에픽 이상일 때 행운의 레전더리
 
@@ -678,11 +686,19 @@ function breedDist(ta, tb) {
 }
 
 function breedResult(ta, tb) {
+  // 전설 이상끼리 교배할 때만 근원의 문이 열릴 수 있다
+  if (isLegend(ta) && isLegend(tb) && originLuck()) {
+    const pool = CAT_LIST.filter(c => c.rarity === 'origin');
+    if (pool.length) { const c = pool[Math.floor(Math.random() * pool.length)]; setTimeout(() => toast('🌌✨ 근원의 문이 열렸어요!! 정말 정말 드문 일이에요!'), 300); return c.id; }
+  }
   const d = breedDist(ta, tb);
-  let r = Math.random();
+  let r = Math.random(), out = null;
   const entries = Object.entries(d);
-  for (const [t, p] of entries) { r -= p; if (r <= 0) return t; }
-  return entries[entries.length - 1][0];
+  for (const [t, p] of entries) { r -= p; if (r <= 0) { out = t; break; } }
+  out = out || entries[entries.length - 1][0];
+  // 근원 부모를 그대로 물려받는 것도 막는다 (근원은 문으로만)
+  if (CAT[out].rarity === 'origin') out = MYTHICS[Math.floor(Math.random() * MYTHICS.length)].id;
+  return out;
 }
 // ===================== 건물 / 농장 / 룬 =====================
 // 섬 8개 × 25칸. 모든 칸은 한 배열(S.plots)에 들어 있고, 섬 k는 k*25 ~ k*25+24번 칸
@@ -6031,6 +6047,7 @@ function altarFuse() {
   if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
   if (mats.some(m => S.team.includes(m.uid)) && !confirm('재료 중에 모험 팀 몬스터가 있어요. 그래도 바칠까요?')) return;
   if (mats.some(m => (m.star || 0) > 0) && !confirm('재료 중에 별(★)이 있는 몬스터가 있어요. 그래도 바칠까요?')) return;
+  if (altarNext(altarRank) === 'origin' && !originLuck()) { sfx('err'); toast('🌌 근원의 문이 열리지 않았어요… (근원은 게임한 시간 1000시간에 한 번쯤만 열려요. 재료는 그대로예요)'); return; }
   if (!spend(altarCost(altarRank))) return;
   // 재료 속성과 겹칠수록 가중치 ↑
   const els = new Set(mats.flatMap(m => CAT[m.type].els));
