@@ -1699,3 +1699,9 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .ban-times .btn { background: rgba(255, 77, 109, .25); border: 1px solid #ff4d6d; }
 .ban-row { display: flex; align-items: center; gap: 8px; padding: 8px; margin: 4px 0; border-radius: 10px; background: rgba(255, 77, 109, .12); }
 .ban-row small { flex: 1; color: var(--muted); }
+
+/* 👑 긴 등급 이름은 카드에서 한 줄로 줄이기 */
+.card .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.card.r-creator { box-shadow: 0 0 18px #ff3df5, inset 0 0 12px rgba(255, 61, 245, .4); }
+
+.creator-item { border: 2px solid #ff3df5; box-shadow: 0 0 16px rgba(255, 61, 245, .5); background: linear-gradient(135deg, rgba(255, 61, 245, .15), rgba(255, 224, 102, .12)); }

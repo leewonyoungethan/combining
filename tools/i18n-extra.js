@@ -1,5 +1,18 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  '♾️ 돈 무한이라 살 수 있어요…?!': '♾️ Infinite money, so you can buy it…?!', '게임에서 가질 수 있는 최대 돈(100Ce)보다 10만 배 많아요. 정말로 불가능해요!': 'That is 100,000× more than the most money you can have (100Ce). Truly impossible!',
+  '💰 {}이 필요해요… 최대 돈(100Ce)으로도 절대 못 사요!': '💰 You need {}… even max money (100Ce) can never buy it!', '👑 이원영, 제작자를 💰 {}에 살까요?': '👑 Buy Lee Wonyoung, the Creator for 💰 {}?',
+  '👑 당신은 레전드입니다!! 이원영, 제작자 알이 부화장에 왔어요': '👑 You are a LEGEND!! The Creator egg is in your hatchery',
+  '이름이 이미 있습니다.': 'That name already exists.', '이 이름도 있어요~': 'This one exists too~', '어라? 이것도 누가 쓰고 있네요 😅': 'Huh? Someone uses this one too 😅',
+  '음… 다들 이름 짓는 실력이 비슷한가 봐요 🤔': 'Hmm… everyone seems to name things the same way 🤔', '혹시 일부러 그러는 거예요? 😏': 'Are you doing this on purpose? 😏',
+  '이 정도면 이름 맞히기 게임 같아요 🎯': "At this point it's a name-guessing game 🎯", '세상에 이름이 그렇게 없나요?! 🙈': 'Are there really no names left in the world?! 🙈',
+  '이름 짓기 장인이 되려면 아직 멀었어요 😜': 'You have a long way to go to be a naming master 😜', '포기하지 마세요… 아니, 이제 좀 포기해도 돼요 🤣': "Don't give up… actually, maybe you can give up now 🤣",
+  '👑 이 이름은 제작자만 쓸 수 있어요': '👑 Only the creator can use this name', '😅 이미 다른 사람이 쓰는 이름이에요. 다른 이름을 골라 주세요': '😅 Someone else already uses this name. Please pick another',
+  '🔑 제작자 열쇠 넣기': '🔑 Enter the creator key', '🔑 제작자 열쇠를 넣었어요!': '🔑 Creator key added!', '제작자(이원영)': 'Creator (Lee Wonyoung)',
+  '이건 정말로 불가능한것이지만 당신이 이것을 가졌으면 당신은 레전드입니다': 'This is truly impossible, but if you have it, you are a LEGEND',
+  '이원영, 제작자': 'Lee Wonyoung, the Creator', '세상이 날아가는 한 방': 'World-Blasting Strike',
+  '👑 이건 정말로 불가능해요! 근원보다 높은 등급은 아무도 만들 수 없어요': '👑 This is truly impossible! Nobody can make a rarity above Origin',
+  '👑 이건 정말로 불가능한 몬스터라 받을 수 없어요': '👑 This monster is truly impossible, so it cannot be received',
   '🌌✨ 근원의 문이 열렸어요!! 정말 정말 드문 일이에요!': '🌌✨ The Gate of Origin opened!! This is super super rare!',
   '🌌 근원의 문이 열리지 않았어요… (근원은 게임한 시간 1000시간에 한 번쯤만 열려요. 재료는 그대로예요)': '🌌 The Gate of Origin did not open… (it opens only about once per 1000 hours of play. Your materials are safe)',
   '⚡ 1 · 2 · 4배는 무료! 10배부터는 💰로 한 단계씩 열어요 (단계가 오를수록 점점 더 엄청나게 비싸져요!)': '⚡ 1 · 2 · 4× are free! From 10× you unlock one step at a time with 💰 (each step gets MUCH more expensive!)',

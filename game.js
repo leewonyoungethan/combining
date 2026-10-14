@@ -73,6 +73,8 @@ const RAR_TABLE = [
   ['holy',       '신성', '#fff27a',   420,   300,  8000,  3200, 420, 168],
   ['absolute',   '절대', '#ffffff',   600,   600,  12000, 4200, 540, 176],
   ['origin',     '근원', '#ff8a3d',   900,   1200, 20000, 5500, 700, 185],
+  // 👑 근원 위: 정말로 얻을 수 없는 등급 (몬스터는 '이원영, 제작자' 하나뿐)
+  ['creator',    '이건 정말로 불가능한것이지만 당신이 이것을 가졌으면 당신은 레전드입니다', '#ff3df5', 99999, 1e15, 1e18, 99999999999999999999999999999999999999999999999, 1e45, 9999],
 ];
 const RAR_ORDER = RAR_TABLE.map(r => r[0]);
 const RAR = Object.fromEntries(RAR_TABLE.map(([key, name, color, time, income, cost, hp, atk, spd]) =>
@@ -551,6 +553,8 @@ PAIRS.forEach(([i, j]) => { for (let n = 0; n < HYB_8; n++) addHybrid8(i, j, n);
 LEGENDS.forEach(l => addMon({ ...l, rarity: 'legendary' }));
 MYTHICS.forEach(m => addMon({ ...m, rarity: 'mythic' }));
 SHOP_LEGENDS.forEach(l => addMon({ ...l, rarity: l.rank || 'divine', shop: true }));
+// 👑 이원영, 제작자: 체력 99999…(9가 47개), 한 번 공격하면 세상이 거의 날아간다
+addMon({ id: 'X:creator', name: '이원영, 제작자', face: '👑', els: ['light', 'dark', 'space'], rarity: 'creator', ult: '세상이 날아가는 한 방', shop: true, impossible: true, mod: { hp: 1, atk: 1, spd: 1 } });
 // ---- 🔺 7차: 높은 등급 몬스터를 새로 만들어 피라미드 모양으로 ----
 const PYR_TOP = { origin: 15, absolute: 22, holy: 33, divine: 50, legendary: 120 };
 const PYR_TITLES = {
@@ -6047,6 +6051,7 @@ function altarFuse() {
   if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
   if (mats.some(m => S.team.includes(m.uid)) && !confirm('재료 중에 모험 팀 몬스터가 있어요. 그래도 바칠까요?')) return;
   if (mats.some(m => (m.star || 0) > 0) && !confirm('재료 중에 별(★)이 있는 몬스터가 있어요. 그래도 바칠까요?')) return;
+  if (altarNext(altarRank) === 'creator') { sfx('err'); toast('👑 이건 정말로 불가능해요! 근원보다 높은 등급은 아무도 만들 수 없어요'); return; }
   if (altarNext(altarRank) === 'origin' && !originLuck()) { sfx('err'); toast('🌌 근원의 문이 열리지 않았어요… (근원은 게임한 시간 1000시간에 한 번쯤만 열려요. 재료는 그대로예요)'); return; }
   if (!spend(altarCost(altarRank))) return;
   // 재료 속성과 겹칠수록 가중치 ↑
@@ -6584,7 +6589,7 @@ function renderShop() {
         </div>
         <button class="btn" data-act="buyLegend" data-id="${l.id}" ${can ? '' : 'disabled'}>구매</button>
       </div>`;
-    }).join('')}</div>
+    }).join('')}${creatorShopHTML()}</div>
     <h3 class="sub" id="shopRunes">💠 내 룬 <small class="muted">같은 룬 3개를 합성하면 한 단계 위 룬이 돼요</small>
       <button class="btn small" data-act="mergeAll" ${list.some(g => g.free >= 3 && g.lv < 3) ? '' : 'disabled'}>✨ 모두 합성</button></h3>
     <div class="rune-inv">${list.length ? list.map(g => `
@@ -6688,7 +6693,7 @@ function allShopList() {
   const own = ownedSet(), q = ALL_SHOP.q.trim(), key = [ALL_SHOP.r, ALL_SHOP.el, ALL_SHOP.own, q].join('|');
   if (ALLSHOP_MEMO.set === own && ALLSHOP_MEMO.key === key) return ALLSHOP_MEMO.list;
   ALLSHOP_MEMO = { set: own, key, list: null };
-  return (ALLSHOP_MEMO.list = CAT_LIST.filter(c => (ALL_SHOP.r === 'all' || c.rarity === ALL_SHOP.r) && (ALL_SHOP.el === 'all' || c.els.includes(ALL_SHOP.el))
+  return (ALLSHOP_MEMO.list = CAT_LIST.filter(c => !c.impossible && (ALL_SHOP.r === 'all' || c.rarity === ALL_SHOP.r) && (ALL_SHOP.el === 'all' || c.els.includes(ALL_SHOP.el))
     && (!q || c.name.includes(q)) && (ALL_SHOP.own === 'all' || (ALL_SHOP.own === 'yes') === own.has(c.id))).map(c => c.id));
 }
 let ALLSHOP_MEMO = { set: null, key: '', list: null };
@@ -6700,7 +6705,7 @@ function allShopHTML() {
   const miss = ALL_SHOP.own === 'yes' ? [] : allShopMissing(), bulk = miss.slice(0, ALL_BULK);
   const chip = (k, v, label) => `<button class="chip ${ALL_SHOP[k] === v ? 'on' : ''}" data-act="allShopSet" data-k="${k}" data-v="${v}">${label}</button>`;
   return `<h3 class="sub" id="shopAll">📚 모든 몬스터 상점 <small class="muted">게임에 있는 몬스터 ${fmt(CAT_LIST.length)}마리를 전부 살 수 있어요</small></h3>
-    <details class="price-table"><summary>💰 등급별 값 보기 (희귀할수록 어마어마하게 비싸요!)</summary><div class="ut-grid">${RAR_ORDER.map(r => `<span><b style="color:${RAR[r].color}">${RAR[r].name}</b><small>💰 ${shortNum(rarityPrice(r))}</small></span>`).join('')}</div></details>
+    <details class="price-table"><summary>💰 등급별 값 보기 (희귀할수록 어마어마하게 비싸요!)</summary><div class="ut-grid">${RAR_ORDER.filter(r => r !== 'creator').map(r => `<span><b style="color:${RAR[r].color}">${RAR[r].name}</b><small>💰 ${shortNum(rarityPrice(r))}</small></span>`).join('')}</div></details>
     <div class="all-shop">
       <div class="chips">${chip('own', 'no', '🆕 없는 몬스터')}${chip('own', 'yes', '✅ 있는 몬스터')}${chip('own', 'all', '📚 전체')}</div>
       <div class="chips">${chip('r', 'all', '모든 등급')}${RAR_ORDER.map(r => chip('r', r, RAR[r].name)).join('')}</div>
@@ -6804,6 +6809,31 @@ function buyMon(type) {
   openHatchery();
 }
 
+const CREATOR_PRICE_TEXT = '10,000,000Ce';   // = 10^310 · 게임의 최대 돈(100Ce = 10^305)보다 10만 배 많다
+function creatorShopHTML() {
+  const c = CAT['X:creator'];
+  if (!c) return '';
+  const owned = S.monsters.filter(m => m.type === c.id).length + S.hatch.filter(t => t === c.id).length;
+  return `<div class="legend-item creator-item">
+    <div class="face" style="background:${grad(c)}">${c.face}</div>
+    <div class="li-info">
+      <div class="li-nm">${c.name}${owned ? ` <small class="muted">보유 ${owned}</small>` : ''}</div>
+      <div class="li-els">${elNames(c.els)} · <span class="rar" style="color:${RAR[c.rarity].color}">${RAR[c.rarity].name}</span></div>
+      <div class="li-price">💰 ${CREATOR_PRICE_TEXT}</div>
+      <div class="li-wait muted">${S.infinite ? '♾️ 돈 무한이라 살 수 있어요…?!' : '게임에서 가질 수 있는 최대 돈(100Ce)보다 10만 배 많아요. 정말로 불가능해요!'}</div>
+    </div>
+    <button class="btn" data-act="buyCreator" ${S.infinite ? '' : 'disabled'}>구매</button>
+  </div>`;
+}
+function buyCreator() {
+  if (!S.infinite) { sfx('err'); toast(`💰 ${CREATOR_PRICE_TEXT}이 필요해요… 최대 돈(100Ce)으로도 절대 못 사요!`); return; }
+  if (S.hatch.length >= hatchCap()) { toast('부화장이 가득 찼어요! 먼저 부화시켜 주세요'); return; }
+  if (!confirm(`👑 이원영, 제작자를 💰 ${CREATOR_PRICE_TEXT}에 살까요?`)) return;
+  S.hatch.push('X:creator');
+  sfx('yay'); save();
+  toast('👑 당신은 레전드입니다!! 이원영, 제작자 알이 부화장에 왔어요');
+  render(); openHatchery();
+}
 function buyLegend(id) {
   const l = SHOP_LEGENDS.find(x => x.id === id);
   if (!l) return;
@@ -8679,10 +8709,34 @@ const badName = (s) => { const c = nameCore(s); return BAD_WORDS.some(w => c.inc
 function nameProblem(s) {
   const t = String(s || '').trim();
   if (!t) return '이름을 적어 주세요';
+  if (/제작자|이원영/.test(t.replace(/[\s()\[\]{}<>._-]/g, '')) && !lsGet('combining-admin-key')) return '👑 이 이름은 제작자만 쓸 수 있어요';
   if (badName(t)) return '🙅 부적절한 말이 들어간 이름은 쓸 수 없어요';
   if ((t.match(/\d/g) || []).length >= 7) return '📵 전화번호 같은 개인정보는 이름에 쓸 수 없어요';
   if (/https?:|www\.|\.com|\.kr|@/i.test(t)) return '📵 링크나 이메일은 이름에 쓸 수 없어요';
   return '';
+}
+const TAKEN_SAY = [
+  '이름이 이미 있습니다.',
+  '이 이름도 있어요~',
+  '어라? 이것도 누가 쓰고 있네요 😅',
+  '음… 다들 이름 짓는 실력이 비슷한가 봐요 🤔',
+  '혹시 일부러 그러는 거예요? 😏',
+  '이 정도면 이름 맞히기 게임 같아요 🎯',
+  '세상에 이름이 그렇게 없나요?! 🙈',
+  '이름 짓기 장인이 되려면 아직 멀었어요 😜',
+  '포기하지 마세요… 아니, 이제 좀 포기해도 돼요 🤣',
+];
+let takenTries = 0;
+// 이름이 겹쳤을 때 보여 줄 말 (한 번 성공하면 다시 처음부터)
+function takenToast() { toast(TAKEN_SAY[Math.min(takenTries, TAKEN_SAY.length - 1)]); takenTries++; sfx('err'); }
+// 랭킹에 올라온 다른 사람이 이미 쓰는 이름인지 (내 기록은 빼고)
+function nameTaken(name) {
+  const n = String(name || '').trim().slice(0, 10).toLowerCase();
+  if (!n) return false;
+  let st = {};
+  try { st = JSON.parse(lsGet(RANK_STORE) || '{}') || {}; } catch (e) { st = {}; }
+  const me = typeof S !== 'undefined' && S ? S.rankId : '';
+  return Object.values(st).some(p => p && p.id !== me && !p.del && String(p.n || '').trim().toLowerCase() === n);
 }
 // 다른 사람 이름을 보여 줄 때: 부적절하면 가린다
 const safeName = (s, fb = '플레이어') => { const t = String(s || '').trim(); if (!t) return fb; return nameProblem(t) ? '🙊 ***' : t; };
@@ -9387,6 +9441,7 @@ async function giftRecvOk() {
   if (S.usedGifts.includes(g.id)) { toast('이미 받은 선물이에요'); return; }
   const from = esc(String(g.from || '친구').slice(0, 10));
   let got = '';
+  if (g.g === 'mon' && g.d && CAT[g.d.type] && CAT[g.d.type].impossible) { toast('👑 이건 정말로 불가능한 몬스터라 받을 수 없어요'); return; }
   if (g.g === 'mon' && g.d && CAT[g.d.type]) {
     const lv = Math.max(1, Math.min(MAX_LV, Math.floor(g.d.lv) || 1));
     const placed = placeGiftMon(g.d.type, lv);
@@ -9824,7 +9879,8 @@ function accNewOk() {
   if (nameProblem(name)) { toast(nameProblem(name)); return; }
   if (pin && !/^\d{4}$/.test(pin)) { toast('비밀번호는 숫자 4자리예요'); return; }
   const list = accounts();
-  if (list.some(a => a.name === name)) { toast('같은 이름의 계정이 이미 있어요'); return; }
+  if (list.some(a => a.name === name)) { takenToast(); return; }
+  if (nameTaken(name)) { takenToast(); return; }
   const a = { id: newAccId(), name, pin: null, created: Date.now() };
   if (pin) a.pin = pinHash(a.id, pin);
   list.push(a);
@@ -9873,7 +9929,7 @@ async function accImportOk() {
 }
 // ===================== 🛡️ 제작자: 계정 정지 =====================
 // 제작자(이원영)만 가진 비밀 열쇠로 "서명"한 정지만 믿는다. 정지는 인터넷(ntfy)으로 모든 기기에 퍼진다.
-const ADMIN_NAME = '이원영';
+const ADMIN_NAME = '제작자(이원영)';
 const ADMIN_PUB = {"kty":"EC","x":"IzLpI4mlXFci0iJ8u29BZpdjiXWMhCBXwxBixzqrHQo","y":"9ghMuWZaIOM53VsaTsMelENBEU521OcQh84oZCVb6WQ","crv":"P-256"};
 const BAN_TOPIC = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) ? 'monhap-ban-dev-k3v8' : 'monhap-ban-v1-k3v8';
 const BAN_URL = 'https://ntfy.sh/' + BAN_TOPIC;
@@ -9938,7 +9994,7 @@ async function adminSign(name, until, reason) {
 }
 const BAN_TIMES = [[30, '30분'], [60, '1시간'], [720, '12시간'], [1440, '1일'], [10080, '7일'], [43200, '30일']];
 async function openAdmin() {
-  if (!isAdminAcc()) return;
+  if (!isAdminAcc() && !document.querySelector('#adminKeyIn')) return;
   const k = await adminKey();
   if (!k) {
     showModal(`<div class="admin-box"><h3>🛡️ 제작자 메뉴</h3>
@@ -9963,7 +10019,8 @@ async function adminKeySet() {
   const b = await adminSign('test', 0, '');
   if (!b || !(await banVerify(b))) { lsDel('combining-admin-key'); ADMIN_KEY = null; toast('❌ 열쇠가 맞지 않아요'); return; }
   toast('🔑 제작자 열쇠를 넣었어요!'); sfx('yay');
-  openAdmin();
+  if (isAdminAcc()) openAdmin();
+  else { closeModal(); toast(`🔑 열쇠를 넣었어요! 이제 👤 계정 → ✏️ 이름 바꾸기에서 "${ADMIN_NAME}"(으)로 바꾸면 제작자 메뉴가 생겨요`); }
 }
 async function banGo(minutes) {
   const name = (($('#banName') || {}).value || '').trim();
@@ -10027,8 +10084,10 @@ function accRenameOk() {
   if (!name) return;
   if (nameProblem(name)) { toast(nameProblem(name)); return; }
   const list = accounts();
-  if (list.some(a => a.name === name && a.id !== ACC.id)) { toast('같은 이름의 계정이 이미 있어요'); return; }
+  if (list.some(a => a.name === name && a.id !== ACC.id)) { takenToast(); return; }
+  if (nameTaken(name)) { takenToast(); return; }
   const a = list.find(x => x.id === ACC.id);
+  takenTries = 0;
   a.name = name;
   saveAccounts(list);
   ACC = a;
@@ -10085,7 +10144,8 @@ function firstAccOk() {
   if (pin && !/^\d{4}$/.test(pin)) { toast('비밀번호는 숫자 4자리예요'); return; }
   const list = accounts(), a = list.find(x => x.id === ACC.id);
   if (!a) return;
-  if (list.some(x => x.name === name && x.id !== a.id)) { toast('같은 이름의 계정이 이미 있어요'); return; }
+  if (list.some(x => x.name === name && x.id !== a.id)) { takenToast(); return; }
+  if (nameTaken(name)) { takenToast(); return; }
   a.name = name; a.pin = pin ? pinHash(a.id, pin) : null; delete a.auto;
   saveAccounts(list);
   ACC = a; S.nick = name; save();
@@ -10914,6 +10974,16 @@ function submitCode() {
   if (!inp) return;
   const v = inp.value.replace(/\s/g, '');
   if (v === CE_CODE) { openRichGift(); return; }
+  if (v === '제작자') {
+    closeModal();
+    if (isAdminAcc()) { openAdmin(); return; }
+    if (lsGet('combining-admin-key')) { toast(`🔑 열쇠가 있어요! 👤 계정 → ✏️ 이름 바꾸기에서 이름을 "${ADMIN_NAME}"(으)로 바꿔요`); return; }
+    showModal(`<div class="admin-box"><h3>🔑 제작자 열쇠 넣기</h3>
+      <p class="muted">제작자 비밀 열쇠를 넣으면 이 기기에서 "${ADMIN_NAME}" 이름을 쓸 수 있어요.</p>
+      <textarea id="adminKeyIn" class="code-box" placeholder="제작자 비밀 열쇠를 붙여 넣어요"></textarea>
+      <div class="row"><button class="btn green" data-act="adminKeySet">🔑 열쇠 넣기</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+    return;
+  }
   if (v === SECRET_CODE) {
     closeModal();
     // 한 번 더 넣으면 돈 무한을 끈다
@@ -11750,6 +11820,7 @@ const ACTIONS = {
   buyAllMons: (d) => buyAllMons(d.kind),
   buyAny: (d) => buyAny(d.type),
   buyEveryEgg: () => buyEveryEgg(),
+  buyCreator: () => buyCreator(),
   nickOpen: (d) => openNick(d.uid),
   labOpen: () => openLab(),
   labRoll: (d) => { LAB[d.k] = labRand(); LAB.r = null; openLab(); },
