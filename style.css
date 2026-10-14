@@ -1692,3 +1692,10 @@ body.ui-hidden .todo-btn { opacity: .55; }
   .zoom-btns { top: calc(152px + env(safe-area-inset-top)); }
   .zoom-btns button { width: 36px; height: 36px; font-size: 18px; }
 }
+
+/* 🛡️ 제작자 메뉴 */
+.admin-box input, .admin-box textarea { width: 100%; margin: 4px 0; }
+.ban-times { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 8px 0; }
+.ban-times .btn { background: rgba(255, 77, 109, .25); border: 1px solid #ff4d6d; }
+.ban-row { display: flex; align-items: center; gap: 8px; padding: 8px; margin: 4px 0; border-radius: 10px; background: rgba(255, 77, 109, .12); }
+.ban-row small { flex: 1; color: var(--muted); }

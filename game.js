@@ -852,13 +852,15 @@ function accLocked(a) {
   let rid = '', nick = '';
   try { const d = JSON.parse(readSave(a.id) || 'null'); if (d) { rid = d.rankId || ''; nick = String(d.nick || ''); } } catch (e) { /* 저장 없음 */ }
   const nm = String(a.name || '').trim().toLowerCase();
-  return ACC_LOCKS.find(l => Date.now() < l.until && (nm === l.name || nick.trim().toLowerCase() === l.name || (rid && rid === l.rid))) || null;
+  const nk = nick.trim().toLowerCase();
+  return ACC_LOCKS.find(l => Date.now() < l.until && (nm === l.name || nk === l.name || (rid && rid === l.rid)))
+    || Object.values(banStore()).find(b => Date.now() < b.until && (nm === b.name || nk === b.name)) || null;
 }
 function lockLeft(l) {
   const s = Math.max(0, Math.ceil((l.until - Date.now()) / 1000));
   return `${Math.floor(s / 3600)}시간 ${Math.floor(s % 3600 / 60)}분`;
 }
-function lockToast(a, l) { toast(`🔒 ${a.name} 계정은 잠겨 있어요. ${lockLeft(l)} 뒤에 풀려요`); }
+function lockToast(a, l) { toast(`🔒 ${a.name} 계정은 정지됐어요. ${lockLeft(l)} 뒤에 풀려요${l.reason ? ' · 이유: ' + l.reason : ''}`); }
 
 function newState() {
   const s = {
@@ -9852,6 +9854,123 @@ async function accImportOk() {
   closeLogin();
   enterAccount(a);
 }
+// ===================== 🛡️ 제작자: 계정 정지 =====================
+// 제작자(이원영)만 가진 비밀 열쇠로 "서명"한 정지만 믿는다. 정지는 인터넷(ntfy)으로 모든 기기에 퍼진다.
+const ADMIN_NAME = '이원영';
+const ADMIN_PUB = {"kty":"EC","x":"IzLpI4mlXFci0iJ8u29BZpdjiXWMhCBXwxBixzqrHQo","y":"9ghMuWZaIOM53VsaTsMelENBEU521OcQh84oZCVb6WQ","crv":"P-256"};
+const BAN_TOPIC = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) ? 'monhap-ban-dev-k3v8' : 'monhap-ban-v1-k3v8';
+const BAN_URL = 'https://ntfy.sh/' + BAN_TOPIC;
+const banStore = () => { try { return JSON.parse(lsGet('combining-bans') || '{}') || {}; } catch (e) { return {}; } };
+const banPayload = (b) => JSON.stringify([b.name, b.until, b.at, b.reason || '']);
+let BAN_PUB = null;
+async function banVerify(b) {
+  try {
+    if (!b || typeof b.name !== 'string' || typeof b.until !== 'number' || typeof b.at !== 'number' || typeof b.sig !== 'string') return false;
+    BAN_PUB = BAN_PUB || await crypto.subtle.importKey('jwk', ADMIN_PUB, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+    return await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, BAN_PUB, unb64u(b.sig), new TextEncoder().encode(banPayload(b)));
+  } catch (e) { return false; }
+}
+// 받은 정지를 기억하기 (이름마다 가장 최근 것)
+async function banTake(list) {
+  const st = banStore();
+  let changed = false;
+  for (const b of list) {
+    if (!b || (st[b.name] && st[b.name].at >= b.at)) continue;
+    if (!(await banVerify(b))) continue;
+    st[b.name] = { name: b.name, until: b.until, at: b.at, reason: b.reason || '', sig: b.sig };
+    changed = true;
+  }
+  // 끝난 지 하루 넘은 정지는 지우기
+  Object.keys(st).forEach(k => { if (st[k].until < Date.now() - 86400000) { delete st[k]; changed = true; } });
+  if (changed) lsSet('combining-bans', JSON.stringify(st));
+  return changed;
+}
+let banLastFetch = 0;
+async function banFetch() {
+  if (!navigator.onLine) return;
+  banLastFetch = Date.now();
+  let txt = '';
+  try { txt = await (await fetch(BAN_URL + '/json?poll=1&since=all')).text(); } catch (e) { return; }
+  const got = [];
+  let newest = 0;
+  txt.split('\n').forEach(l => { let m, d; try { m = JSON.parse(l); d = JSON.parse(m.message); } catch (e) { return; } newest = Math.max(newest, (m.time || 0) * 1000); (Array.isArray(d.bundle) ? d.bundle : [d]).forEach(b => got.push(b)); });
+  await banTake(got);
+  // 12시간이 지나면 서버에서 사라지니까, 6시간 동안 아무도 안 올렸으면 내가 다시 올려 둔다
+  const active = Object.values(banStore()).filter(b => b.until > Date.now());
+  if (active.length && Date.now() - newest > 6 * 3600 * 1000) ntfyPost(BAN_URL, { bundle: active }, true);
+}
+setTimeout(banFetch, 3000);
+setInterval(() => { if (!document.hidden && Date.now() - banLastFetch > 3 * 60 * 1000) banFetch(); }, 60 * 1000);
+
+// 제작자 열쇠 (이 기기에만 저장)
+const isAdminAcc = () => ACC && String(ACC.name || '').trim() === ADMIN_NAME;
+let ADMIN_KEY = null;
+async function adminKey() {
+  if (ADMIN_KEY) return ADMIN_KEY;
+  const raw = lsGet('combining-admin-key');
+  if (!raw) return null;
+  try { ADMIN_KEY = await crypto.subtle.importKey('pkcs8', unb64u(raw.replace(/[^A-Za-z0-9+/=_-]/g, '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']); return ADMIN_KEY; } catch (e) { return null; }
+}
+async function adminSign(name, until, reason) {
+  const k = await adminKey();
+  if (!k) return null;
+  const b = { name: name.trim().toLowerCase(), until, at: Date.now(), reason: (reason || '').slice(0, 40) };
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, k, new TextEncoder().encode(banPayload(b)));
+  b.sig = b64u(new Uint8Array(sig));
+  return b;
+}
+const BAN_TIMES = [[30, '30분'], [60, '1시간'], [720, '12시간'], [1440, '1일'], [10080, '7일'], [43200, '30일']];
+async function openAdmin() {
+  if (!isAdminAcc()) return;
+  const k = await adminKey();
+  if (!k) {
+    showModal(`<div class="admin-box"><h3>🛡️ 제작자 메뉴</h3>
+      <p class="muted">이 기기에서 처음 쓰려면 <b>제작자 비밀 열쇠</b>를 한 번 넣어야 해요. (열쇠는 이 기기에만 저장돼요)</p>
+      <textarea id="adminKeyIn" class="code-box" placeholder="제작자 비밀 열쇠를 붙여 넣어요"></textarea>
+      <div class="row"><button class="btn green" data-act="adminKeySet">🔑 열쇠 넣기</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+    return;
+  }
+  const bans = Object.values(banStore()).filter(b => b.until > Date.now()).sort((a, b) => a.until - b.until);
+  showModal(`<div class="admin-box"><h3>🛡️ 제작자 메뉴 · 계정 정지</h3>
+    <p class="muted">정지할 사람의 <b>이름</b>(계정 이름이나 랭킹에 나오는 이름)을 적고 시간을 골라요. 1~3분 안에 모든 기기에 퍼져요.</p>
+    <input id="banName" maxlength="20" placeholder="이름 (예: minjun)" autocomplete="off">
+    <input id="banWhy" maxlength="40" placeholder="이유 (없어도 돼요)" autocomplete="off">
+    <div class="ban-times">${BAN_TIMES.map(([m, l]) => `<button class="btn small" data-act="banGo" data-m="${m}">⛔ ${l}</button>`).join('')}</div>
+    <h4 class="sub">지금 정지된 사람 (${bans.length})</h4>
+    ${bans.length ? `<div class="ban-list">${bans.map(b => `<div class="ban-row"><b>${esc(b.name)}</b><small>${lockLeft(b)} 남음${b.reason ? ' · ' + esc(b.reason) : ''}</small><button class="btn ghost small" data-act="banUndo" data-n="${esc(b.name)}">✅ 풀기</button></div>`).join('')}</div>` : '<p class="muted">정지된 사람이 없어요</p>'}
+    <div class="row"><button class="btn ghost small" data-act="adminRefresh">🔄 새로 받기</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
+async function adminKeySet() {
+  const v = (($('#adminKeyIn') || {}).value || '').trim();
+  lsSet('combining-admin-key', v); ADMIN_KEY = null;
+  const b = await adminSign('test', 0, '');
+  if (!b || !(await banVerify(b))) { lsDel('combining-admin-key'); ADMIN_KEY = null; toast('❌ 열쇠가 맞지 않아요'); return; }
+  toast('🔑 제작자 열쇠를 넣었어요!'); sfx('yay');
+  openAdmin();
+}
+async function banGo(minutes) {
+  const name = (($('#banName') || {}).value || '').trim();
+  const why = (($('#banWhy') || {}).value || '').trim();
+  if (!name) { toast('이름을 적어 주세요'); return; }
+  if (name.toLowerCase() === ADMIN_NAME) { toast('제작자 계정은 정지할 수 없어요'); return; }
+  const label = (BAN_TIMES.find(t => t[0] === Number(minutes)) || [0, minutes + '분'])[1];
+  if (!confirm(`⛔ "${name}" 계정을 ${label} 동안 정지할까요?`)) return;
+  const b = await adminSign(name, Date.now() + Number(minutes) * 60000, why);
+  if (!b) { toast('❌ 제작자 열쇠가 없어요'); return; }
+  await banTake([b]);
+  const ok = await ntfyPost(BAN_URL, b, false);
+  toast(ok ? `⛔ ${name} 계정을 ${label} 동안 정지했어요` : '⚠️ 인터넷으로 보내지 못했어요. 다시 해 주세요');
+  openAdmin();
+}
+async function banUndo(name) {
+  if (!confirm(`✅ "${name}" 계정의 정지를 풀까요?`)) return;
+  const b = await adminSign(name, 0, '');
+  if (!b) return;
+  await banTake([b]);
+  const ok = await ntfyPost(BAN_URL, b, false);
+  toast(ok ? `✅ ${name} 계정의 정지를 풀었어요` : '⚠️ 인터넷으로 보내지 못했어요. 다시 해 주세요');
+  openAdmin();
+}
 function openAccountMenu() {
   tutFlag('menuSeen', true);
   tutFlag('account', true);
@@ -9861,6 +9980,7 @@ function openAccountMenu() {
       <button class="build-opt" data-act="guildOpen" style="--hc:#7dff8f"><span class="bo-ico">🛡️</span><span class="bo-nm">길드<br><small>${S.guild ? `${esc(S.guild.emblem)} ${esc(S.guild.name)}` : '길드에 들어가거나 만들기'}</small></span></button>
       <button class="build-opt" data-act="ranking" style="--hc:#ffd24a"><span class="bo-ico">🏆</span><span class="bo-nm">전 세계 랭킹<br><small>${tierOf(S.trophies).icon} ${tierOf(S.trophies).name} · 🏆 ${fmt(S.trophies || 0)}</small></span></button>
       <button class="build-opt" data-act="accSwitch" style="--hc:#6f8cff"><span class="bo-ico">🔄</span><span class="bo-nm">계정 바꾸기 / 새 계정</span></button>
+      ${isAdminAcc() ? '<button class="build-opt" data-act="adminOpen" style="--hc:#ff4d6d"><span class="bo-ico">🛡️</span><span class="bo-nm">제작자 메뉴<br><small>계정 정지 · 풀기</small></span></button>' : ''}
       <button class="build-opt" data-act="records" style="--hc:#ffd24a"><span class="bo-ico">📊</span><span class="bo-nm">내 기록<br><small>⏱️ 게임한 시간 ${playTimeText(S.playSec)} · 몬스터 · 연승 기록</small></span></button>
       <button class="build-opt" data-act="syncOpen" style="--hc:#2bd9a8"><span class="bo-ico">🔄</span><span class="bo-nm">다른 기기와 맞추기 (컴퓨터 ↔ 핸드폰)<br><small>${S.syncKey ? '☁️ 자동 맞추기 켜짐' : '한 번 4자리 숫자로 연결하면 그다음부터 자동으로 맞춰져요'}</small></span></button>
       <button class="build-opt" data-act="accExport" style="--hc:#3fd6a4"><span class="bo-ico">📤</span><span class="bo-nm">이 계정 옮기기 코드<br><small>다른 기기에서 📥 가져오기에 붙여 넣으면 내 섬이 그대로 가요</small></span></button>
@@ -11678,6 +11798,11 @@ const ACTIONS = {
   accExport: () => accExport(),
   syncOpen: () => openSync(),
   records: () => openRecords(),
+  adminOpen: () => openAdmin(),
+  adminKeySet: () => adminKeySet(),
+  banGo: (d) => banGo(d.m),
+  banUndo: (d) => banUndo(d.n),
+  adminRefresh: () => { banFetch().then(openAdmin); },
   syncHost: () => syncHost(),
   syncJoinOpen: () => syncJoinOpen(),
   syncJoin: () => syncJoin(),
