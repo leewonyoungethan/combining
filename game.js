@@ -7050,7 +7050,7 @@ function openLoopStart() {
   const cur = S.bSpeed || 1;
   showModal(`<div class="loop-start"><h3>🔁 연속 전투</h3>
     <p class="muted">몇 배속으로 할까요? 이기면 다음 스테이지로 자동으로 계속 싸워요. (전투 중에도 ⏩ 버튼으로 바꿀 수 있어요 · <b>Esc</b> 키로 나가기)</p>
-    <p class="muted small-note">⚡ 1 · 2 · 4배는 무료! 10배부터는 💰로 한 단계씩 열어요 (단계마다 1000배 비싸져요)</p>
+    <p class="muted small-note">⚡ 1 · 2 · 4배는 무료! 10배부터는 💰로 한 단계씩 열어요 (단계가 오를수록 점점 더 엄청나게 비싸져요!)</p>
     <div class="ls-grid">${SPEEDS_LOOP.map(sp => { const own = spOwned(sp), nx = spNextLocked() === sp; return `<button class="ls-sp ${sp === cur && own ? 'on' : ''} ${sp >= 1000 ? 'hot' : ''} ${own ? '' : 'locked'} ${nx ? 'next' : ''}" data-act="loopGo" data-sp="${sp}">${own ? `⏩ ${fmt(sp)}배` : `🔒 ${fmt(sp)}배<small>💰 ${shortNum(speedPrice(sp))}</small>`}</button>`; }).join('')}</div>
     <div class="row"><button class="btn ghost small" data-act="close">취소</button></div></div>`);
 }
@@ -7179,8 +7179,9 @@ function logB(msg) {
 }
 // 배속: 보통 전투 1·2·4배, 🔁 연속 전투는 10·25·50·100배까지
 const SPEEDS_LOOP = [1, 2, 4, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 100000, 1000000, 10000000], SPEEDS = [1, 2, 4];
-// 값: 10배 1M → 단계마다 1000배씩 → 10000배 1Dc, 100000배 10Ce, 1000000배 30Ce, 10000000배는 최대 돈 전부(100Ce)!
-const speedPrice = (sp) => { const i = SPEEDS_LOOP.indexOf(sp); if (i < 3) return 0; if (sp >= 10000000) return MONEY_CAP; if (sp >= 1000000) return 3e304; if (sp >= 100000) return 1e304; return Math.pow(10, 6 + 3 * (i - 3)); };
+// 값: 10배 1M → 단계가 오를수록 곱하는 수도 커진다 → 10000000배는 최대 돈 전부(100Ce)!
+const SPEED_EXP = [6, 9, 13, 18, 25, 34, 46, 62, 83, 110, 150, 210, 305];   // 10배 · 25배 · … · 10000000배 값의 0의 개수
+const speedPrice = (sp) => { const i = SPEEDS_LOOP.indexOf(sp); if (i < 3) return 0; const e = SPEED_EXP[Math.min(i - 3, SPEED_EXP.length - 1)]; return e >= 305 ? MONEY_CAP : Math.pow(10, e); };
 const spOwned = (sp) => speedPrice(sp) === 0 || (S.spdOwn || []).includes(sp);
 const spTop = () => SPEEDS_LOOP.filter(spOwned).pop() || 1;
 const spNextLocked = () => SPEEDS_LOOP.find(sp => !spOwned(sp));

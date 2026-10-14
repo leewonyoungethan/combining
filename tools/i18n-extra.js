@@ -1,5 +1,6 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  '⚡ 1 · 2 · 4배는 무료! 10배부터는 💰로 한 단계씩 열어요 (단계가 오를수록 점점 더 엄청나게 비싸져요!)': '⚡ 1 · 2 · 4× are free! From 10× you unlock one step at a time with 💰 (each step gets MUCH more expensive!)',
   '💰 돈을 어떤 단위로 볼까요? (예: {})': '💰 Which money units? (e.g. {})', '🔤 aa · ab · ac': '🔤 aa · ab · ac', '🔬 1.2e45': '🔬 1.2e45',
   'K · M · B · T 다음부터는 1000배마다 aa → ab → ac … 로 바뀌어요': 'After K · M · B · T, it changes every ×1000: aa → ab → ac …',
   '1.2e45 = 1.2 뒤에 0이 45개라는 뜻이에요 (1.2 × 10': '1.2e45 means 1.2 followed by 45 zeros (1.2 × 10',
