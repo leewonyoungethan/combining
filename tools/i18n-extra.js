@@ -1,5 +1,11 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  '🛡️ 제작자에게서 온 소식': '🛡️ News from the creator', '알겠어요': 'OK', '🫳 가져가기': '🫳 Take away',
+  '가져올 사람 이름': 'Name of the player', '이유 (그 사람에게 보여요 · 없어도 돼요)': 'Reason (shown to them · optional)',
+  '🫳 제작자가 {} {}마리를 가져갔어요': '🫳 The creator took away {} {}', '🫳 제작자가 {}을 가져갔어요': '🫳 The creator took away {}',
+  '🌌 근원 몬스터': '🌌 Origin monsters', '⭐ 신성 이상 몬스터': '⭐ Holy-or-higher monsters', '💰 돈 전부': '💰 all gold', '💎 보석 전부': '💎 all gems',
+  '가져올 사람의 이름을 적어 주세요': 'Please write the player name', '제작자 계정에서는 가져올 수 없어요': 'You cannot take from the creator account',
+  '❌ 제작자 비밀번호를 먼저 넣어 주세요': '❌ Enter the creator password first',
   '♾️ 돈 무한이라 살 수 있어요…?!': '♾️ Infinite money, so you can buy it…?!', '게임에서 가질 수 있는 최대 돈(100Ce)보다 10만 배 많아요. 정말로 불가능해요!': 'That is 100,000× more than the most money you can have (100Ce). Truly impossible!',
   '💰 {}이 필요해요… 최대 돈(100Ce)으로도 절대 못 사요!': '💰 You need {}… even max money (100Ce) can never buy it!', '👑 이원영, 제작자를 💰 {}에 살까요?': '👑 Buy Lee Wonyoung, the Creator for 💰 {}?',
   '👑 당신은 레전드입니다!! 이원영, 제작자 알이 부화장에 왔어요': '👑 You are a LEGEND!! The Creator egg is in your hatchery',

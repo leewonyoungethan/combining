@@ -1705,3 +1705,5 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .card.r-creator { box-shadow: 0 0 18px #ff3df5, inset 0 0 12px rgba(255, 61, 245, .4); }
 
 .creator-item { border: 2px solid #ff3df5; box-shadow: 0 0 16px rgba(255, 61, 245, .5); background: linear-gradient(135deg, rgba(255, 61, 245, .15), rgba(255, 224, 102, .12)); }
+
+.admin-note { padding: 10px; margin: 6px 0; border-radius: 12px; background: rgba(255, 210, 74, .15); border: 1px solid rgba(255, 210, 74, .45); text-align: left; }

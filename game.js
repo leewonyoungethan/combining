@@ -10032,6 +10032,51 @@ async function banTake(list) {
   if (changed) lsSet('combining-bans', JSON.stringify(st));
   return changed;
 }
+// ----- 제작자 명령: 가져가기 -----
+const cmdPayload = (c) => JSON.stringify(['v2', c.kind, c.name, c.what || '', c.text || '', c.at]);
+const cmdStore = () => { try { return JSON.parse(lsGet('combining-cmds') || '[]') || []; } catch (e) { return []; } };
+async function cmdVerify(c) {
+  try {
+    if (!c || c.kind !== 'take' || typeof c.name !== 'string' || typeof c.at !== 'number' || typeof c.sig !== 'string') return false;
+    BAN_PUB = BAN_PUB || await crypto.subtle.importKey('jwk', ADMIN_PUB, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+    return await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, BAN_PUB, unb64u(c.sig), new TextEncoder().encode(cmdPayload(c)));
+  } catch (e) { return false; }
+}
+async function cmdTake(list) {
+  const st = cmdStore(), seen = new Set(st.map(c => c.sig));
+  for (const c of list) { if (c && c.kind && !seen.has(c.sig) && await cmdVerify(c)) { st.push({ kind: c.kind, name: c.name, what: c.what || '', text: c.text || '', at: c.at, sig: c.sig }); seen.add(c.sig); } }
+  lsSet('combining-cmds', JSON.stringify(st.filter(c => c.at > Date.now() - 7 * 86400000).slice(-60)));   // 7일 동안만 보관
+  cmdApply();
+}
+const TAKE_WHAT = { origin: '🌌 근원 몬스터', top: '⭐ 신성 이상 몬스터', gold: '💰 돈 전부', gems: '💎 보석 전부' };
+// 내 계정 이름(또는 랭킹 이름)으로 온 명령을 한 번씩만 실행
+function cmdApply() {
+  if (typeof S === 'undefined' || !S || !ACC || VISIT) return;
+  const nm = String(ACC.name || '').trim().toLowerCase(), nk = String(S.nick || '').trim().toLowerCase();
+  if (nm === ADMIN_NAME.toLowerCase()) return;
+  const done = new Set(S.cmdDone || []);
+  const mine = cmdStore().filter(c => !done.has(c.sig.slice(0, 24)) && (c.name === nm || c.name === nk));
+  if (!mine.length) return;
+  const notes = [];
+  for (const c of mine) {
+    done.add(c.sig.slice(0, 24));
+    if (c.what === 'origin' || c.what === 'top') {
+      const lim = c.what === 'origin' ? RANK.origin : RANK.holy;
+      const gone = new Set(S.monsters.filter(m => RANK[CAT[m.type].rarity] >= lim).map(m => m.uid));
+      const h0 = S.hatch.length;
+      S.monsters = S.monsters.filter(m => !gone.has(m.uid));
+      S.team = S.team.filter(u => !gone.has(u));
+      S.hatch = S.hatch.filter(t => RANK[CAT[t].rarity] < lim);
+      notes.push(`🫳 제작자가 ${TAKE_WHAT[c.what]} ${fmt(gone.size + h0 - S.hatch.length)}마리를 가져갔어요${c.text ? ' · ' + esc(c.text) : ''}`);
+    } else if (c.what === 'gold' || c.what === 'gems') {
+      S.infinite = false; S[c.what] = 0;
+      notes.push(`🫳 제작자가 ${TAKE_WHAT[c.what]}을 가져갔어요${c.text ? ' · ' + esc(c.text) : ''}`);
+    }
+  }
+  S.cmdDone = [...done].slice(-200);
+  save(); render(); updateHud();
+  showModal(`<div class="admin-box"><h3>🛡️ 제작자에게서 온 소식</h3>${notes.map(n => `<p class="admin-note">${n}</p>`).join('')}<div class="row"><button class="btn" data-act="close">알겠어요</button></div></div>`);
+}
 let banLastFetch = 0;
 async function banFetch() {
   if (!navigator.onLine) return;
@@ -10041,9 +10086,10 @@ async function banFetch() {
   const got = [];
   let newest = 0;
   txt.split('\n').forEach(l => { let m, d; try { m = JSON.parse(l); d = JSON.parse(m.message); } catch (e) { return; } newest = Math.max(newest, (m.time || 0) * 1000); (Array.isArray(d.bundle) ? d.bundle : [d]).forEach(b => got.push(b)); });
-  await banTake(got);
+  await banTake(got.filter(b => b && !b.kind));
+  await cmdTake(got.filter(b => b && b.kind));
   // 12시간이 지나면 서버에서 사라지니까, 6시간 동안 아무도 안 올렸으면 내가 다시 올려 둔다
-  const active = Object.values(banStore()).filter(b => b.until > Date.now());
+  const active = [...Object.values(banStore()).filter(b => b.until > Date.now()), ...cmdStore()];
   if (active.length && Date.now() - newest > 6 * 3600 * 1000) ntfyPost(BAN_URL, { bundle: active }, true);
 }
 setTimeout(banFetch, 3000);
@@ -10067,6 +10113,19 @@ async function adminKey() {
   const raw = lsGet('combining-admin-key');
   if (!raw) return null;
   try { ADMIN_KEY = await crypto.subtle.importKey('pkcs8', unb64u(raw.replace(/[^A-Za-z0-9+/=_-]/g, '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']); return ADMIN_KEY; } catch (e) { return null; }
+}
+async function adminTake(what) {
+  const name = (($('#takeName') || {}).value || '').trim();
+  const why = (($('#takeWhy') || {}).value || '').trim();
+  if (!name) { toast('가져올 사람의 이름을 적어 주세요'); return; }
+  if (name.toLowerCase() === ADMIN_NAME.toLowerCase()) { toast('제작자 계정에서는 가져올 수 없어요'); return; }
+  if (!confirm(`🫳 "${name}"에게서 ${TAKE_WHAT[what]}을(를) 가져갈까요?\n(그 사람이 게임을 켜면 바로 사라져요)`)) return;
+  const k = await adminKey();
+  if (!k) { toast('❌ 제작자 비밀번호를 먼저 넣어 주세요'); return; }
+  const c = { kind: 'take', name: name.toLowerCase(), what, text: why.slice(0, 80), at: Date.now() };
+  c.sig = b64u(new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, k, new TextEncoder().encode(cmdPayload(c)))));
+  const ok = await ntfyPost(BAN_URL, c, false);
+  toast(ok ? `🫳 "${name}"에게서 ${TAKE_WHAT[what]}을(를) 가져가요 (게임을 켜면 바로)` : '⚠️ 인터넷으로 보내지 못했어요. 다시 해 주세요');
 }
 async function adminSign(name, until, reason) {
   const k = await adminKey();
@@ -10093,6 +10152,10 @@ async function openAdmin() {
     <input id="banName" maxlength="20" placeholder="이름 (예: minjun)" autocomplete="off">
     <input id="banWhy" maxlength="40" placeholder="이유 (없어도 돼요)" autocomplete="off">
     <div class="ban-times">${BAN_TIMES.map(([m, l]) => `<button class="btn small" data-act="banGo" data-m="${m}">⛔ ${l}</button>`).join('')}</div>
+    <h4 class="sub">🫳 가져가기</h4>
+    <input id="takeName" maxlength="20" placeholder="가져올 사람 이름" autocomplete="off">
+    <input id="takeWhy" maxlength="80" placeholder="이유 (그 사람에게 보여요 · 없어도 돼요)" autocomplete="off">
+    <div class="ban-times">${Object.entries(TAKE_WHAT).map(([k, l]) => `<button class="btn small" data-act="adminTake" data-w="${k}">🫳 ${l}</button>`).join('')}</div>
     <h4 class="sub">지금 정지된 사람 (${bans.length})</h4>
     ${bans.length ? `<div class="ban-list">${bans.map(b => `<div class="ban-row"><b>${esc(b.name)}</b><small>${lockLeft(b)} 남음${b.reason ? ' · ' + esc(b.reason) : ''}</small><button class="btn ghost small" data-act="banUndo" data-n="${esc(b.name)}">✅ 풀기</button></div>`).join('')}</div>` : '<p class="muted">정지된 사람이 없어요</p>'}
     <div class="row"><button class="btn ghost small" data-act="adminRefresh">🔄 새로 받기</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
@@ -10241,6 +10304,7 @@ function firstAccOk() {
   setTimeout(afterEnter, 300);
 }
 function afterEnter() {
+  setTimeout(() => { try { cmdApply(); } catch (e) { /* 없음 */ } }, 1500);
   if (S && S.syncKey) setTimeout(cloudCheck, 2500);
   countLoginDay();
   // 처음 온 사람은 계정부터 (자동으로 만든 계정이면)
@@ -11979,6 +12043,7 @@ const ACTIONS = {
   syncOpen: () => openSync(),
   records: () => openRecords(),
   adminOpen: () => openAdmin(),
+  adminTake: (d) => adminTake(d.w),
   adminKeySet: () => adminKeySet(),
   banGo: (d) => banGo(d.m),
   banUndo: (d) => banUndo(d.n),
