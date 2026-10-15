@@ -608,6 +608,21 @@ const rIdx = (type) => RAR_ORDER.indexOf(CAT[type].rarity);
 const eggLv = (t) => { const r = rIdx(t); return r >= RANK.mythic ? 'lv5' : r >= RANK.legendary ? 'lv4' : r >= RANK.masterwork ? 'lv3' : ''; };
 const isLegend = (type) => rIdx(type) >= RANK.legendary;
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+let SIG = { t: -1e9, s: null, v: '' };
+function monSig() {
+  const now = performance.now();
+  if (SIG.s === S && now - SIG.t < 100) return SIG.v;
+  let a = 0, b = 0;
+  for (const m of S.monsters) { a = (a + m.lv * 7 + (m.star || 0) * 131 + (m.fav ? 1009 : 0) + (m.nick ? 3 : 0) + ((m.runes && (m.runes[0] || 0) + (m.runes[1] || 0)) || 0) * 17) % 1e12; b = (b * 31 + m.uid + m.hab * 7) % 1e9; }
+  SIG = { t: now, s: S, v: S.monsters.length + ':' + a + ':' + b + ':' + S.team.join(',') + ':' + S.hatch.length };
+  return SIG.v;
+}
+const MEMO_C = {};
+function monMemo(key, fn) { const v = monSig(); const e = MEMO_C[key]; if (e && e.v === v && e.s === S) return e.r; const r = fn(); MEMO_C[key] = { v, s: S, r }; return r; }
+// 가장 큰 값 (아주 많아도 멈추지 않게 하나씩)
+const maxBy = (arr, f, init) => { let m = init; for (const x of arr) { const v = f(x); if (v > m) m = v; } return m; };
+// 아주 많은 것을 한꺼번에 넣기 (push(...큰 배열)은 10만 개쯤에서 멈춘다)
+const pushAll = (to, list) => { for (let k = 0; k < list.length; k++) to.push(list[k]); return to; };
 const shuffle = (arr) => {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
@@ -1034,7 +1049,7 @@ function compactAllSaves() {
 }
 // 저장은 1.5초 동안 모아서 한 번에 (압축이 오래 걸리지 않게). 창을 닫거나 숨길 때는 바로
 let SAVE_T = null, SAVE_ACC = null, SAVE_S = null, lastSaved = {}, lastFullWarn = 0;
-let SAVE_SEQ = 0, ZIP_W, ZIP_BUSY = false;
+let SAVE_SEQ = 0, ZIP_W, ZIP_BUSY = false, lastJsonLen = 0;
 const savedSeq = {};
 const fullWarn = () => { if (Date.now() - lastFullWarn > 60000) { lastFullWarn = Date.now(); toast('⚠️ 저장 공간이 부족해요! 안 쓰는 계정을 지우면 자리가 생겨요'); } };
 function zipWorker() {
@@ -1062,6 +1077,7 @@ function flushSave(urgent = true) {
   SAVE_ACC = SAVE_S = null;
   if (!acc || !s) return true;
   const json = JSON.stringify(s);
+  lastJsonLen = json.length;
   if (lastSaved[acc] === json) return true;
   const seq = ++SAVE_SEQ;
   if (!urgent && json.length > SAVE_ZIP_AT) {
@@ -1071,6 +1087,7 @@ function flushSave(urgent = true) {
   }
   const ok = writeSave(acc, json);
   if (ok) { lastSaved[acc] = json; savedSeq[acc] = seq; } else fullWarn();
+  lastJsonLen = json.length;
   return !!ok;
 }
 function storageUsedKB() { let n = 0; try { for (let k = 0; k < localStorage.length; k++) { const key = localStorage.key(k); n += key.length + (localStorage.getItem(key) || '').length; } } catch (e) { /* 없음 */ } return Math.round(n * 2 / 1024); }
@@ -1098,12 +1115,13 @@ document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 's' || e.key === 'S' || e.key === 'ㄴ')) { e.preventDefault(); saveNow(); }
 });
 function save() {
+  if (typeof incDirty === 'function') incDirty();
   if (VISIT) return;   // 친구 섬 구경 중에는 저장하지 않는다
   if (!ACC) return;
   // 다른 계정/섬으로 바뀌었으면 앞의 것부터 저장
   if (SAVE_ACC && (SAVE_ACC !== ACC.id || SAVE_S !== S)) flushSave();
   SAVE_ACC = ACC.id; SAVE_S = S;
-  if (!SAVE_T) SAVE_T = setTimeout(() => flushSave(false), 1500);
+  if (!SAVE_T) SAVE_T = setTimeout(() => flushSave(false), lastJsonLen > 5e6 ? 15000 : 1500);
 }
 
 let S = load() || newState();
@@ -1135,7 +1153,24 @@ function habMons(i) {
 // 서식지에 들어갈 수 있는 몬스터 수 = 레벨 (최소 2마리, Lv.100이면 100마리). 쌓이는 골드는 무제한
 const habCap = (i) => Math.max(2, S.plots[i].lv);
 const habLvBonus = (i) => (S.plots[i].lv - 1) * HAB_LV_BONUS;
-const habIncome = (i) => habMons(i).reduce((s, m) => s + monIncome(m), 0) * (1 + (habLvBonus(i) + decoPercent(islandOf(i)) + guildPct() + petPct('gold') + kdLv('gold') * 10 + wonderPct()) / 100) * (boostOn() ? 2 : 1) * evtGoldMult(S.plots[i].el);
+let INC_T = { t: -1e9, s: null, n: -1, ml: -1, arr: null };
+const incDirty = () => { INC_T.t = -1e9; };
+function incTable() {
+  const now = performance.now();
+  if (INC_T.arr && INC_T.s === S && INC_T.n === S.plots.length && INC_T.ml === S.monsters.length && now - INC_T.t < 1000) return INC_T.arr;
+  const arr = new Float64Array(S.plots.length);
+  for (const m of S.monsters) if (m.hab >= 0 && m.hab < arr.length) arr[m.hab] += monIncome(m);
+  const glob = guildPct() + petPct('gold') + kdLv('gold') * 10 + wonderPct(), boost = boostOn() ? 2 : 1, evm = {};
+  for (let i = 0; i < arr.length; i++) {
+    const p = S.plots[i];
+    if (!p || p.kind !== 'hab' || !arr[i]) { arr[i] = 0; continue; }
+    const em = evm[p.el] != null ? evm[p.el] : (evm[p.el] = evtGoldMult(p.el));
+    arr[i] *= (1 + (habLvBonus(i) + decoPercent(islandOf(i)) + glob) / 100) * boost * em;
+  }
+  INC_T = { t: now, s: S, n: S.plots.length, ml: S.monsters.length, arr };
+  return arr;
+}
+const habIncome = (i) => (incTable()[i] || 0);
 const habGoldCap = () => Infinity;
 const feedCost = (m) => m.lv * 20;
 const sellPrice = (m) => Math.round(RAR[CAT[m.type].rarity].cost * 0.5 * (1 + m.lv * 0.2));
@@ -1813,14 +1848,18 @@ function buyCloner() {
   toast('🧬 복제기를 세웠어요! 섬에서 눌러서 몬스터를 복제해요');
   render();
 }
+const CLONE_VIEW = { n: 60, fav: false };
 function openCloner() {
   tutFlag('cloner', true);
   if (clonerIdx() < 0) { toast('먼저 상점에서 🧬 복제기를 사야 해요 (💰 ' + shortNum(CLONER_COST) + ')'); return; }
-  const list = S.monsters.slice().sort((a, b) => rIdx(b.type) - rIdx(a.type) || (b.star || 0) - (a.star || 0) || b.lv - a.lv);
+  const all = monMemo('cloneList', () => fastSortMons(S.monsters, 'rar'));
+  const list = CLONE_VIEW.fav ? all.filter(m => m.fav) : all, shown = list.slice(0, CLONE_VIEW.n);
   showModal(`<div class="cloner-head"><span class="cl-ico">🧬</span><div><h3>복제기</h3>
       <div class="muted">몬스터를 누르면 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요 (룬은 빼고)</div>
       <div class="cl-cost">한 번에 💰 ${shortNum(CLONE_COST)} · 지금까지 ${fmt(stat('clone'))}번 복제</div></div></div>
-    <div class="grid small cloner-grid">${list.length ? list.map(m => card(m, `data-act="cloneMon" data-uid="${m.uid}"`, 'mini', `<div class="price-tag">🧬 복제</div>`)).join('') : '<p class="muted">복제할 몬스터가 없어요</p>'}</div>
+    <div class="chips"><button class="chip ${CLONE_VIEW.fav ? '' : 'on'}" data-act="cloneView" data-fav="0">🐾 모두 (${fmt(all.length)})</button><button class="chip ${CLONE_VIEW.fav ? 'on' : ''}" data-act="cloneView" data-fav="1">💖 최애만</button></div>
+    <div class="grid small cloner-grid">${shown.length ? shown.map(m => card(m, `data-act="cloneMon" data-uid="${m.uid}"`, 'mini', `<div class="price-tag">🧬 복제</div>`)).join('') : '<p class="muted">복제할 몬스터가 없어요</p>'}</div>
+    ${list.length > shown.length ? `<div class="row"><button class="btn ghost small" data-act="cloneMore">⬇️ 더 보기 (${fmt(list.length - shown.length)}마리 더)</button></div>` : ''}
     <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
 }
 function cloneMon(uid) {
@@ -1831,7 +1870,7 @@ function cloneMon(uid) {
   if (!spend(CLONE_COST)) return;
   S.monsters.push({ uid: S.nextUid++, type: m.type, lv: m.lv, star: m.star || 0, hab: home.i, runes: [null, null] });
   statAdd('clone', 1);
-  sfx('hatch'); save(); updateHud(); render();
+  sfx('hatch'); save(); updateHud(); if (tab === 'island') render();
   toast(`🧬 ${CAT[m.type].face} ${CAT[m.type].name} Lv.${m.lv}${m.star ? ' ' + '★'.repeat(m.star) : ''} 복제 완료! → ${habName(S.plots[home.i].el)}`);
   const box = $('#modalBox'), y = box.scrollTop;
   openCloner(); box.scrollTop = y;
@@ -1913,7 +1952,7 @@ function evtGoldMult(el) {
   if (ev.id === 'element' && ev.el === el) return 2;
   return 1;
 }
-const totalIncome = () => S.plots.reduce((s, p, i) => s + (p && p.kind === 'hab' ? habIncome(i) : 0), 0);
+const totalIncome = () => { const a = incTable(); let s = 0; for (let i = 0; i < a.length; i++) s += a[i]; return s; };
 function evtCycle() {
   const d = new Date(), days = Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
   return Math.floor(days / EVT_DAYS);
@@ -3398,7 +3437,8 @@ function openResInfo(r) {
 // 스토리: 마법사 루나가 한 번에 하나씩 퀘스트를 준다 (6장 30개). 주간: 월요일마다 4개
 const QNPC = { face: '🧙‍♀️', name: '마법사 루나' };
 const stat = (k) => (S.stat && S.stat[k]) || 0;
-const maxRank = () => Math.max(-1, ...S.monsters.map(m => RANK[CAT[m.type].rarity]));
+const maxRank = () => monMemo('maxRank', () => maxBy(S.monsters, m => RANK[CAT[m.type].rarity], -1));
+const maxStar = () => monMemo('maxStar', () => maxBy(S.monsters, m => m.star || 0, 0));
 const habCount = () => S.plots.filter(p => p && p.kind === 'hab').length;
 // 보상 주기
 function qReward(r) {
@@ -3424,7 +3464,7 @@ const QUESTS = [
   { text: '도감을 10마리 채워요', say: '세상에는 20,000마리가 넘는 몬스터가 있대요. 하나씩 기록해 봐요!', now: () => Object.keys(S.dex).length, need: 10, r: { gems: 10 } },
   { text: '모험 스테이지 3에 가요', say: '섬 밖에는 야생 몬스터가 있어요. 우리 팀의 힘을 보여 줘요!', now: () => S.stage, need: 3, r: { gold: 3000, rune: 1 } },
   { ch: '2장 · 커져 가는 왕국' },
-  { text: '서식지 하나를 Lv.3으로 올려요', say: '몬스터가 많아지면 집이 좁아져요. 서식지를 넓혀 줘요!', now: () => Math.max(0, ...S.plots.filter(p => p && p.kind === 'hab').map(p => p.lv)), need: 3, r: { gold: 5000 } },
+  { text: '서식지 하나를 Lv.3으로 올려요', say: '몬스터가 많아지면 집이 좁아져요. 서식지를 넓혀 줘요!', now: () => maxBy(S.plots.filter(p => p && p.kind === 'hab'), p => p.lv, 0), need: 3, r: { gold: 5000 } },
   { text: '농장을 3개 가져요', say: '배고픈 몬스터가 많아요! 농장을 늘려서 먹이를 넉넉히 키워요.', now: () => S.plots.filter(p => p && p.kind === 'farm').length, need: 3, r: { food: 2000 } },
   { text: '희귀 등급 몬스터를 얻어요', say: '교배를 계속하면 더 좋은 등급이 나와요. 희귀 몬스터를 만나 봐요!', now: () => (maxRank() >= RANK.rare ? 1 : 0), need: 1, r: { gems: 15 } },
   { text: '골드를 5번 걷어요', count: 'collect', need: 5, say: '몬스터들이 열심히 번 골드예요. 잊지 말고 걷어 줘요!', r: { gold: 5000 } },
@@ -3451,7 +3491,7 @@ const QUESTS = [
   { text: '신화 몬스터를 얻어요', say: '전설보다 더 높은 존재, 신화… 전설끼리 교배해 봐요!', now: () => (maxRank() >= RANK.mythic ? 1 : 0), need: 1, r: { gems: 100 } },
   { text: '도감을 200마리 채워요', say: '당신은 이제 최고의 몬스터 박사예요!', now: () => Object.keys(S.dex).length, need: 200, r: { gems: 100 } },
   { text: '모험 스테이지 30에 가요', say: '세상 끝까지 모험을 떠나요!', now: () => S.stage, need: 30, r: { gems: 100 } },
-  { text: '★3 몬스터를 만들어요', say: '별 세 개의 몬스터라니, 눈이 부셔요!', now: () => Math.max(0, ...S.monsters.map(m => m.star || 0)), need: 3, r: { gems: 100 } },
+  { text: '★3 몬스터를 만들어요', say: '별 세 개의 몬스터라니, 눈이 부셔요!', now: () => maxStar(), need: 3, r: { gems: 100 } },
   { text: '초월 몬스터를 얻어요', say: '마지막 시험이에요. 신들의 세계, 초월 등급에 닿아 봐요!', now: () => (maxRank() >= RANK.divine ? 1 : 0), need: 1, r: { gems: 300, legend: 1 } },
 ];
 const QLIST = QUESTS.filter(q => !q.ch);
@@ -5672,7 +5712,7 @@ function oldHatchAll() {
   const eggs = S.hatch.slice();
   S.hatch = [];
   const r = fastPlace(eggs), born = r.born, stuck = r.stuck;
-  S.hatch.push(...stuck);
+  pushAll(S.hatch, stuck);
   save();
   render();
   showModal(`
@@ -5988,10 +6028,15 @@ function starFuse(uid) {
   openMon(m.uid);
 }
 // 별 합성할 수 있는 종류들 (같은 몬스터 3마리 이상)
-function starReady() {
-  const by = {};
-  S.monsters.forEach(m => { (by[m.type] = by[m.type] || []).push(m); });
-  return Object.values(by).filter(l => l.length >= 3 && l.some(m => (m.star || 0) < STAR_MAX)).map(l => l.slice().sort((a, b) => (b.star || 0) - (a.star || 0) || b.lv - a.lv)[0]);
+function starReady() { return monMemo('star', starReadyRaw); }
+const byTypeMap = () => monMemo('byType', () => { const mp = new Map(); for (const m of S.monsters) { const a = mp.get(m.type); if (a) a.push(m); else mp.set(m.type, [m]); } return mp; });
+function starReadyRaw() {
+  const out = [];
+  for (const l of byTypeMap().values()) {
+    if (l.length < 3 || !l.some(m => (m.star || 0) < STAR_MAX)) continue;
+    out.push(l.slice().sort((a, b) => (b.star || 0) - (a.star || 0) || b.lv - a.lv)[0]);
+  }
+  return out;
 }
 function openStarList() {
   tutFlag('star', true);
@@ -6132,9 +6177,11 @@ function sell(uid) {
 
 // ----- 겹치는 몬스터 팔기: 종류마다 한 마리만 남긴다 -----
 // 가장 좋은 한 마리(레벨 → 룬 → 먼저 얻은 순)는 남기고, 모험 팀에 있는 몬스터도 팔지 않는다
-function dupPlan(onlyType) {
+function dupPlan(onlyType) { return onlyType ? dupPlanRaw(onlyType) : monMemo('dup', () => dupPlanRaw()); }
+function dupPlanRaw(onlyType) {
   const groups = {};
-  S.monsters.forEach(m => { if (!onlyType || m.type === onlyType) (groups[m.type] = groups[m.type] || []).push(m); });
+  if (onlyType) { const l = byTypeMap().get(onlyType); if (l) groups[onlyType] = l; }
+  else for (const [t, l] of byTypeMap()) if (l.length >= 2) groups[t] = l;
   const rows = [];
   let gold = 0;
   const sellList = [];
@@ -6149,7 +6196,7 @@ function dupPlan(onlyType) {
     if (!sell.length) return;
     const g = sell.reduce((t, m) => t + sellPrice(m), 0);
     gold += g;
-    sellList.push(...sell);
+    pushAll(sellList, sell);
     rows.push({ type, total: list.length, keep: keep.length, sell: sell.length, gold: g, best: keep[0] });
   });
   rows.sort((a, b) => rIdx(b.type) - rIdx(a.type) || b.sell - a.sell);
@@ -6243,9 +6290,7 @@ function renderMons() {
       <p>누르면 능력치, 스킬, 룬을 볼 수 있고 먹이를 줄 수 있어요.</p>
     </div>
     ${(() => {
-      const once = S.monsters.filter(m => m.lv < MAX_LV).reduce((s, m) => s + feedCost(m), 0);
-      let toBreed = 0;
-      S.monsters.forEach(m => { for (let lv = m.lv; lv < BREED_LV; lv++) toBreed += lv * 20; });
+      const { once, toBreed } = monMemo('feed', () => { let once = 0, toBreed = 0; for (const m of S.monsters) { if (m.lv < MAX_LV) once += feedCost(m); for (let lv = m.lv; lv < BREED_LV; lv++) toBreed += lv * 20; } return { once, toBreed }; });
       return `<div class="all-box row">
         <button class="btn small" data-act="feedAll" data-mode="once" ${once ? '' : 'disabled'}>🍖 모두 한 번씩 먹이 (🍖 ${fmt(once)})</button>
         <button class="btn small green" data-act="feedAll" data-mode="breed" ${toBreed ? '' : 'disabled'}>🧬 모두 Lv.${BREED_LV}까지 키우기${toBreed ? ` (🍖 ${fmt(toBreed)})` : ' (완료)'}</button>
@@ -6272,32 +6317,53 @@ function renderMons() {
 const MON_VIEW_DEFAULT = { group: 'rar', sort: 'lv', el: 'all', fav: 'off' };
 const monView = () => (S.monView = { ...MON_VIEW_DEFAULT, ...(S.monView || {}) });
 
-function monSummaryHTML() {
-  const inc = S.monsters.reduce((s, m) => s + monIncome(m), 0);
-  const byRar = RAR_ORDER.map(r => [r, S.monsters.filter(m => CAT[m.type].rarity === r).length]).filter(([, n]) => n);
+function monSummaryHTML() { return monMemo('summary', monSummaryRaw); }
+function monSummaryRaw() {
+  let inc = 0; const cnt = {}, types = new Set();
+  for (const m of S.monsters) { inc += monIncome(m); const r = CAT[m.type].rarity; cnt[r] = (cnt[r] || 0) + 1; types.add(m.type); }
+  const byRar = RAR_ORDER.map(r => [r, cnt[r] || 0]).filter(([, n]) => n);
   return `<div class="mon-summary">
-    <div class="ms-big"><b>${S.monsters.length}</b><span>마리</span></div>
+    <div class="ms-big"><b>${fmt(S.monsters.length)}</b><span>마리</span></div>
     <div class="ms-big"><b>💰${fmt(inc)}</b><span>초당 골드</span></div>
-    <div class="ms-big"><b>${new Set(S.monsters.map(m => m.type)).size}</b><span>종류</span></div>
+    <div class="ms-big"><b>${fmt(types.size)}</b><span>종류</span></div>
     <div class="ms-rar">${byRar.map(([r, n]) => `<span style="color:${RAR[r].color}">${RAR[r].name} ${n}</span>`).join('')}</div>
   </div>`;
 }
 
+const ownedEls = () => monMemo('ownedEls', () => { const s = new Set(); for (const m of S.monsters) for (const e of CAT[m.type].els) s.add(e); return s; });
+const favCount = () => monMemo('favCount', () => { let n = 0; for (const m of S.monsters) if (m.fav) n++; return n; });
 function monControlsHTML() {
   const v = monView();
   const chip = (key, val, label) =>
     `<button class="chip ${v[key] === val ? 'on' : ''}" data-act="monView" data-k="${key}" data-v="${val}">${label}</button>`;
-  const owned = new Set(S.monsters.flatMap(m => CAT[m.type].els));
+  const owned = ownedEls();
   return `
     <div class="chips"><span class="chip-label">묶어 보기</span>${chip('group', 'rar', '⭐ 등급')}${chip('group', 'el', '🔥 속성')}${chip('group', 'isl', '🏝️ 섬')}${chip('group', 'hab', '🏠 서식지')}${chip('group', 'none', '📋 전체')}</div>
     <div class="chips"><span class="chip-label">정렬</span>${chip('sort', 'lv', '⬆️ 레벨')}${chip('sort', 'rar', '⭐ 등급')}${chip('sort', 'name', '가나다')}${chip('sort', 'new', '🆕 최근')}</div>
     <div class="chips"><span class="chip-label">속성</span>${chip('el', 'all', '전체')}${EL.filter(e => owned.has(e.id)).map(e => chip('el', e.id, e.emoji + e.name)).join('')}</div>
-    <div class="chips"><span class="chip-label">보기</span>${chip('fav', 'off', '🐾 모두')}${chip('fav', 'on', `💖 최애만 (${fmt(S.monsters.filter(m => m.fav).length)})`)}</div>`;
+    <div class="chips"><span class="chip-label">보기</span>${chip('fav', 'off', '🐾 모두')}${chip('fav', 'on', `💖 최애만 (${fmt(favCount())})`)}</div>`;
 }
 
-// 가나다 순서는 한 번만 정해 두고 숫자로 비교 (몬스터가 많아도 빠르게)
+// 가나다 순서는 한 번만 정해 두고 숫자로 비교 (몬스터가 많아도 빠르게) · 켠 뒤 8초쯤에 미리 만든다
+setTimeout(() => { try { nameRank('p:fire'); } catch (e) { /* 아직 */ } }, 8000);
 let NAME_RANK = null;
 const nameRank = (t) => { if (!NAME_RANK) { NAME_RANK = {}; const col = new Intl.Collator('ko'); CAT_LIST.slice().sort((x, y) => col.compare(x.name, y.name)).forEach((c, i) => { NAME_RANK[c.id] = i; }); } return NAME_RANK[t] ?? 0; };
+// 몬스터 정렬을 숫자 하나로 (레벨 · 등급 · 가나다)
+function fastSortMons(list, sort) {
+  const key = new Float64Array(list.length);
+  for (let k = 0; k < list.length; k++) {
+    const m = list[k], r = RANK[CAT[m.type].rarity], lv = Math.min(999, m.lv || 1), nr = nameRank(m.type);
+    key[k] = sort === 'rar' ? (30 - r) * 1e10 + (999 - lv) * 1e6 + nr
+      : sort === 'name' ? nr * 1000 + (999 - lv)
+      : sort === 'new' ? -m.uid
+      : (999 - lv) * 1e8 + (30 - r) * 1e6 + nr;
+  }
+  const idx = new Uint32Array(list.length).map((_, k) => k);
+  idx.sort((a, b) => key[a] - key[b]);
+  const out = new Array(list.length);
+  for (let k = 0; k < idx.length; k++) out[k] = list[idx[k]];
+  return out;
+}
 function monSorter(sort) {
   const byRar = (a, b) => rIdx(b.type) - rIdx(a.type);
   const byLv = (a, b) => b.lv - a.lv;
@@ -6318,31 +6384,33 @@ function redrawKeepScroll() {
 }
 function monGroupsHTML() {
   const v = monView();
-  const list = S.monsters.filter(m => (v.el === 'all' || CAT[m.type].els.includes(v.el)) && (v.fav !== 'on' || m.fav)).sort(monSorter(v.sort));
+  return monMemo('groups:' + JSON.stringify(v) + JSON.stringify(SHOW_MORE), () => monGroupsRaw(v));
+}
+function monGroupsRaw(v) {
+  const list = monMemo('list:' + v.el + v.fav + v.sort, () => fastSortMons(S.monsters.filter(m => (v.el === 'all' || CAT[m.type].els.includes(v.el)) && (v.fav !== 'on' || m.fav)), v.sort));
   if (!list.length) return v.fav === 'on' ? '<p class="muted empty-note">아직 💖 최애 몬스터가 없어요. 몬스터를 누르고 🤍 최애로를 눌러 봐요!</p>' : '<p class="muted empty-note">아직 몬스터가 없어요. 상점에서 알을 사 보세요! 🥚</p>';
   const groups = new Map();
-  const add = (key, label, order, m) => {
-    if (!groups.has(key)) groups.set(key, { label, order, items: [] });
-    groups.get(key).items.push(m);
-  };
-  list.forEach(m => {
+  for (const m of list) {
     const c = CAT[m.type];
-    if (v.group === 'rar') add(c.rarity, `<span style="color:${RAR[c.rarity].color}">⭐ ${RAR[c.rarity].name}</span>`, -rIdx(m.type), m);
-    else if (v.group === 'el') {
-      const key = c.els.join('+');
-      add(key, `${elBadges(c.els)} ${c.els.map(e => EL[ELI[e]].name).join(' + ')}`, c.els.length * 100 + ELI[c.els[0]] * 10 + (ELI[c.els[1]] || 0), m);
-    } else if (v.group === 'isl') {
-      const k = islandOf(m.hab);
-      add(k, `${ISLANDS[k].emoji} ${k + 1}. ${ISLANDS[k].name}`, k, m);
-    } else if (v.group === 'hab') {
-      const p = S.plots[m.hab];
-      add(m.hab, `${habEmoji(p.el)} ${habName(p.el)} Lv.${p.lv} <small class="muted">${islandLabel(m.hab)} · ${habMons(m.hab).length}/${habCap(m.hab)}마리</small>`, m.hab, m);
-    } else add('all', '📋 전체', 0, m);
-  });
-  return [...groups.values()].sort((a, b) => a.order - b.order).map(g => {
-    const inc = g.items.reduce((s, m) => s + monIncome(m), 0), k = 'mon:' + v.group + ':' + g.label;
+    const key = v.group === 'rar' ? c.rarity : v.group === 'el' ? c.els.join('+') : v.group === 'isl' ? islandOf(m.hab) : v.group === 'hab' ? m.hab : 'all';
+    let g = groups.get(key);
+    if (!g) { g = { key, c, m, items: [], inc: 0 }; groups.set(key, g); }
+    g.items.push(m);
+    g.inc += monIncome(m);
+  }
+  // 이름표 · 순서는 묶음마다 한 번만
+  const info = (g) => {
+    const c = g.c, m = g.m;
+    if (v.group === 'rar') return [`<span style="color:${RAR[c.rarity].color}">⭐ ${RAR[c.rarity].name}</span>`, -RANK[c.rarity]];
+    if (v.group === 'el') return [`${elBadges(c.els)} ${c.els.map(e => EL[ELI[e]].name).join(' + ')}`, c.els.length * 100 + ELI[c.els[0]] * 10 + (ELI[c.els[1]] || 0)];
+    if (v.group === 'isl') { const k = islandOf(m.hab); return [`${ISLANDS[k].emoji} ${k + 1}. ${ISLANDS[k].name}`, k]; }
+    if (v.group === 'hab') { const p = S.plots[m.hab] || { el: 'fire', lv: 1 }; return [`${habEmoji(p.el)} ${habName(p.el)} Lv.${p.lv} <small class="muted">${islandLabel(m.hab)} · ${g.items.length}/${habCap(m.hab)}마리</small>`, m.hab]; }
+    return ['📋 전체', 0];
+  };
+  return [...groups.values()].map(g => { const [label, order] = info(g); return { ...g, label, order }; }).sort((a, b) => a.order - b.order).map(g => {
+    const k = 'mon:' + v.group + ':' + g.label;
     return `<div class="mon-group">
-      <h3 class="mg-head">${g.label} <span class="mg-count">${fmt(g.items.length)}마리 · 초당 💰${fmt(inc)}</span></h3>
+      <h3 class="mg-head">${g.label} <span class="mg-count">${fmt(g.items.length)}마리 · 초당 💰${fmt(g.inc)}</span></h3>
       <div class="grid">${g.items.slice(0, showN(k)).map(m => card(m, `data-act="openMon" data-uid="${m.uid}"`)).join('')}</div>
       ${moreBtn(k, g.items.length)}
     </div>`;
@@ -6495,7 +6563,7 @@ function buyAllMons(kind) {
   const cost = list.reduce((s, t) => s + buyAllPrice(kind, t), 0);
   if (!confirm(`🛒 없는 몬스터 ${list.length}마리를 모두 살까요?\n💰 ${shortNum(cost)}`)) return;
   if (!spend(cost)) return;
-  S.hatch.push(...list);     // 한꺼번에 살 때는 부화장 칸 수를 넘어도 괜찮아요 → 바로 부화
+  pushAll(S.hatch, list);     // 한꺼번에 살 때는 부화장 칸 수를 넘어도 괜찮아요 → 바로 부화
   list.forEach(() => mission('buyEgg'));
   sfx('buy');
   toast(`🛒 ${list.length}마리를 샀어요! 바로 부화시킬게요`);
@@ -6752,7 +6820,7 @@ function buyEveryEgg() {
   if (!spend(cost)) return;
   mission('buyEgg', list.length);
   const r = fastPlace(list);
-  S.hatch.push(...r.stuck);
+  pushAll(S.hatch, r.stuck);
   sfx('yay');
   save(); render(); updateHud();
   showModal(`<h3>🥚 모든 알 사기 완료!</h3>
@@ -6770,7 +6838,7 @@ function allShopBuyAll() {
   const cost = list.reduce((s, t) => s + anyPrice(t), 0);
   if (!confirm(`🛒 없는 몬스터 ${list.length}마리를 모두 살까요?\n💰 ${shortNum(cost)}`)) return;
   if (!spend(cost)) return;
-  S.hatch.push(...list);
+  pushAll(S.hatch, list);
   mission('buyEgg', list.length);
   sfx('buy');
   toast(`🛒 ${list.length}마리를 샀어요! 바로 부화시킬게요`);
@@ -7007,10 +7075,13 @@ function renderAdventure() {
 // ----- 모험 팀 고르기: 등급/속성별로 나눠 보기 + 상대에게 강한 몬스터 표시 -----
 const teamView = () => (S.teamView = { group: 'rar', el: 'all', sort: 'power', strong: false, ...(S.teamView || {}) });
 function teamPickHTML(foeEls) {
+  return monMemo('teampick:' + JSON.stringify(teamView()) + foeEls.join(',') + JSON.stringify(SHOW_MORE), () => teamPickRaw(foeEls));
+}
+function teamPickRaw(foeEls) {
   const v = teamView();
   const chip = (key, val, label) =>
     `<button class="chip ${String(v[key]) === String(val) ? 'on' : ''}" data-act="teamView" data-k="${key}" data-v="${val}">${label}</button>`;
-  const owned = new Set(S.monsters.flatMap(m => CAT[m.type].els));
+  const owned = ownedEls();
   // 이 몬스터의 속성 중 하나라도 상대 팀 속성에게 강하면 ▲
   const strongVs = (m) => CAT[m.type].els.some(e => BEATS[e].some(x => foeEls.includes(x)));
   const POW = new Map();
@@ -7018,11 +7089,14 @@ function teamPickHTML(foeEls) {
   const sorter = v.sort === 'lv' ? (a, b) => b.lv - a.lv || rIdx(b.type) - rIdx(a.type)
     : v.sort === 'rar' ? (a, b) => rIdx(b.type) - rIdx(a.type) || b.lv - a.lv
     : (a, b) => powerOf(b) - powerOf(a);
-  const list0 = S.monsters
-    .filter(m => v.el === 'all' || CAT[m.type].els.includes(v.el))
-    .filter(m => !v.strong || strongVs(m));
-  if (v.sort !== 'lv' && v.sort !== 'rar') list0.forEach(powerOf);
-  const list = list0.sort(sorter);
+  const list = monMemo('team:' + v.el + v.strong + v.sort + foeEls.join(','), () => {
+    const list0 = S.monsters
+      .filter(m => v.el === 'all' || CAT[m.type].els.includes(v.el))
+      .filter(m => !v.strong || strongVs(m));
+    if (v.sort === 'lv' || v.sort === 'rar') return fastSortMons(list0, v.sort);
+    list0.forEach(powerOf);
+    return list0.sort(sorter);
+  });
   const cardOf = (m) => {
     const i = S.team.indexOf(m.uid);
     const tag = `${i >= 0 ? `<div class="check">${i + 1}</div>` : ''}${strongVs(m) ? '<div class="strong-tag">▲ 강함</div>' : ''}<div class="power-tag">⚔️${fmt(powerOf(m))}</div>`;
@@ -10440,7 +10514,7 @@ const ACH = [
   ...[5, 20, 50, 100].map((n, k) => ({ id: 'kd' + n, text: `🏛️ 왕국 발전 합계 Lv.${n}`, now: () => KINGDOM.reduce((s, x) => s + kdLv(x.id), 0), need: n, gems: [20, 50, 120, 300][k] })),
   ...[1, 4, 8].map((n, k) => ({ id: 'wonder' + n, text: `🗽 랜드마크 ${n}개 세우기`, now: () => DECOS.filter(d => d.wonder && S.plots.some(p => p && p.kind === 'deco' && p.id === d.id)).length, need: n, gems: [30, 100, 500][k] })),
   ...[1, 3, 6].map((n, k) => ({ id: 'evpet' + n, text: `🎉 이벤트 한정 펫 ${n}마리`, now: () => PETS.filter(p => p.event && petLv(p.id)).length, need: n, gems: [30, 100, 300][k] })),
-  ...[1, 3, 5].map((n, k) => ({ id: 'star' + n, text: `⭐ ★${n} 몬스터 만들기`, now: () => Math.max(0, ...S.monsters.map(m => m.star || 0)), need: n, gems: [10, 40, 150][k] })),
+  ...[1, 3, 5].map((n, k) => ({ id: 'star' + n, text: `⭐ ★${n} 몬스터 만들기`, now: () => maxStar(), need: n, gems: [10, 40, 150][k] })),
   ...[1, 10, 50].map((n, k) => ({ id: 'altar' + n, text: `🔮 합성 제단 ${n}번 쓰기`, now: () => S.altarCount || 0, need: n, gems: [10, 40, 150][k] })),
   { id: 'guild1', text: '🛡️ 길드에 들어가거나 만들기', now: () => (S.guild ? 1 : 0), need: 1, gems: 20 },
   ...[200, 500, 900, 1400].map((n, k) => ({ id: 'troph' + n, text: `🏆 트로피 ${fmt(n)} 모으기`, now: () => S.trophies || 0, need: n, gems: [10, 20, 40, 60][k] })),
@@ -10576,15 +10650,19 @@ function achNotify() {
 }
 setInterval(achNotify, 5000);
 const achReady = (a) => !(S.achGot || []).includes(a.id) && a.now() >= a.need;
-function misClaimable() {
+let MIS_DOT = { t: -1e9, v: false };
+function misClaimable() { const now = performance.now(); if (now - MIS_DOT.t > 3000) MIS_DOT = { t: now, v: misClaimableRaw() }; return MIS_DOT.v; }
+function misClaimableRaw() {
   const m = misToday();
   return m.ids.some(id => (m.prog[id] || 0) >= MISSIONS.find(x => x.id === id).need && !m.got.includes(id)) ||
-    (!m.bonus && m.got.length >= 3) || ACH.some(achReady);
+    (!m.bonus && m.got.length >= 3) || achDotCached();
 }
+let ACH_DOT = { t: -1e9, v: false };
+function achDotCached() { const now = performance.now(); if (now - ACH_DOT.t > 5000) ACH_DOT = { t: now, v: ACH.some(achReady) }; return ACH_DOT.v; }
 function updateMisDot() {
   const d = $('#misDot'); if (d) d.classList.toggle('on', misClaimable());
   const m = $('#menuDot');
-  if (m) { let on = false; try { on = misClaimable() || qReady() || weekReady() || ACH.some(achReady); } catch (e) { /* 아직 준비 전 */ } m.classList.toggle('on', on); }
+  if (m) { let on = false; try { on = misClaimable() || qReady() || weekReady() || achDotCached(); } catch (e) { /* 아직 준비 전 */ } m.classList.toggle('on', on); }
 }
 // ☰ 메뉴 (폰): 작은 버튼 대신 큰 글자 버튼으로
 function openMenu() {
@@ -11820,6 +11898,8 @@ const ACTIONS = {
   buyAllMons: (d) => buyAllMons(d.kind),
   buyAny: (d) => buyAny(d.type),
   buyEveryEgg: () => buyEveryEgg(),
+  cloneMore: () => { CLONE_VIEW.n += 240; const box = $('#modalBox'), y = box.scrollTop; openCloner(); box.scrollTop = y; },
+  cloneView: (d) => { CLONE_VIEW.fav = d.fav === '1'; CLONE_VIEW.n = 60; openCloner(); },
   buyCreator: () => buyCreator(),
   nickOpen: (d) => openNick(d.uid),
   labOpen: () => openLab(),
@@ -12248,6 +12328,7 @@ async function startLoading() {
   const bar = setInterval(() => {
     shown += Math.max(0.4, (target - shown) * 0.18);
     if (shown > target) shown = target;
+    if (!$('#ldFill')) { clearInterval(bar); return; }
     $('#ldFill').style.width = shown + '%';
     $('#ldPct').textContent = Math.floor(shown) + '%';
   }, 30);
