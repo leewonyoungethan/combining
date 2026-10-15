@@ -3418,6 +3418,7 @@ function unitTableHTML() {
     <div class="ut-grid">${NUM_UNITS.slice().reverse().map(([u, s], i) => `<span><b>${s}</b><small>10<sup>${3 * (i + 1)}</sup></small></span>`).join('')}</div></details>`;
 }
 let UT_OPEN = false;
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing && e.target && e.target.id === 'findName') { ADMIN_FIND = e.target.value.trim(); const o = $('#findOut'); if (o) o.innerHTML = ADMIN_FIND ? adminFindHTML(ADMIN_FIND) : ''; } });
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing && e.target && e.target.id === 'allShopQ') { ALL_SHOP.q = e.target.value.trim().slice(0, 20); ALL_SHOP.page = 0; allShopRedraw(); } });
 document.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('unit-table') && e.target.open) tutFlag('unitTable', true); if (e.target.classList && e.target.classList.contains('price-table') && e.target.open) tutFlag('priceTable', true); }, true);
 function openResInfo(r) {
@@ -10136,6 +10137,33 @@ async function adminSign(name, until, reason) {
   return b;
 }
 const BAN_TIMES = [[30, '30분'], [60, '1시간'], [720, '12시간'], [1440, '1일'], [10080, '7일'], [43200, '30일']];
+let ADMIN_FIND = '';
+// 랭킹 기록에서 이름이 들어간 사람 찾기 (최근에 들어온 순)
+function adminFindHTML(q) {
+  let st = {};
+  try { st = JSON.parse(lsGet(RANK_STORE) || '{}') || {}; } catch (e) { st = {}; }
+  const n = q.trim().toLowerCase();
+  const list = Object.values(st).filter(p => p && !p.del && String(p.n || '').toLowerCase().includes(n)).sort((a, b) => (b.t || 0) - (a.t || 0)).slice(0, 30);
+  if (!list.length) return '<p class="muted">찾는 사람이 없어요. (랭킹에 올라온 사람만 찾을 수 있어요 · 🔄 새로 받기를 눌러 봐요)</p>';
+  const ago = (t) => { const s = Date.now() / 1000 - (t || 0); return s < 3600 ? Math.max(1, Math.round(s / 60)) + '분 전' : s < 86400 ? Math.round(s / 3600) + '시간 전' : Math.round(s / 86400) + '일 전'; };
+  const banned = banStore();
+  return `<div class="find-list">${list.map(p => { const nm = String(p.n || ''), b = banned[nm.toLowerCase()];
+    return `<div class="find-row">
+      <span class="find-face">${esc(p.f || '🥚')}</span>
+      <div class="find-info"><b>${esc(nm)}</b>${b && b.until > Date.now() ? ' <small class="ban-tag">⛔ 정지 중</small>' : ''}
+        <small>📖 도감 ${fmt(p.dex || 0)} · ⚔️ 스테이지 ${fmt(p.st || 1)} · 🏆 ${fmt(p.tr || 0)}${p.gn ? ' · 🛡️ ' + esc(p.gn) : ''} · ${ago(p.t)} 접속</small></div>
+      <div class="find-btns"><button class="btn small" data-act="adminPick" data-n="${esc(nm)}" data-to="ban">⛔ 정지</button><button class="btn small" data-act="adminPick" data-n="${esc(nm)}" data-to="take">🫳 가져가기</button></div>
+    </div>`; }).join('')}</div>`;
+}
+// 찾은 사람 이름을 정지 / 가져가기 칸에 넣고 그쪽으로
+function adminPick(name, to) {
+  const inp = $(to === 'ban' ? '#banName' : '#takeName');
+  if (!inp) return;
+  inp.value = name;
+  inp.scrollIntoView({ block: 'center' });
+  inp.classList.add('flash-in'); setTimeout(() => inp.classList.remove('flash-in'), 900);
+  toast(to === 'ban' ? `⛔ "${name}" — 아래에서 정지할 시간을 골라요` : `🫳 "${name}" — 아래에서 가져갈 것을 골라요`);
+}
 async function openAdmin() {
   if (!isAdminAcc() && !document.querySelector('#adminKeyIn')) return;
   const k = await adminKey();
@@ -10147,7 +10175,11 @@ async function openAdmin() {
     return;
   }
   const bans = Object.values(banStore()).filter(b => b.until > Date.now()).sort((a, b) => a.until - b.until);
-  showModal(`<div class="admin-box"><h3>🛡️ 제작자 메뉴 · 계정 정지</h3>
+  showModal(`<div class="admin-box"><h3>🛡️ 제작자 메뉴</h3>
+    <h4 class="sub">🔍 사람 찾기</h4>
+    <div class="row as-search"><input id="findName" maxlength="20" placeholder="이름으로 찾기" autocomplete="off" value="${esc(ADMIN_FIND)}"><button class="btn small" data-act="adminFind">🔍 찾기</button></div>
+    <div id="findOut">${ADMIN_FIND ? adminFindHTML(ADMIN_FIND) : '<p class="muted">랭킹에 올라온 사람을 이름으로 찾아요. 찾은 사람을 눌러 바로 정지하거나 가져갈 수 있어요.</p>'}</div>
+    <h4 class="sub">⛔ 계정 정지</h4>
     <p class="muted">정지할 사람의 <b>이름</b>(계정 이름이나 랭킹에 나오는 이름)을 적고 시간을 골라요. 1~3분 안에 모든 기기에 퍼져요.</p>
     <input id="banName" maxlength="20" placeholder="이름 (예: minjun)" autocomplete="off">
     <input id="banWhy" maxlength="40" placeholder="이유 (없어도 돼요)" autocomplete="off">
@@ -12044,10 +12076,12 @@ const ACTIONS = {
   records: () => openRecords(),
   adminOpen: () => openAdmin(),
   adminTake: (d) => adminTake(d.w),
+  adminFind: () => { ADMIN_FIND = (($('#findName') || {}).value || '').trim(); const o = $('#findOut'); if (o) o.innerHTML = ADMIN_FIND ? adminFindHTML(ADMIN_FIND) : ''; },
+  adminPick: (d) => adminPick(d.n, d.to),
   adminKeySet: () => adminKeySet(),
   banGo: (d) => banGo(d.m),
   banUndo: (d) => banUndo(d.n),
-  adminRefresh: () => { banFetch().then(openAdmin); },
+  adminRefresh: () => { toast('🔄 받아 오는 중…'); Promise.allSettled([banFetch(), rankFetch()]).then(openAdmin); },
   syncHost: () => syncHost(),
   syncJoinOpen: () => syncJoinOpen(),
   syncJoin: () => syncJoin(),

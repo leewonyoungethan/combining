@@ -1,5 +1,10 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  '🔍 사람 찾기': '🔍 Find a player', '이름으로 찾기': 'Search by name', '⛔ 계정 정지': '⛔ Suspend account', '⛔ 정지 중': '⛔ suspended',
+  '랭킹에 올라온 사람을 이름으로 찾아요. 찾은 사람을 눌러 바로 정지하거나 가져갈 수 있어요.': 'Find players on the ranking by name, then suspend or take from them right away.',
+  '찾는 사람이 없어요. (랭킹에 올라온 사람만 찾을 수 있어요 · 🔄 새로 받기를 눌러 봐요)': 'No one found. (Only players on the ranking can be found · try 🔄 Refresh)',
+  '⛔ 정지': '⛔ Suspend', '{}분 전': '{} min ago', '{}시간 전': '{} h ago', '{}일 전': '{} days ago', '🔄 받아 오는 중…': '🔄 Loading…',
+  '⛔ "{}" — 아래에서 정지할 시간을 골라요': '⛔ "{}" — pick how long below', '🫳 "{}" — 아래에서 가져갈 것을 골라요': '🫳 "{}" — pick what to take below',
   '🛡️ 제작자에게서 온 소식': '🛡️ News from the creator', '알겠어요': 'OK', '🫳 가져가기': '🫳 Take away',
   '가져올 사람 이름': 'Name of the player', '이유 (그 사람에게 보여요 · 없어도 돼요)': 'Reason (shown to them · optional)',
   '🫳 제작자가 {} {}마리를 가져갔어요': '🫳 The creator took away {} {}', '🫳 제작자가 {}을 가져갔어요': '🫳 The creator took away {}',
