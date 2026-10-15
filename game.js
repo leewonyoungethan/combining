@@ -10052,6 +10052,16 @@ setInterval(() => { if (!document.hidden && Date.now() - banLastFetch > 3 * 60 *
 // 제작자 열쇠 (이 기기에만 저장)
 const isAdminAcc = () => ACC && String(ACC.name || '').trim() === ADMIN_NAME;
 let ADMIN_KEY = null;
+// 제작자 열쇠는 비밀번호로 잠가 두었다 (비밀번호를 넣으면 이 기기에서 열쇠가 풀린다)
+const ADMIN_LOCK = {"s":"e6kPp6FHpEavUASUyt6FeA","iv":"_lH1aT8I98_TVgiH","ct":"TmVelhAFyPG0LqKmSuPT_zgvRsCzp7uYXPkH0cArz8c030PEXB9XlI7l7YuCOw4BGjzrsO1k8_aYVXXyCy2e_kWorFa17mzFor-497FkRFVUvMJtO_Ki4oaOCPrQ11DLIAsjx482pmurcxaVpzrLUNkUgvc2fShvRygumqk6VUFrE3bl1OZ0gZK9hAX0DPOToIc708fJQcBBNg","it":300000};
+async function adminUnlock(pw) {
+  try {
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+    const aes = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: unb64u(ADMIN_LOCK.s), iterations: ADMIN_LOCK.it, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const raw = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64u(ADMIN_LOCK.iv) }, aes, unb64u(ADMIN_LOCK.ct)));
+    return b64u(raw);
+  } catch (e) { return null; }
+}
 async function adminKey() {
   if (ADMIN_KEY) return ADMIN_KEY;
   const raw = lsGet('combining-admin-key');
@@ -10072,9 +10082,9 @@ async function openAdmin() {
   const k = await adminKey();
   if (!k) {
     showModal(`<div class="admin-box"><h3>🛡️ 제작자 메뉴</h3>
-      <p class="muted">이 기기에서 처음 쓰려면 <b>제작자 비밀 열쇠</b>를 한 번 넣어야 해요. (열쇠는 이 기기에만 저장돼요)</p>
-      <textarea id="adminKeyIn" class="code-box" placeholder="제작자 비밀 열쇠를 붙여 넣어요"></textarea>
-      <div class="row"><button class="btn green" data-act="adminKeySet">🔑 열쇠 넣기</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+      <p class="muted">이 기기에서 처음 쓰려면 <b>제작자 비밀번호</b>를 한 번 넣어야 해요. (이 기기만 기억해요)</p>
+      <input id="adminKeyIn" type="password" autocomplete="off" placeholder="제작자 비밀번호">
+      <div class="row"><button class="btn green" data-act="adminKeySet">🔑 비밀번호 넣기</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
     return;
   }
   const bans = Object.values(banStore()).filter(b => b.until > Date.now()).sort((a, b) => a.until - b.until);
@@ -10088,13 +10098,15 @@ async function openAdmin() {
     <div class="row"><button class="btn ghost small" data-act="adminRefresh">🔄 새로 받기</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
 }
 async function adminKeySet() {
-  const v = (($('#adminKeyIn') || {}).value || '').trim();
+  let v = (($('#adminKeyIn') || {}).value || '').trim();
+  if (v.length < 60) { toast('🔑 확인하는 중…'); v = (await adminUnlock(v)) || ''; }
+  if (!v) { toast('❌ 비밀번호가 맞지 않아요'); return; }
   lsSet('combining-admin-key', v); ADMIN_KEY = null;
   const b = await adminSign('test', 0, '');
-  if (!b || !(await banVerify(b))) { lsDel('combining-admin-key'); ADMIN_KEY = null; toast('❌ 열쇠가 맞지 않아요'); return; }
-  toast('🔑 제작자 열쇠를 넣었어요!'); sfx('yay');
+  if (!b || !(await banVerify(b))) { lsDel('combining-admin-key'); ADMIN_KEY = null; toast('❌ 비밀번호가 맞지 않아요'); return; }
+  toast('🔑 제작자 비밀번호가 맞아요!'); sfx('yay');
   if (isAdminAcc()) openAdmin();
-  else { closeModal(); toast(`🔑 열쇠를 넣었어요! 이제 👤 계정 → ✏️ 이름 바꾸기에서 "${ADMIN_NAME}"(으)로 바꾸면 제작자 메뉴가 생겨요`); }
+  else { closeModal(); toast(`🔑 비밀번호가 맞아요! 이제 👤 계정 → ✏️ 이름 바꾸기에서 "${ADMIN_NAME}"(으)로 바꾸면 제작자 메뉴가 생겨요`); }
 }
 async function banGo(minutes) {
   const name = (($('#banName') || {}).value || '').trim();
@@ -11056,10 +11068,10 @@ function submitCode() {
     closeModal();
     if (isAdminAcc()) { openAdmin(); return; }
     if (lsGet('combining-admin-key')) { toast(`🔑 열쇠가 있어요! 👤 계정 → ✏️ 이름 바꾸기에서 이름을 "${ADMIN_NAME}"(으)로 바꿔요`); return; }
-    showModal(`<div class="admin-box"><h3>🔑 제작자 열쇠 넣기</h3>
-      <p class="muted">제작자 비밀 열쇠를 넣으면 이 기기에서 "${ADMIN_NAME}" 이름을 쓸 수 있어요.</p>
-      <textarea id="adminKeyIn" class="code-box" placeholder="제작자 비밀 열쇠를 붙여 넣어요"></textarea>
-      <div class="row"><button class="btn green" data-act="adminKeySet">🔑 열쇠 넣기</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+    showModal(`<div class="admin-box"><h3>🔑 제작자 비밀번호</h3>
+      <p class="muted">제작자 비밀번호를 넣으면 이 기기에서 "${ADMIN_NAME}" 이름을 쓸 수 있어요.</p>
+      <input id="adminKeyIn" type="password" autocomplete="off" placeholder="제작자 비밀번호">
+      <div class="row"><button class="btn green" data-act="adminKeySet">🔑 비밀번호 넣기</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
     return;
   }
   if (v === SECRET_CODE) {
