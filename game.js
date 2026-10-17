@@ -8002,7 +8002,7 @@ function rankNorm(d, t) {
   if (!d || d.v !== 1 || typeof d.id !== 'string' || RANK_HIDE.has(d.id)) return null;
   const num = (x, hi) => Math.max(0, Math.min(hi, Math.floor(Number(x) || 0)));
   return { id: d.id.slice(0, 20), n: safeName(String(d.n || '플레이어').slice(0, 10)), f: String(d.f || '🥚').slice(0, 4),
-    tr: num(d.tr, 99999), dex: num(d.dex, CAT_LIST.length), st: num(d.st, 9999), pw: num(d.pw, 1e8), t: Number(t) || 0, tt: num(d.tt, TITLES.length - 1),
+    tr: num(d.tr, 1e9), dex: num(d.dex, CAT_LIST.length), st: num(d.st, 1e15), pw: num(d.pw, 1e300), t: Number(t) || 0, tt: num(d.tt, TITLES.length - 1),
     g: typeof d.g === 'string' ? d.g.slice(0, 12) : '', gn: d.gn ? safeName(String(d.gn).slice(0, 12), '길드') : '', ge: String(d.ge || '🛡️').slice(0, 4), gl: d.gl ? 1 : 0,
     dt: Array.isArray(d.dt) ? d.dt.slice(0, 3).filter(x => x && CAT[x.type]) : [], del: d.del ? 1 : 0 };
 }
