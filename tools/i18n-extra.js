@@ -1,5 +1,7 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  '👥 "{}" 찾은 사람 {}명 (최근 접속 순)': '👥 Found for "{}": {} players (most recent first)', '👥 랭킹에 올라온 사람 {}명 (최근 접속 순)': '👥 {} players on the ranking (most recent first)',
+  '⬇️ 더 보기 ({}명 더)': '⬇️ Show more ({} more)',
   '⚡ 전투력 모드': '⚡ Power mode', '🔒 ⚡ 전투력 모드': '🔒 ⚡ Power mode', '⚡ 전투력 모드 · 전투력으로 바로 계산!': '⚡ Power mode · Calculated instantly from battle power!',
   '⚡ 1 · 2 · 4배는 무료! ⚡ 전투력 모드는 💰 10Qi로 열어요 (전투력이 클수록 훨씬 빨라져요!)': '⚡ 1 · 2 · 4× are free! ⚡ Power mode unlocks for 💰 10Qi (the stronger you are, the faster it goes!)',
   '⚡ 전투력 모드: 싸우는 장면 없이 전투력으로 바로 계산! 지금 내 팀이면 1초에 약': '⚡ Power mode: no battle scenes, calculated from power! With your team now, about',
