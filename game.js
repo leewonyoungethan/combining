@@ -3418,6 +3418,7 @@ function unitTableHTML() {
     <div class="ut-grid">${NUM_UNITS.slice().reverse().map(([u, s], i) => `<span><b>${s}</b><small>10<sup>${3 * (i + 1)}</sup></small></span>`).join('')}</div></details>`;
 }
 let UT_OPEN = false;
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing && e.target && e.target.id === 'dmText') { const b = $('#modalBox [data-act=dmWrite]'); if (b) b.click(); } });
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing && e.target && e.target.id === 'findName') { ADMIN_FIND = e.target.value.trim(); ADMIN_FIND_N = 50; const o = $('#findOut'); if (o) o.innerHTML = adminFindHTML(ADMIN_FIND); } });
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing && e.target && e.target.id === 'allShopQ') { ALL_SHOP.q = e.target.value.trim().slice(0, 20); ALL_SHOP.page = 0; allShopRedraw(); } });
 document.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('unit-table') && e.target.open) tutFlag('unitTable', true); if (e.target.classList && e.target.classList.contains('price-table') && e.target.open) tutFlag('priceTable', true); }, true);
@@ -8160,11 +8161,17 @@ const DM_SAY = ['안녕! 👋', '반가워! 😊', '고마워! 🙏', '잘 가! 
   '😀', '😎', '🥳', '😢', '😮', '❤️', '🔥', '⭐'];
 const DM_KEEP = 150;
 const dmBlocked = (id) => (S.dmBlock || []).some(b => b.id === id);
+const dmText = (x) => (typeof x.s === 'string' ? esc(x.s) : DM_SAY[x.m] || '');
 const dmNew = () => (S.dms || []).filter(x => !x.me && !x.read).length;
 let dmLast = 0;
-async function dmSend(id, m) {
+async function dmSend(id, m, s) {
   m = Math.floor(Number(m));
-  if (!(m >= 0 && m < DM_SAY.length)) return;
+  if (s != null) {
+    s = String(s).trim();
+    const bad = chatProblem(s);
+    if (bad) { toast(bad); return false; }
+    if (!swearOk(s)) return false;
+  } else if (!(m >= 0 && m < DM_SAY.length)) return false;
   if (!S.rankId || !ACC) { toast('계정이 있어야 말을 걸 수 있어요'); return; }
   if (id === S.rankId) { toast('자기 자신에게는 보낼 수 없어요 😅'); return; }
   if (dmBlocked(id)) { toast('🚫 차단한 사람이에요. 차단을 풀면 보낼 수 있어요'); return; }
@@ -8173,13 +8180,16 @@ async function dmSend(id, m) {
   if (!S.dmDay || S.dmDay.d !== day) S.dmDay = { d: day, n: 0 };
   if (S.dmDay.n >= 60) { toast('💬 오늘은 말을 많이 보냈어요. 내일 또 해요!'); return; }
   dmLast = Date.now();
-  const ok = await frPost(id, { k: 'dm', m });
+  const ok = await frPost(id, s != null ? { k: 'dm', s } : { k: 'dm', m });
   if (!ok) { toast('⚠️ 인터넷으로 보내지 못했어요. 다시 해 주세요'); return; }
   S.dmDay.n++;
   const p = dmPerson(id);
-  S.dms = (S.dms || []).concat([{ id, n: p.n, f: p.f, m, t: Math.floor(Date.now() / 1000), me: 1 }]).slice(-DM_KEEP);
+  const x = { id, n: p.n, f: p.f, t: Math.floor(Date.now() / 1000), me: 1 };
+  if (s != null) x.s = s; else x.m = m;
+  S.dms = (S.dms || []).concat([x]).slice(-DM_KEEP);
   save();
-  toast(`💬 ${p.n}님에게 "${DM_SAY[m]}" 보냈어요 (받는 데 조금 걸려요)`);
+  toast(`💬 ${p.n}님에게 보냈어요 (받는 데 조금 걸려요)`);
+  return true;
 }
 // 이름 · 얼굴 찾기 (랭킹 → 친구 → 받은 말)
 function dmPerson(id) {
@@ -8195,8 +8205,9 @@ function openDmSay(id) {
   const p = dmPerson(id);
   const talk = (S.dms || []).filter(x => x.id === id).slice(-8);
   showModal(`<div class="dm-panel"><h3>💬 ${esc(p.f)} ${esc(p.n)}님에게 말 걸기</h3>
-    <p class="muted">🛡️ 안전을 위해 정해진 말과 이모지만 보낼 수 있어요</p>
-    ${talk.length ? `<div class="dm-talk">${talk.map(x => `<div class="dm-msg ${x.me ? 'me' : ''}">${x.me ? '' : esc(x.f) + ' '}${DM_SAY[x.m]}</div>`).join('')}</div>` : ''}
+    <p class="muted">🛡️ 전화번호 · 주소 · 학교 · 다른 앱 연락처 같은 개인정보는 보낼 수 없어요. 게임 안에서만 이야기해요!</p>
+    ${talk.length ? `<div class="dm-talk">${talk.map(x => `<div class="dm-msg ${x.me ? 'me' : ''}">${x.me ? '' : esc(x.f) + ' '}${dmText(x)}</div>`).join('')}</div>` : ''}
+    <div class="gchat-input"><input id="dmText" maxlength="${GCHAT_MAX}" placeholder="하고 싶은 말을 적어요 (${GCHAT_MAX}자까지)" autocomplete="off"><button class="btn green" data-act="dmWrite" data-id="${esc(id)}">보내기</button></div>
     <div class="dm-say">${DM_SAY.map((s, i) => `<button class="btn small" data-act="dmSend" data-id="${esc(id)}" data-m="${i}">${s}</button>`).join('')}</div>
     <div class="row">${dmBlocked(id) ? `<button class="btn small ghost" data-act="dmUnblock" data-id="${esc(id)}">🔓 차단 풀기</button>` : `<button class="btn small ghost" data-act="dmBlock" data-id="${esc(id)}">🚫 차단</button>`}
       <button class="btn small ghost" data-act="dmBox">📬 받은 말</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
@@ -8217,7 +8228,7 @@ function openDmBox() {
     <p class="muted">🏆 랭킹에서 사람 옆의 💬를 누르면 말을 걸 수 있어요. 싫은 사람은 🚫 차단!</p>
     <div class="fr-list">${people.length ? people.map(x => `<div class="fr-row">
       <span class="fr-face">${esc(x.f)}</span>
-      <span class="fr-name"><b>${esc(x.n)}</b> ${unread[x.id] ? `<span class="dm-new">${unread[x.id]}</span>` : ''}<br><small>${x.me ? '나: ' : ''}${DM_SAY[x.m]}</small> <small class="muted">${frAgo(x.t)}</small></span>
+      <span class="fr-name"><b>${esc(x.n)}</b> ${unread[x.id] ? `<span class="dm-new">${unread[x.id]}</span>` : ''}<br><small>${x.me ? '나: ' : ''}${dmText(x)}</small> <small class="muted">${frAgo(x.t)}</small></span>
       <span class="fr-btns"><button class="btn small green" data-act="dmSay" data-id="${esc(x.id)}">💬 답장</button>
         <button class="btn small ghost" data-act="dmBlock" data-id="${esc(x.id)}" title="차단">🚫</button></span></div>`).join('') : '<p class="muted">아직 받은 말이 없어요.</p>'}</div>
     ${blocks.length ? `<h4>🚫 차단한 사람 ${blocks.length}</h4>${blocks.map(b => `<div class="fr-row"><span class="fr-face">${esc(b.f)}</span><span class="fr-name"><b>${esc(b.n)}</b></span>
@@ -8307,10 +8318,14 @@ async function frPoll() {
         if (fr && !fr.mutual) { fr.mutual = 1; toast(`🤝 ${from.n}님이 친구 요청을 받아 줬어요!`); }
       } else if (d.k === 'dm') {
         const m = Math.floor(Number(d.m));
-        if (m >= 0 && m < DM_SAY.length && !dmBlocked(from.id) && Date.now() / 1000 - ev.time < 12 * 3600) {
-          S.dms = (S.dms || []).concat([{ id: from.id, n: from.n, f: from.f, m, t: ev.time }]).slice(-DM_KEEP);
+        const s = typeof d.s === 'string' ? d.s.trim() : null;
+        const good = s != null ? !chatProblem(s) : (m >= 0 && m < DM_SAY.length);
+        if (good && !dmBlocked(from.id) && Date.now() / 1000 - ev.time < 12 * 3600) {
+          const x = { id: from.id, n: from.n, f: from.f, t: ev.time };
+          if (s != null) x.s = s; else x.m = m;
+          S.dms = (S.dms || []).concat([x]).slice(-DM_KEEP);
           news++;
-          toast(`💬 ${from.n}님: ${DM_SAY[m]}`);
+          toast(`💬 ${from.n}님: ${s != null ? s : DM_SAY[m]}`);
         }
       } else if (d.k === 'gift') {
         if (fr) { S.frGifts = (S.frGifts || []).concat([{ id: from.id, n: from.n, f: from.f, t: ev.time }]).slice(-50); news++; }
@@ -12092,7 +12107,7 @@ const WELCOME = [
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
   { icon: '🌍', title: '월드 보스', text: '⚔️ 모험 탭의 🌍 월드 보스! 12시간마다 거대한 보스가 나타나요.<br>게임하는 모든 사람이 같이 때려요. 한 사람이 3번씩 공격할 수 있고, 팀이 셀수록 데미지가 커요.<br>공격하면 💎 5, 다 같이 쓰러뜨리면 💎 50, 데미지 1등은 💎 100 더!' },
-  { icon: '💬', title: '말 걸기', text: '🏆 랭킹에서 사람 옆의 💬를 누르면 모르는 사람에게도 말을 걸 수 있어요!<br>🛡️ 안전을 위해 정해진 말과 이모지만 보낼 수 있어요. 받은 말은 📬 받은 말에서 보고 💬 답장!<br>싫은 사람은 🚫 차단하면 더 이상 말이 오지 않아요.' },
+  { icon: '💬', title: '말 걸기', text: '🏆 랭킹에서 사람 옆의 💬를 누르면 모르는 사람에게도 말을 걸 수 있어요!<br>✏️ 하고 싶은 말을 직접 적거나 정해진 말 · 이모지를 눌러요. 🛡️ 개인정보는 보낼 수 없어요. 받은 말은 📬 받은 말에서 보고 💬 답장!<br>싫은 사람은 🚫 차단하면 더 이상 말이 오지 않아요.' },
   { icon: '📊', title: '내 기록', text: '위쪽 👤 계정에서 📊 내 기록을 누르면 ⏱️ 지금까지 게임한 시간이 나와요!<br>몬스터 수, 도감, 가장 긴 연승, 이긴 전투, 미니게임 판수 같은 기록도 한눈에 볼 수 있어요.' },
   { icon: '🧪', title: '합체 실험실', text: '🐾 몬스터 탭의 🧪 합체 실험실에서 내 몬스터 두 마리를 합체해 봐요!<br>살라맨더 + 거북 = 살라북?! 웃긴 이름과 모습, 성격이 나와요. 마음에 들면 📒 앨범에 저장!<br>재미로만 하는 거라 진짜 몬스터는 그대로예요.' },
   { icon: '💖', title: '최애 몬스터 · 섬 사진', text: '몬스터를 누르고 🤍 최애로를 누르면 카드에 💖가 붙어요. 🐾 몬스터 탭의 💖 최애만으로 좋아하는 몬스터만 모아 봐요!<br>섬 오른쪽 📸 버튼을 누르면 내 섬 사진을 찍어서 💾 저장할 수 있어요.' },
@@ -12400,6 +12415,7 @@ const ACTIONS = {
   dmSay: (d) => openDmSay(d.id),
   dmSend: (d) => dmSend(d.id, d.m).then(() => { if ($('#modalBox .dm-panel')) openDmSay(d.id); }),
   dmBox: () => openDmBox(),
+  dmWrite: (d) => { const i = $('#dmText'); dmSend(d.id, 0, i ? i.value : '').then(ok => { if (ok && $('#modalBox .dm-panel')) openDmSay(d.id); }); },
   dmBlock: (d) => dmBlock(d.id),
   dmUnblock: (d) => dmUnblock(d.id),
   dmRefresh: () => frPoll().then(() => { if ($('#modalBox .dm-panel')) openDmBox(); }),

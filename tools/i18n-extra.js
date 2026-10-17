@@ -1,5 +1,7 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  '💬 {}님에게 보냈어요 (받는 데 조금 걸려요)': '💬 Sent to {} (it takes a moment to arrive)', '하고 싶은 말을 적어요 ({}자까지)': 'Type a message (up to {} chars)',
+  '🛡️ 전화번호 · 주소 · 학교 · 다른 앱 연락처 같은 개인정보는 보낼 수 없어요. 게임 안에서만 이야기해요!': "🛡️ Personal info like phone numbers, addresses, schools or other app contacts can't be sent. Keep it in the game!",
   '안녕! 👋': 'Hi! 👋', '반가워! 😊': 'Nice to meet you! 😊', '고마워! 🙏': 'Thanks! 🙏', '잘 가! 👋': 'Bye! 👋', '대단해! 👍': 'Awesome! 👍',
   '섬 멋지다! 🏝️': 'Cool island! 🏝️', '몬스터 멋지다! 🐉': 'Cool monsters! 🐉', '랭킹 1등 축하해! 🏆': 'Congrats on #1! 🏆',
   '같이 월드 보스 잡자! 🌍': "Let's beat the World Boss! 🌍", '친구 하자! 👫': "Let's be friends! 👫", '대전 한 판 할래? ⚔️': 'Want a battle? ⚔️',
@@ -16,7 +18,7 @@ module.exports = {
   '🚫 {}님을 차단했어요': '🚫 Blocked {}', '🔓 차단을 풀었어요': '🔓 Unblocked', '💬 {}님: {}': '💬 {}: {}', '말 걸기': 'Talk',
   '🏆 랭킹에서 사람 옆의 ➕를 눌러도 친구가 돼요 · 💬로 말 걸기': '🏆 Tap ➕ next to a player in the ranking to add them · 💬 to talk',
   '💬 🏆 랭킹에서 📬 받은 말을 열어 봐요 (사람 옆의 💬로 말을 걸 수 있어요!)': '💬 Open 📬 Messages in the 🏆 Ranking (tap 💬 next to a player to talk!)',
-  '🏆 랭킹에서 사람 옆의 💬를 누르면 모르는 사람에게도 말을 걸 수 있어요!<br>🛡️ 안전을 위해 정해진 말과 이모지만 보낼 수 있어요. 받은 말은 📬 받은 말에서 보고 💬 답장!<br>싫은 사람은 🚫 차단하면 더 이상 말이 오지 않아요.': '🏆 Tap 💬 next to a player in the ranking to talk to anyone!<br>🛡️ For safety, only set phrases and emojis can be sent. Read them in 📬 Messages and 💬 reply!<br>🚫 Block someone and their messages stop coming.',
+  '🏆 랭킹에서 사람 옆의 💬를 누르면 모르는 사람에게도 말을 걸 수 있어요!<br>✏️ 하고 싶은 말을 직접 적거나 정해진 말 · 이모지를 눌러요. 🛡️ 개인정보는 보낼 수 없어요. 받은 말은 📬 받은 말에서 보고 💬 답장!<br>싫은 사람은 🚫 차단하면 더 이상 말이 오지 않아요.': '🏆 Tap 💬 next to a player in the ranking to talk to anyone!<br>✏️ Type your own message or tap a set phrase / emoji. 🛡️ Personal info can\'t be sent. Read them in 📬 Messages and 💬 reply!<br>🚫 Block someone and their messages stop coming.',
   '얼마나? 예: 3Ce · 500만 · 50%': 'How much? e.g. 3Ce · 5M · 50%', '🫳 💰 돈 이만큼': '🫳 💰 This much gold', '🫳 💎 보석 이만큼': '🫳 💎 This many gems',
   '얼마나 가져갈지 적어 주세요 (예: 3Ce · 500만 · 50%)': 'Write how much to take (e.g. 3Ce · 5M · 50%)',
   '🫳 제작자가 {} {}을 가져갔어요 (남은 {} {})': '🫳 The creator took {} {} ({} {} left)',
