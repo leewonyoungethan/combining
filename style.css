@@ -1732,3 +1732,5 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .wb-row { display: grid; grid-template-columns: 26px 30px 1fr auto; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 10px; background: rgba(255, 255, 255, .06); text-align: left; }
 .wb-row.me { background: rgba(255, 224, 102, .2); border: 1px solid rgba(255, 224, 102, .6); }
 .wb-row i { font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .wb-row em { font-style: normal; font-weight: 900; }
+
+.ls-sp.power { grid-column: 1 / -1; font-size: 16px; }

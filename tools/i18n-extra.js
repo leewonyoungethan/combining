@@ -1,5 +1,12 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  '⚡ 전투력 모드': '⚡ Power mode', '🔒 ⚡ 전투력 모드': '🔒 ⚡ Power mode', '⚡ 전투력 모드 · 전투력으로 바로 계산!': '⚡ Power mode · Calculated instantly from battle power!',
+  '⚡ 1 · 2 · 4배는 무료! ⚡ 전투력 모드는 💰 10Qi로 열어요 (전투력이 클수록 훨씬 빨라져요!)': '⚡ 1 · 2 · 4× are free! ⚡ Power mode unlocks for 💰 10Qi (the stronger you are, the faster it goes!)',
+  '⚡ 전투력 모드: 싸우는 장면 없이 전투력으로 바로 계산! 지금 내 팀이면 1초에 약': '⚡ Power mode: no battle scenes, calculated from power! With your team now, about',
+  '{}를 열까요?': 'Unlock {}?', '{}가 열렸어요!': '{} unlocked!',
+  '내 팀 ⚔️ {} vs 적 ⚔️ {} · 전투력이 클수록 빨라요 (목표 1초에 {}판)': 'My team ⚔️ {} vs enemy ⚔️ {} · stronger = faster (target {} per second)',
+  '⏩ 🔁 연속 전투를 시작할 때 배속을 골라 봐요 (⚡ 전투력 모드는 💰 10Qi! Esc 키로 나가기)': '⏩ Pick a speed when you start a 🔁 Battle streak (⚡ Power mode is 💰 10Qi! Press Esc to exit)',
+  '는 시작할 때 골라요: 1 · 2 · 4배는 무료,': 'let you choose: 1 · 2 · 4× are free,', '는 💰 10Qi로 열어요. 전투력이 클수록 훨씬 빨라져요!': 'unlocks for 💰 10Qi. The stronger you are, the faster it goes!',
   '🌍 월드 보스': '🌍 World Boss', '모두 같이 거대 보스를 쓰러뜨려요! (12시간마다 새 보스)': 'Defeat a giant boss together! (new boss every 12 hours)',
   '📡 보스 소식을 받아 오는 중…': '📡 Loading boss news…', '💀 쓰러뜨렸어요!': '💀 Defeated!', '모든 사람이 같이 때려요! 👥 {}명 참여 · ⏰ {}시간 {}분 뒤에 새 보스': 'Everyone fights together! 👥 {} players · ⏰ new boss in {}h {}m',
   '🎁 보상 받기': '🎁 Claim reward', '✅ 보상을 받았어요! 다음 보스를 기다려요': '✅ Reward claimed! Wait for the next boss', '이번 보스에는 공격하지 않았어요': 'You did not attack this boss',

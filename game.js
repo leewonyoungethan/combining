@@ -7175,8 +7175,9 @@ function openLoopStart() {
   const cur = S.bSpeed || 1;
   showModal(`<div class="loop-start"><h3>🔁 연속 전투</h3>
     <p class="muted">몇 배속으로 할까요? 이기면 다음 스테이지로 자동으로 계속 싸워요. (전투 중에도 ⏩ 버튼으로 바꿀 수 있어요 · <b>Esc</b> 키로 나가기)</p>
-    <p class="muted small-note">⚡ 1 · 2 · 4배는 무료! 10배부터는 💰로 한 단계씩 열어요 (단계가 오를수록 점점 더 엄청나게 비싸져요!)</p>
-    <div class="ls-grid">${SPEEDS_LOOP.map(sp => { const own = spOwned(sp), nx = spNextLocked() === sp; return `<button class="ls-sp ${sp === cur && own ? 'on' : ''} ${sp >= 1000 ? 'hot' : ''} ${own ? '' : 'locked'} ${nx ? 'next' : ''}" data-act="loopGo" data-sp="${sp}">${own ? `⏩ ${fmt(sp)}배` : `🔒 ${fmt(sp)}배<small>💰 ${shortNum(speedPrice(sp))}</small>`}</button>`; }).join('')}</div>
+    <p class="muted small-note">⚡ 1 · 2 · 4배는 무료! ⚡ 전투력 모드는 💰 10Qi로 열어요 (전투력이 클수록 훨씬 빨라져요!)</p>
+    <div class="ls-grid">${SPEEDS_LOOP.map(sp => { const own = spOwned(sp), nx = spNextLocked() === sp; return `<button class="ls-sp ${sp === cur && own ? 'on' : ''} ${sp === POWER_SPEED ? 'hot power' : ''} ${own ? '' : 'locked'} ${nx ? 'next' : ''}" data-act="loopGo" data-sp="${sp}">${own ? spLabel(sp) : `🔒 ${spLabel(sp)}<small>💰 ${shortNum(speedPrice(sp))}</small>`}</button>`; }).join('')}</div>
+    <p class="muted small-note">⚡ 전투력 모드: 싸우는 장면 없이 전투력으로 바로 계산! 지금 내 팀이면 1초에 약 <b>${fmt(powerRate(unitsPower(S.team.map(byUid).filter(Boolean).map((m, i) => mkUnit(m, 'me', i)))))}</b> 스테이지</p>
     <div class="row"><button class="btn ghost small" data-act="close">취소</button></div></div>`);
 }
 function startLoop() {
@@ -7207,7 +7208,7 @@ function quickLoop() {
   const L = LOOP;
   const bt = $('#battle');
   bt.innerHTML = `<div class="b-inner quick-run">
-    <h2>⚡ ${fmt(bSpeed())}배속 · 전투력으로 바로 계산!</h2>
+    <h2>⚡ 전투력 모드 · 전투력으로 바로 계산!</h2>
     <p class="muted">싸우는 장면 없이 내 팀 전투력과 적 전투력을 비교해서 이기면 바로 다음 스테이지로!</p>
     <div class="qr-stage" id="qrStage"></div>
     <div class="qr-grid"><div><small>연승</small><b id="qrWins">0</b></div><div><small>1초에</small><b id="qrRate">0</b></div><div><small>번 돈</small><b id="qrGold">0</b></div><div><small>번 보석</small><b id="qrGems">0</b></div></div>
@@ -7220,22 +7221,29 @@ function quickLoop() {
     mgSet('#qrStage', `스테이지 ${fmt(S.stage)}`);
     mgSet('#qrWins', fmt(L.wins)); mgSet('#qrRate', fmt(Math.round((L.wins - L.wins0) / sec)) + '판');
     mgSet('#qrGold', '💰 ' + shortNum(L.gold)); mgSet('#qrGems', '💎 ' + shortNum(L.gems));
-    mgSet('#qrPow', `내 팀 ⚔️ ${shortNum(myPow)} vs 적 ⚔️ ${shortNum(fp)}`);
+    mgSet('#qrPow', `내 팀 ⚔️ ${shortNum(myPow)} vs 적 ⚔️ ${shortNum(fp)} · 전투력이 클수록 빨라요 (목표 1초에 ${fmt(powerRate(myPow))}판)`);
   };
+  const rate = powerRate(myPow);
+  L.quota = 0; L.last = performance.now();
   const step = () => {
     if (LOOP !== L) return;
     const t0 = performance.now();
+    // 전투력에 맞춰 이번에 할 판 수
+    L.quota = Math.min(L.quota + rate * (t0 - L.last) / 1000, rate);
+    L.last = t0;
+    const want = Math.floor(L.quota);
     let n = 0, g = 0, gm = 0, fp = 0;
-    // 1000000배부터: 내 팀이 어떤 적보다도 세면 몰아서 (1프레임에 몇 십만 스테이지)
-    if (bSpeed() >= 1000000 && S.stage > 60 && myPow >= foeCap()) {
-      const tour = evtOn('tourney') ? 2 : 1, chunk = bSpeed() >= 10000000 ? 50000 : 5000;
-      while (performance.now() - t0 < 12) {
-        for (let k = 0; k < chunk; k++) { const st = S.stage; g += stageGold(st) * tour; gm += st % 5 === 0 ? 20 : 5; S.stage++; n++; }
+    // 내 팀이 어떤 적보다도 세면 몰아서
+    if (S.stage > 60 && myPow >= foeCap()) {
+      const tour = evtOn('tourney') ? 2 : 1;
+      while (n < want && performance.now() - t0 < 12) {
+        const end = Math.min(want, n + 5000);
+        for (; n < end; n++) { const st = S.stage; g += stageGold(st) * tour; gm += st % 5 === 0 ? 20 : 5; S.stage++; }
       }
       fp = foeCap() / 1.3;
     } else
-    while (performance.now() - t0 < 12) {
-      for (let k = 0; k < 10; k++) {
+    while (n < want && performance.now() - t0 < 12) {
+      for (let k = 0; k < 10 && n < want; k++) {
         const st = S.stage;
         fp = foePower(st);
         if (myPow < fp) {
@@ -7250,9 +7258,10 @@ function quickLoop() {
         S.stage++; n++;
       }
     }
-    earn(g); earn(gm, 'gems'); mission('win', n);
+    L.quota -= n;
+    if (n) { earn(g); earn(gm, 'gems'); mission('win', n); }
     L.gold += g; L.gems += gm; L.wins += n;
-    draw(fp);
+    draw(fp || foePower(S.stage));
     if (performance.now() - (L.hud || 0) > 300) { L.hud = performance.now(); updateHud(); }
     if (performance.now() - (L.sv || 0) > 3000) { L.sv = performance.now(); save(); }
     nextFrame(step);
@@ -7303,10 +7312,17 @@ function logB(msg) {
   if (B.log.length > 30) B.log.shift();
 }
 // 배속: 보통 전투 1·2·4배, 🔁 연속 전투는 10·25·50·100배까지
-const SPEEDS_LOOP = [1, 2, 4, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 100000, 1000000, 10000000], SPEEDS = [1, 2, 4];
+const POWER_SPEED = 1e9;   // ⚡ 전투력 모드 (배속 대신 전투력으로 빨라진다)
+const SPEEDS_LOOP = [1, 2, 4, POWER_SPEED], SPEEDS = [1, 2, 4];
+const POWER_MODE_PRICE = 1e19;   // 10Qi
 // 값: 10배 1M → 단계가 오를수록 곱하는 수도 커진다 → 10000000배는 최대 돈 전부(100Ce)!
 const SPEED_EXP = [6, 9, 13, 18, 25, 34, 46, 62, 83, 110, 150, 210, 305];   // 10배 · 25배 · … · 10000000배 값의 0의 개수
-const speedPrice = (sp) => { const i = SPEEDS_LOOP.indexOf(sp); if (i < 3) return 0; const e = SPEED_EXP[Math.min(i - 3, SPEED_EXP.length - 1)]; return e >= 305 ? MONEY_CAP : Math.pow(10, e); };
+const speedPrice = (sp) => (sp === POWER_SPEED ? POWER_MODE_PRICE : 0);
+const spLabel = (sp) => (sp === POWER_SPEED ? '⚡ 전투력 모드' : `⏩ ${fmt(sp)}배`);
+// 전투력이 클수록 1초에 더 많은 스테이지 (전투력의 자릿수가 클수록 훨씬 빨라진다)
+const powerRate = (p) => Math.min(2e7, Math.round(10 * Math.pow(Math.log10(Math.max(10, p)), 3)));
+// 예전에 비싼 배속을 산 사람은 전투력 모드를 그냥 준다
+function spMigrate() { const own = S.spdOwn || []; if (!own.includes(POWER_SPEED) && own.some(x => x >= 100 && x !== POWER_SPEED)) S.spdOwn = [...own, POWER_SPEED]; }
 const spOwned = (sp) => speedPrice(sp) === 0 || (S.spdOwn || []).includes(sp);
 const spTop = () => SPEEDS_LOOP.filter(spOwned).pop() || 1;
 const spNextLocked = () => SPEEDS_LOOP.find(sp => !spOwned(sp));
@@ -7315,11 +7331,11 @@ function buySpeed(sp) {
   if (spOwned(sp)) return true;
   const nx = spNextLocked();
   if (sp !== nx) { toast(`🔒 먼저 ⏩ ${fmt(nx)}배를 열어야 해요`); return false; }
-  if (!confirm(`⏩ ${fmt(sp)}배속을 열까요?\n💰 ${shortNum(speedPrice(sp))}`)) return false;
+  if (!confirm(`${spLabel(sp)}를 열까요?\n💰 ${shortNum(speedPrice(sp))}`)) return false;
   if (!spend(speedPrice(sp))) return false;
   S.spdOwn = [...(S.spdOwn || []), sp];
   sfx('level'); save(); updateHud();
-  toast(`⚡ ${fmt(sp)}배속이 열렸어요!`);
+  toast(`${spLabel(sp)}가 열렸어요!`);
   return true;
 }
 // 250배속부터는 타이머(최소 4ms)를 기다리지 않고 바로 다음 차례로 (화면이 멈추지 않게 한 번씩 숨은 쉬면서)
@@ -7347,6 +7363,7 @@ const _clearTimeout = window.clearTimeout.bind(window);
 window.clearTimeout = (t) => { if (t && typeof t === 'object' && 'dead' in t) t.dead = true; else _clearTimeout(t); };
 function bSpeed() {
   let s = S.bSpeed || (S.fastBattle ? 4 : 1);
+  if (!SPEEDS_LOOP.includes(s)) s = s > 4 && spOwned(POWER_SPEED) ? POWER_SPEED : Math.min(4, s);
   if (!spOwned(s)) s = Math.min(s, spTop());
   return LOOP ? s : Math.min(4, s);
 }
@@ -10417,6 +10434,7 @@ function firstAccOk() {
   setTimeout(afterEnter, 300);
 }
 function afterEnter() {
+  try { spMigrate(); } catch (e) { /* 없음 */ }
   setTimeout(() => { try { cmdApply(); } catch (e) { /* 없음 */ } }, 1500);
   if (S && S.syncKey) setTimeout(cloudCheck, 2500);
   countLoginDay();
@@ -11415,7 +11433,7 @@ TUT.push(
   { text: '📅 섬 왼쪽의 📅 할 일에서 오늘 받을 수 있는 것들을 한눈에 봐요 (다 하면 💎10!)', done: () => tutFlag('todo'), go: () => { closeModal(); tab = 'island'; render(); openTodo(); } },
 );
 TUT.push(
-  { text: '⏩ 🔁 연속 전투를 시작할 때 배속을 골라 봐요 (최대 10000배속! Esc 키로 나가기)', done: () => tutFlag('speed') || (S.bSpeed || 1) > 1,
+  { text: '⏩ 🔁 연속 전투를 시작할 때 배속을 골라 봐요 (⚡ 전투력 모드는 💰 10Qi! Esc 키로 나가기)', done: () => tutFlag('speed') || (S.bSpeed || 1) > 1,
     go: () => { closeModal(); tab = 'adventure'; render(); } },
 );
 TUT.push(
@@ -11954,7 +11972,7 @@ const WELCOME = [
   { icon: '🛒', title: '몬스터 전부 사기', text: '상점 🥚 알 칸에서 🛒 없는 몬스터 전부 사기를 누르면<br>아직 없는 몬스터를 한 번에 모두 사서 바로 부화시켜요!<br>알맞은 서식지가 없으면 부화장에서 기다려요.' },
   { icon: '🧩', title: '새 미니게임 4가지', text: '🧩 몬스터 2048: 같은 몬스터를 밀어서 합치면 🥚→🐣→🐥→🐤→🐔→🦅로 진화!<br>🐤 날아라 몬스터: 눌러서 날아올라 기둥 사이를 통과!<br>🧱 탑 쌓기: 왔다 갔다 하는 블록을 딱 맞게 내려놓아 높이 쌓기!<br>🐍 먹보 몬스터: 🍖을 먹을수록 길어지고 빨라져요!' },
   { icon: '🇰🇷', title: '한국 돈 단위', text: '돈이 커지면 K · M · B · T 같은 단위로 줄여서 보여 줘요.<br>위쪽 💰를 누르고 📏 돈 단위 보기에서 🇰🇷 한국 단위를 켜면<br>만 · 억 · 조 · 경 · 해 … 무량대수까지 17가지 한국 단위로 보여요!<br>🔤 aa · ab · ac 알파벳 단위나 🔬 1.2e45 과학 표기로도 볼 수 있어요.' },
-  { icon: '⏩', title: '전투 배속', text: '전투 화면 위쪽 <b>⏩ 배속</b> 버튼을 누를 때마다 빨라져요!<br>보통 전투는 <b>4배</b>까지, <b>🔁 연속 전투</b>는 시작할 때 배속을 골라요: 1 · 2 · 4배는 무료, 10배부터는 <b>💰로 한 단계씩 열어요</b> … 10000 · <b>100000배</b>까지!<br>25배부터는 움직이는 장면을 건너뛰고 결과만 빠르게 보여 줘요. 전투 중에 <b>Esc</b> 키를 누르면 바로 나가요.' },
+  { icon: '⏩', title: '전투 배속', text: '전투 화면 위쪽 <b>⏩ 배속</b> 버튼을 누를 때마다 빨라져요!<br>보통 전투는 <b>4배</b>까지, <b>🔁 연속 전투</b>는 시작할 때 골라요: 1 · 2 · 4배는 무료, <b>⚡ 전투력 모드</b>는 💰 10Qi로 열어요. 전투력이 클수록 훨씬 빨라져요!<br>25배부터는 움직이는 장면을 건너뛰고 결과만 빠르게 보여 줘요. 전투 중에 <b>Esc</b> 키를 누르면 바로 나가요.' },
   { icon: '🛒', title: '상점 칸', text: '상점이 <b>6칸</b>으로 나뉘었어요! 위쪽 버튼으로 바꿔요.<br>🏠 건물 · 🥚 알 · 🎁 특가·상자 · 🧪 아이템 · 🏛️ 강해지기 · 💎 보석<br>새로 생긴 것: <b>🎁 미스터리 상자</b>(골드/보석) · 🪱 미끼 ×10 · 🍖 먹이 10,000 · 🎟️ 미니게임 티켓 · 🔥 레이드 도전권 · ⚔️ 길드전 공격권 · 📦 룬 상자 ×10' },
   { icon: '📅', title: '오늘 할 일', text: '섬 왼쪽의 <b>📅 할 일</b>에 매일 받을 것들이 모여 있어요!<br>🎁 일일 보상 · 📋 미션 · 🎡 룰렛 · 🏁 경주 응원권 · 🎮 미니게임 · 🔥 레이드 · ⚔️ 길드전 · 💌 하트 …<br>남은 개수가 버튼에 숫자로 보이고, <b>가기 →</b>를 누르면 바로 가요. 다 하면 <b>💎 10</b> 보너스!' },
   { icon: '🎮', title: '미니게임 20가지', text: '섬 왼쪽의 <b>🎮 미니게임</b> 버튼에 게임이 20가지!<br>🎣 낚시 · 🏁 경주 · 🎡 룰렛 · 🃏 짝 맞추기 · 🔨 두더지 잡기 · ⚡ 반응 속도 · 🔢 숫자 순서 · 🎨 색깔 맞추기 · 🧠 순서 기억 · ➕ 빠른 계산 · 🎈 풍선 터뜨리기 · ✊ 가위바위보 · 🔍 다른 그림 찾기 · 🎲 높을까 낮을까 · 📘 속성 퀴즈 · 🎁 보물 상자 · 🧩 몬스터 2048 · 🐤 날아라 몬스터 · 🧱 탑 쌓기 · 🐍 먹보 몬스터<br>새 게임은 하루 3판씩 무료! 잘할수록 ⭐이 많고 💰💎 보상도 커져요.' },
