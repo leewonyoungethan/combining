@@ -1,5 +1,8 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  '얼마나? 예: 3Ce · 500만 · 50%': 'How much? e.g. 3Ce · 5M · 50%', '🫳 💰 돈 이만큼': '🫳 💰 This much gold', '🫳 💎 보석 이만큼': '🫳 💎 This many gems',
+  '얼마나 가져갈지 적어 주세요 (예: 3Ce · 500만 · 50%)': 'Write how much to take (e.g. 3Ce · 5M · 50%)',
+  '🫳 제작자가 {} {}을 가져갔어요 (남은 {} {})': '🫳 The creator took {} {} ({} {} left)',
   '👑 이원영, 제작자': '👑 Lee Wonyoung, the Creator', '🐉 신화 이상 몬스터': '🐉 Mythic-or-higher monsters', '🎖️ 전설 이상 몬스터': '🎖️ Legendary-or-higher monsters',
   '👥 "{}" 찾은 사람 {}명 (최근 접속 순)': '👥 Found for "{}": {} players (most recent first)', '👥 랭킹에 올라온 사람 {}명 (최근 접속 순)': '👥 {} players on the ranking (most recent first)',
   '⬇️ 더 보기 ({}명 더)': '⬇️ Show more ({} more)',

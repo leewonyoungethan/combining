@@ -10177,6 +10177,13 @@ function cmdApply() {
     } else if (c.what === 'gold' || c.what === 'gems') {
       S.infinite = false; S[c.what] = 0;
       notes.push(`🫳 제작자가 ${TAKE_WHAT[c.what]}을 가져갔어요${c.text ? ' · ' + esc(c.text) : ''}`);
+    } else if (/^(gold|gems):/.test(c.what)) {
+      const cur = c.what.split(':')[0], spec = c.what.slice(cur.length + 1);
+      const have = S.infinite ? MONEY_CAP : (S[cur] || 0);
+      const want = /%$/.test(spec) ? have * Math.min(100, Math.max(0, parseFloat(spec) || 0)) / 100 : parseAmount(spec);
+      const took = Math.max(0, Math.min(have, isFinite(want) ? want : 0));
+      S.infinite = false; S[cur] = Math.max(0, have - took);
+      notes.push(`🫳 제작자가 ${cur === 'gold' ? '💰 돈' : '💎 보석'} ${shortNum(took)}을 가져갔어요 (남은 ${cur === 'gold' ? '💰' : '💎'} ${shortNum(S[cur])})${c.text ? ' · ' + esc(c.text) : ''}`);
     }
   }
   S.cmdDone = [...done].slice(-200);
@@ -10225,13 +10232,23 @@ async function adminTake(what) {
   const why = (($('#takeWhy') || {}).value || '').trim();
   if (!name) { toast('가져올 사람의 이름을 적어 주세요'); return; }
   if (name.toLowerCase() === ADMIN_NAME.toLowerCase()) { toast('제작자 계정에서는 가져올 수 없어요'); return; }
-  if (!confirm(`🫳 "${name}"에게서 ${TAKE_WHAT[what]}을(를) 가져갈까요?\n(그 사람이 게임을 켜면 바로 사라져요)`)) return;
+  let label = TAKE_WHAT[what];
+  // 얼마나 가져갈지 적은 경우
+  if (what === 'goldAmt' || what === 'gemsAmt') {
+    const cur = what === 'goldAmt' ? 'gold' : 'gems';
+    const spec = (($('#takeAmt') || {}).value || '').replace(/[,\s]/g, '');
+    const pct = /^\d+(\.\d+)?%$/.test(spec);
+    if (!spec || (!pct && !(parseAmount(spec) > 0))) { toast('얼마나 가져갈지 적어 주세요 (예: 3Ce · 500만 · 50%)'); return; }
+    what = cur + ':' + spec;
+    label = `${cur === 'gold' ? '💰 돈' : '💎 보석'} ${pct ? spec : shortNum(parseAmount(spec))}`;
+  }
+  if (!confirm(`🫳 "${name}"에게서 ${label}을(를) 가져갈까요?\n(그 사람이 게임을 켜면 바로 사라져요)`)) return;
   const k = await adminKey();
   if (!k) { toast('❌ 제작자 비밀번호를 먼저 넣어 주세요'); return; }
   const c = { kind: 'take', name: name.toLowerCase(), what, text: why.slice(0, 80), at: Date.now() };
   c.sig = b64u(new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, k, new TextEncoder().encode(cmdPayload(c)))));
   const ok = await ntfyPost(BAN_URL, c, false);
-  toast(ok ? `🫳 "${name}"에게서 ${TAKE_WHAT[what]}을(를) 가져가요 (게임을 켜면 바로)` : '⚠️ 인터넷으로 보내지 못했어요. 다시 해 주세요');
+  toast(ok ? `🫳 "${name}"에게서 ${label}을(를) 가져가요 (게임을 켜면 바로)` : '⚠️ 인터넷으로 보내지 못했어요. 다시 해 주세요');
 }
 async function adminSign(name, until, reason) {
   const k = await adminKey();
@@ -10295,6 +10312,8 @@ async function openAdmin(fresh = true) {
     <input id="takeName" maxlength="20" placeholder="가져올 사람 이름" autocomplete="off">
     <input id="takeWhy" maxlength="80" placeholder="이유 (그 사람에게 보여요 · 없어도 돼요)" autocomplete="off">
     <div class="ban-times">${Object.entries(TAKE_WHAT).map(([k, l]) => `<button class="btn small" data-act="adminTake" data-w="${k}">🫳 ${l}</button>`).join('')}</div>
+    <div class="row as-search"><input id="takeAmt" maxlength="20" placeholder="얼마나? 예: 3Ce · 500만 · 50%" autocomplete="off"></div>
+    <div class="ban-times"><button class="btn small" data-act="adminTake" data-w="goldAmt">🫳 💰 돈 이만큼</button><button class="btn small" data-act="adminTake" data-w="gemsAmt">🫳 💎 보석 이만큼</button></div>
     <h4 class="sub">지금 정지된 사람 (${bans.length})</h4>
     ${bans.length ? `<div class="ban-list">${bans.map(b => `<div class="ban-row"><b>${esc(b.name)}</b><small>${lockLeft(b)} 남음${b.reason ? ' · ' + esc(b.reason) : ''}</small><button class="btn ghost small" data-act="banUndo" data-n="${esc(b.name)}">✅ 풀기</button></div>`).join('')}</div>` : '<p class="muted">정지된 사람이 없어요</p>'}
     <div class="row"><button class="btn ghost small" data-act="adminRefresh">🔄 새로 받기</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
