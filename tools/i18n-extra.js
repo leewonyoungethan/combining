@@ -1,5 +1,10 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  '💬 위쪽 💬 채팅 버튼을 눌러 봐요 (메신저처럼 다른 사람과 이야기해요!)': '💬 Tap the 💬 Chat button at the top (talk to others like a messenger!)',
+  '💬 채팅': '💬 Chat', '채팅': 'Chat', '대화 목록': 'Chats', '메시지 보내기…': 'Message…', '빠른 말 · 이모지': 'Quick phrases · emojis',
+  '👋 {}님에게 첫 인사를 보내 봐요!': '👋 Say hi to {}!', '🛡️ 전화번호 · 주소 · 학교 · 다른 앱 연락처 같은 개인정보는 보낼 수 없어요': "🛡️ Personal info like phone numbers, addresses, schools or other app contacts can't be sent",
+  '아직 대화가 없어요.': 'No chats yet.', '🏆 랭킹에서 사람 옆의 💬를 눌러 말을 걸어 봐요!': '🏆 Tap 💬 next to a player in the ranking to start one!',
+  '👫 친구에게 말 걸기': '👫 Talk to a friend', '🏆 랭킹에서 찾기': '🏆 Find in ranking',
   '💬 {}님에게 보냈어요 (받는 데 조금 걸려요)': '💬 Sent to {} (it takes a moment to arrive)', '하고 싶은 말을 적어요 ({}자까지)': 'Type a message (up to {} chars)',
   '🛡️ 전화번호 · 주소 · 학교 · 다른 앱 연락처 같은 개인정보는 보낼 수 없어요. 게임 안에서만 이야기해요!': "🛡️ Personal info like phone numbers, addresses, schools or other app contacts can't be sent. Keep it in the game!",
   '안녕! 👋': 'Hi! 👋', '반가워! 😊': 'Nice to meet you! 😊', '고마워! 🙏': 'Thanks! 🙏', '잘 가! 👋': 'Bye! 👋', '대단해! 👍': 'Awesome! 👍',
@@ -18,7 +23,7 @@ module.exports = {
   '🚫 {}님을 차단했어요': '🚫 Blocked {}', '🔓 차단을 풀었어요': '🔓 Unblocked', '💬 {}님: {}': '💬 {}: {}', '말 걸기': 'Talk',
   '🏆 랭킹에서 사람 옆의 ➕를 눌러도 친구가 돼요 · 💬로 말 걸기': '🏆 Tap ➕ next to a player in the ranking to add them · 💬 to talk',
   '💬 🏆 랭킹에서 📬 받은 말을 열어 봐요 (사람 옆의 💬로 말을 걸 수 있어요!)': '💬 Open 📬 Messages in the 🏆 Ranking (tap 💬 next to a player to talk!)',
-  '🏆 랭킹에서 사람 옆의 💬를 누르면 모르는 사람에게도 말을 걸 수 있어요!<br>✏️ 하고 싶은 말을 직접 적거나 정해진 말 · 이모지를 눌러요. 🛡️ 개인정보는 보낼 수 없어요. 받은 말은 📬 받은 말에서 보고 💬 답장!<br>싫은 사람은 🚫 차단하면 더 이상 말이 오지 않아요.': '🏆 Tap 💬 next to a player in the ranking to talk to anyone!<br>✏️ Type your own message or tap a set phrase / emoji. 🛡️ Personal info can\'t be sent. Read them in 📬 Messages and 💬 reply!<br>🚫 Block someone and their messages stop coming.',
+  '위쪽 💬 채팅 버튼을 누르면 메신저처럼 대화 목록이 나와요! 🏆 랭킹에서 사람 옆의 💬를 누르면 모르는 사람에게도 말을 걸 수 있어요.<br>✏️ 하고 싶은 말을 직접 적거나 정해진 말 · 이모지를 눌러요. 🛡️ 개인정보는 보낼 수 없어요. 받은 말은 📬 받은 말에서 보고 💬 답장!<br>싫은 사람은 🚫 차단하면 더 이상 말이 오지 않아요.': 'Tap the 💬 Chat button at the top to see your chats like a messenger! Tap 💬 next to a player in the ranking to talk to anyone.<br>✏️ Type your own message or tap a set phrase / emoji. 🛡️ Personal info can\'t be sent. Read them in 📬 Messages and 💬 reply!<br>🚫 Block someone and their messages stop coming.',
   '얼마나? 예: 3Ce · 500만 · 50%': 'How much? e.g. 3Ce · 5M · 50%', '🫳 💰 돈 이만큼': '🫳 💰 This much gold', '🫳 💎 보석 이만큼': '🫳 💎 This many gems',
   '얼마나 가져갈지 적어 주세요 (예: 3Ce · 500만 · 50%)': 'Write how much to take (e.g. 3Ce · 5M · 50%)',
   '🫳 제작자가 {} {}을 가져갔어요 (남은 {} {})': '🫳 The creator took {} {} ({} {} left)',

@@ -8201,18 +8201,33 @@ function dmPerson(id) {
   return d ? { n: d.n, f: d.f } : { n: '플레이어', f: '🥚' };
 }
 // 정해진 말 고르기
+const dmTime = (t) => { const d = new Date(t * 1000), now = new Date();
+  const hm = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+  return d.toDateString() === now.toDateString() ? hm : (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hm; };
+let dmEmojiOpen = false;
+// 대화방 (한 사람과 주고받은 말)
 function openDmSay(id) {
+  tutFlag('dm', true);
   const p = dmPerson(id);
-  const talk = (S.dms || []).filter(x => x.id === id).slice(-8);
-  showModal(`<div class="dm-panel"><h3>💬 ${esc(p.f)} ${esc(p.n)}님에게 말 걸기</h3>
-    <p class="muted">🛡️ 전화번호 · 주소 · 학교 · 다른 앱 연락처 같은 개인정보는 보낼 수 없어요. 게임 안에서만 이야기해요!</p>
-    ${talk.length ? `<div class="dm-talk">${talk.map(x => `<div class="dm-msg ${x.me ? 'me' : ''}">${x.me ? '' : esc(x.f) + ' '}${dmText(x)}</div>`).join('')}</div>` : ''}
-    <div class="gchat-input"><input id="dmText" maxlength="${GCHAT_MAX}" placeholder="하고 싶은 말을 적어요 (${GCHAT_MAX}자까지)" autocomplete="off"><button class="btn green" data-act="dmWrite" data-id="${esc(id)}">보내기</button></div>
-    <div class="dm-say">${DM_SAY.map((s, i) => `<button class="btn small" data-act="dmSend" data-id="${esc(id)}" data-m="${i}">${s}</button>`).join('')}</div>
-    <div class="row">${dmBlocked(id) ? `<button class="btn small ghost" data-act="dmUnblock" data-id="${esc(id)}">🔓 차단 풀기</button>` : `<button class="btn small ghost" data-act="dmBlock" data-id="${esc(id)}">🚫 차단</button>`}
-      <button class="btn small ghost" data-act="dmBox">📬 받은 말</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+  const keep = ($('#dmText') && $('#modalBox .dm-room') && $('#modalBox .dm-room').dataset.id === id) ? $('#dmText').value : '';
+  (S.dms || []).forEach(x => { if (x.id === id) x.read = 1; });
+  save(); frDot();
+  const talk = (S.dms || []).filter(x => x.id === id).slice(-60);
+  showModal(`<div class="dm-panel dm-room" data-id="${esc(id)}">
+    <div class="dm-head"><button class="btn small ghost" data-act="dmBox" title="대화 목록">‹</button>
+      <span class="dm-who"><span class="fr-face">${esc(p.f)}</span> <b>${esc(p.n)}</b></span>
+      ${dmBlocked(id) ? `<button class="btn small ghost" data-act="dmUnblock" data-id="${esc(id)}">🔓</button>` : `<button class="btn small ghost" data-act="dmBlock" data-id="${esc(id)}" title="차단">🚫</button>`}
+      <button class="btn small ghost" data-act="close">✕</button></div>
+    <div class="dm-talk" id="dmTalk">${talk.length ? talk.map(x => `<div class="dm-msg ${x.me ? 'me' : ''}"><span class="dm-bub">${dmText(x)}</span><small>${dmTime(x.t)}</small></div>`).join('')
+      : `<p class="muted dm-empty">👋 ${esc(p.n)}님에게 첫 인사를 보내 봐요!<br><small>🛡️ 전화번호 · 주소 · 학교 · 다른 앱 연락처 같은 개인정보는 보낼 수 없어요</small></p>`}</div>
+    ${dmEmojiOpen ? `<div class="dm-say">${DM_SAY.map((s, i) => `<button class="btn small" data-act="dmSend" data-id="${esc(id)}" data-m="${i}">${s}</button>`).join('')}</div>` : ''}
+    <div class="dm-input"><button class="btn small ${dmEmojiOpen ? 'green' : ''}" data-act="dmEmoji" data-id="${esc(id)}" title="빠른 말 · 이모지">😀</button>
+      <input id="dmText" maxlength="${GCHAT_MAX}" placeholder="메시지 보내기…" autocomplete="off" value="${esc(keep)}">
+      <button class="btn green" data-act="dmWrite" data-id="${esc(id)}">➤</button></div></div>`);
+  const box = $('#dmTalk'); if (box) box.scrollTop = box.scrollHeight;
+  const inp = $('#dmText'); if (inp && keep) inp.focus();
 }
-// 받은 말 · 보낸 말 (사람별로 묶어서)
+// 대화 목록 (메신저 첫 화면)
 function openDmBox() {
   tutFlag('dm', true);
   const all = S.dms || [];
@@ -8221,19 +8236,18 @@ function openDmBox() {
   const people = Object.values(last).sort((a, b) => b.t - a.t);
   const unread = {};
   all.forEach(x => { if (!x.me && !x.read) unread[x.id] = (unread[x.id] || 0) + 1; });
-  all.forEach(x => { x.read = 1; });
-  save(); frDot();
   const blocks = S.dmBlock || [];
-  showModal(`<div class="dm-panel"><h3>📬 받은 말</h3>
-    <p class="muted">🏆 랭킹에서 사람 옆의 💬를 누르면 말을 걸 수 있어요. 싫은 사람은 🚫 차단!</p>
-    <div class="fr-list">${people.length ? people.map(x => `<div class="fr-row">
+  const fr = (S.friends || []).filter(f => !last[f.id]).slice(0, 20);
+  showModal(`<div class="dm-panel dm-inbox"><h3>💬 채팅</h3>
+    <div class="dm-list">${people.length ? people.map(x => `<button class="dm-item" data-act="dmSay" data-id="${esc(x.id)}">
       <span class="fr-face">${esc(x.f)}</span>
-      <span class="fr-name"><b>${esc(x.n)}</b> ${unread[x.id] ? `<span class="dm-new">${unread[x.id]}</span>` : ''}<br><small>${x.me ? '나: ' : ''}${dmText(x)}</small> <small class="muted">${frAgo(x.t)}</small></span>
-      <span class="fr-btns"><button class="btn small green" data-act="dmSay" data-id="${esc(x.id)}">💬 답장</button>
-        <button class="btn small ghost" data-act="dmBlock" data-id="${esc(x.id)}" title="차단">🚫</button></span></div>`).join('') : '<p class="muted">아직 받은 말이 없어요.</p>'}</div>
+      <span class="dm-mid"><b>${esc(x.n)}</b><small>${x.me ? '나: ' : ''}${dmText(x)}</small></span>
+      <span class="dm-side"><small class="muted">${dmTime(x.t)}</small>${unread[x.id] ? `<span class="dm-new">${unread[x.id]}</span>` : ''}</span></button>`).join('')
+      : '<p class="muted">아직 대화가 없어요.<br>🏆 랭킹에서 사람 옆의 💬를 눌러 말을 걸어 봐요!</p>'}</div>
+    ${fr.length ? `<h4>👫 친구에게 말 걸기</h4><div class="dm-fr">${fr.map(f => `<button class="btn small" data-act="dmSay" data-id="${esc(f.id)}">${esc(f.f)} ${esc(f.n)}</button>`).join('')}</div>` : ''}
     ${blocks.length ? `<h4>🚫 차단한 사람 ${blocks.length}</h4>${blocks.map(b => `<div class="fr-row"><span class="fr-face">${esc(b.f)}</span><span class="fr-name"><b>${esc(b.n)}</b></span>
       <span class="fr-btns"><button class="btn small ghost" data-act="dmUnblock" data-id="${esc(b.id)}">🔓 풀기</button></span></div>`).join('')}` : ''}
-    <div class="row"><button class="btn ghost small" data-act="dmRefresh">🔄 새로고침</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+    <div class="row"><button class="btn small" data-act="ranking">🏆 랭킹에서 찾기</button><button class="btn ghost small" data-act="dmRefresh">🔄</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
 }
 function dmBlock(id) {
   const p = dmPerson(id);
@@ -8341,9 +8355,11 @@ async function frPoll() {
   save();
   frDot();
   if (news && $('#modalBox .fr-panel')) openFriends();
-  if (news && $('#modalBox .dm-panel')) { const sid = ($('#modalBox [data-act=dmSend]') || {}).dataset; if (sid && sid.id) openDmSay(sid.id); else openDmBox(); }
+  if (news && $('#modalBox .dm-room')) openDmSay($('#modalBox .dm-room').dataset.id);
+  else if (news && $('#modalBox .dm-inbox')) openDmBox();
 }
 setInterval(() => { if (!document.hidden) frPoll(); }, 45000);
+setInterval(() => { if (!document.hidden && $('#modalBox .dm-panel')) frPoll(); }, 8000);
 setTimeout(frPoll, 8000);
 const frInvOn = () => S.frInv && Date.now() / 1000 - S.frInv.t < 300;
 const frNewCount = () => (S.frReq || []).length + (S.frGifts || []).length + (frInvOn() ? 1 : 0) + dmNew();
@@ -8351,6 +8367,8 @@ function frDot() {
   const b = document.querySelector('.pvp-box [data-act=friends] .fr-dot');
   const n = frNewCount();
   if (b) { b.textContent = n; b.style.display = n ? '' : 'none'; }
+  const c = $('#chatDot'), k = dmNew();
+  if (c) { c.textContent = k > 99 ? '99+' : k; c.classList.toggle('on', k > 0); }
 }
 const frGiftToday = () => (S.frGiftDay && S.frGiftDay.day === dayKey() ? S.frGiftDay : (S.frGiftDay = { day: dayKey(), sent: [], got: 0 }));
 function frSendGift(id) {
@@ -11636,8 +11654,8 @@ TUT.push(
     go: () => { closeModal(); tab = 'adventure'; render(); } },
 );
 TUT.push(
-  { text: '💬 🏆 랭킹에서 📬 받은 말을 열어 봐요 (사람 옆의 💬로 말을 걸 수 있어요!)', done: () => tutFlag('dm'),
-    go: () => { closeModal(); tab = 'adventure'; render(); openRanking(); } },
+  { text: '💬 위쪽 💬 채팅 버튼을 눌러 봐요 (메신저처럼 다른 사람과 이야기해요!)', done: () => tutFlag('dm'),
+    go: () => { closeModal(); openDmBox(); } },
 );
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
@@ -11918,9 +11936,8 @@ function tutPoint(k) {
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['#view [data-act=wbOpen]'];
     case 65: // 💬 말 걸기
-      if (inModal) return ['#modalBox [data-act=dmBox]', '#modalBox [data-act=close]'];
-      if (tab !== 'adventure') return [bottomBtn('adventure')];
-      return ['#view [data-act=ranking]'];
+      if (inModal) return ['#modalBox [data-act=close]'];
+      return ['.hud [data-act=dmBox]'];
   }
   return null;
 }
@@ -12107,7 +12124,7 @@ const WELCOME = [
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
   { icon: '🌍', title: '월드 보스', text: '⚔️ 모험 탭의 🌍 월드 보스! 12시간마다 거대한 보스가 나타나요.<br>게임하는 모든 사람이 같이 때려요. 한 사람이 3번씩 공격할 수 있고, 팀이 셀수록 데미지가 커요.<br>공격하면 💎 5, 다 같이 쓰러뜨리면 💎 50, 데미지 1등은 💎 100 더!' },
-  { icon: '💬', title: '말 걸기', text: '🏆 랭킹에서 사람 옆의 💬를 누르면 모르는 사람에게도 말을 걸 수 있어요!<br>✏️ 하고 싶은 말을 직접 적거나 정해진 말 · 이모지를 눌러요. 🛡️ 개인정보는 보낼 수 없어요. 받은 말은 📬 받은 말에서 보고 💬 답장!<br>싫은 사람은 🚫 차단하면 더 이상 말이 오지 않아요.' },
+  { icon: '💬', title: '말 걸기', text: '위쪽 💬 채팅 버튼을 누르면 메신저처럼 대화 목록이 나와요! 🏆 랭킹에서 사람 옆의 💬를 누르면 모르는 사람에게도 말을 걸 수 있어요.<br>✏️ 하고 싶은 말을 직접 적거나 정해진 말 · 이모지를 눌러요. 🛡️ 개인정보는 보낼 수 없어요. 받은 말은 📬 받은 말에서 보고 💬 답장!<br>싫은 사람은 🚫 차단하면 더 이상 말이 오지 않아요.' },
   { icon: '📊', title: '내 기록', text: '위쪽 👤 계정에서 📊 내 기록을 누르면 ⏱️ 지금까지 게임한 시간이 나와요!<br>몬스터 수, 도감, 가장 긴 연승, 이긴 전투, 미니게임 판수 같은 기록도 한눈에 볼 수 있어요.' },
   { icon: '🧪', title: '합체 실험실', text: '🐾 몬스터 탭의 🧪 합체 실험실에서 내 몬스터 두 마리를 합체해 봐요!<br>살라맨더 + 거북 = 살라북?! 웃긴 이름과 모습, 성격이 나와요. 마음에 들면 📒 앨범에 저장!<br>재미로만 하는 거라 진짜 몬스터는 그대로예요.' },
   { icon: '💖', title: '최애 몬스터 · 섬 사진', text: '몬스터를 누르고 🤍 최애로를 누르면 카드에 💖가 붙어요. 🐾 몬스터 탭의 💖 최애만으로 좋아하는 몬스터만 모아 봐요!<br>섬 오른쪽 📸 버튼을 누르면 내 섬 사진을 찍어서 💾 저장할 수 있어요.' },
@@ -12414,6 +12431,7 @@ const ACTIONS = {
   frReject: (d) => frReject(d.id),
   dmSay: (d) => openDmSay(d.id),
   dmSend: (d) => dmSend(d.id, d.m).then(() => { if ($('#modalBox .dm-panel')) openDmSay(d.id); }),
+  dmEmoji: (d) => { dmEmojiOpen = !dmEmojiOpen; openDmSay(d.id); },
   dmBox: () => openDmBox(),
   dmWrite: (d) => { const i = $('#dmText'); dmSend(d.id, 0, i ? i.value : '').then(ok => { if (ok && $('#modalBox .dm-panel')) openDmSay(d.id); }); },
   dmBlock: (d) => dmBlock(d.id),

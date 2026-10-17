@@ -1742,3 +1742,29 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .dm-msg { align-self: flex-start; background: rgba(127,127,127,.15); border-radius: 12px; padding: 5px 10px; }
 .dm-msg.me { align-self: flex-end; background: #60a5fa; color: #fff; }
 .dm-new { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: #ef4444; color: #fff; font-size: 12px; text-align: center; }
+
+/* 💬 채팅 (메신저) */
+.chat-btn { position: relative; }
+.chat-btn .dot { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: #ff4d6d; color: #fff; font: 800 11px/18px sans-serif; font-style: normal; text-align: center; display: none; border: 2px solid #fff; box-sizing: content-box; }
+.chat-btn .dot.on { display: block; }
+.dm-list { display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow-y: auto; margin: 6px 0; }
+.dm-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; border-radius: 14px; padding: 8px 10px; background: rgba(127,127,127,.12); color: inherit; cursor: pointer; font: inherit; }
+.dm-item:hover { background: rgba(127,127,127,.22); }
+.dm-item .fr-face { font-size: 28px; }
+.dm-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.dm-mid small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .8; }
+.dm-side { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.dm-fr { display: flex; flex-wrap: wrap; gap: 6px; }
+.dm-room { display: flex; flex-direction: column; }
+.dm-head { display: flex; align-items: center; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(127,127,127,.25); }
+.dm-who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; }
+.dm-room .dm-talk { height: 46vh; max-height: none; padding: 8px 2px; }
+.dm-msg { display: flex; flex-direction: column; align-items: flex-start; background: none; padding: 0; max-width: 80%; }
+.dm-msg.me { align-self: flex-end; align-items: flex-end; background: none; color: inherit; }
+.dm-bub { background: rgba(127,127,127,.18); border-radius: 16px 16px 16px 4px; padding: 7px 12px; word-break: break-word; }
+.dm-msg.me .dm-bub { background: #3b82f6; color: #fff; border-radius: 16px 16px 4px 16px; }
+.dm-msg small { font-size: 10px; opacity: .6; margin: 1px 6px; }
+.dm-empty { margin: auto; text-align: center; }
+.dm-room .dm-say { max-height: 22vh; }
+.dm-input { display: flex; gap: 6px; align-items: center; padding-top: 6px; }
+.dm-input input { flex: 1; min-width: 0; border-radius: 20px; padding: 9px 14px; }
