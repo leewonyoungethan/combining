@@ -7055,6 +7055,7 @@ function renderAdventure() {
       <h3>👥 대전 · 친구</h3>
       <p class="muted"><b>🌍 랜덤 대전</b>으로 모르는 사람과 바로 싸우거나, 친구와 방 코드로 싸우고 선물·섬 구경도 해요.</p>
       <div class="friend-grid">
+        <button class="btn big-rnd wb-btn" data-act="wbOpen">🌍 월드 보스<small>모두 같이 거대 보스를 쓰러뜨려요! (12시간마다 새 보스)</small></button>
         <button class="btn big-rnd" data-act="pvpRandom">🌍 랜덤 대전<small>모르는 사람과 바로 매칭! 이기면 🏆 +${TROPHY_WIN}</small></button>
         <button class="btn guild-btn" data-act="guildOpen">🛡️ 길드<small>${S.guild ? `${esc(S.guild.emblem)} ${esc(S.guild.name)} · 골드 +${guildPct()}%` : '길드원과 함께 골드 보너스!'}</small></button>
         <button class="btn rank-btn" data-act="ranking">🏆 랭킹<small>${tierOf(S.trophies).icon} ${tierOf(S.trophies).name} · 🏆 ${fmt(S.trophies || 0)}</small></button>
@@ -8343,6 +8344,83 @@ const GUILD_COST = 5000, GUILD_MAX = 30, GUILD_PCT = 2;
 const GUILD_EMBLEMS = ['🛡️', '⚔️', '🐉', '🦁', '🦅', '🐺', '🔥', '💧', '⚡', '🌿', '🌙', '☀️', '💎', '👑', '🌈', '🍀'];
 const GUILD_LV = [0, 600, 1500, 3000, 5500, 9000, 14000, 21000, 30000, 45000];
 const GUILD_CHAT = ['👋 안녕하세요!', '🤝 같이 해요!', '🙏 고마워요!', '👍 대단해요!', '🆘 도와주세요!', '🎉 축하해요!', '⚔️ 대전 한 판 해요!', '🐣 새 몬스터 얻었어요!', '🌙 잘 자요!', '😄', '😭', '🔥', '❤️', '👑'];
+// ===================== 🌍 월드 보스 =====================
+const WB_TOPIC = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) ? 'monhap-wboss-dev-r4t' : 'monhap-wboss-v1-r4t';
+const WB_URL = 'https://ntfy.sh/' + WB_TOPIC;
+const WB_SLOT_MS = 12 * 3600 * 1000, WB_TRIES = 3, WB_HP = 30000;
+const WB_BOSSES = [
+  { e: '🐙', n: '심해의 대왕 크라켄' }, { e: '🦖', n: '고대 폭군 티라노' }, { e: '🐉', n: '불꽃 대마왕 드레이크' }, { e: '👾', n: '우주 침략자 조그' },
+  { e: '🦍', n: '정글의 왕 콩콩' }, { e: '☃️', n: '얼음 거인 프로스티' }, { e: '🤖', n: '강철 거대 로봇 메카' }, { e: '🦂', n: '사막의 독전갈 킹' },
+];
+const wbSlot = () => Math.floor(Date.now() / WB_SLOT_MS);
+const wbBoss = (s = wbSlot()) => WB_BOSSES[s % WB_BOSSES.length];
+let WB = { slot: -1, hits: [], at: 0 };   // 받아 온 공격 기록
+const wbMine = () => (S.wb && S.wb.slot === wbSlot() ? S.wb : (S.wb = { slot: wbSlot(), tries: 0, dmg: 0, claimed: false }));
+async function wbFetch() {
+  try {
+    const txt = await (await fetch(WB_URL + '/json?poll=1&since=all')).text();
+    const slot = wbSlot(), hits = [];
+    txt.split('\n').forEach(l => { let m, d; try { m = JSON.parse(l); d = JSON.parse(m.message); } catch (e) { return; } if (d && d.s === slot && typeof d.id === 'string' && d.d > 0) hits.push({ id: d.id.slice(0, 20), n: safeName(String(d.n || '').slice(0, 10)), f: String(d.f || '🥚').slice(0, 4), d: Math.min(9999, Math.floor(d.d)) }); });
+    WB = { slot, hits, at: Date.now() };
+  } catch (e) { /* 인터넷 문제 */ }
+}
+// 사람마다 3번까지만 센다 (내 방금 공격은 아직 안 보여도 더해 준다)
+function wbBoard() {
+  const by = {}, cnt = {};
+  for (const h of (WB.slot === wbSlot() ? WB.hits : [])) { cnt[h.id] = (cnt[h.id] || 0) + 1; if (cnt[h.id] > WB_TRIES) continue; const p = by[h.id] || (by[h.id] = { id: h.id, n: h.n, f: h.f, d: 0 }); p.d += h.d; p.n = h.n; }
+  const me = wbMine();
+  if (S.rankId && me.dmg > ((by[S.rankId] && by[S.rankId].d) || 0)) by[S.rankId] = { id: S.rankId, n: safeName(String(S.nick || ACC.name || '나').slice(0, 10)), f: '⭐', d: me.dmg };
+  const list = Object.values(by).sort((a, b) => b.d - a.d);
+  return { list, total: list.reduce((s, p) => s + p.d, 0) };
+}
+// 데미지: 팀 전투력이 셀수록 크지만, 너무 세도 한 방에 끝나지 않게 (0의 개수만큼)
+function wbDamage() {
+  const team = S.team.map(byUid).filter(Boolean);
+  const pw = team.reduce((s, m) => s + monPower(m), 0) || 100;
+  return Math.max(50, Math.round(120 * Math.log10(1 + pw) * (0.85 + Math.random() * 0.3)));
+}
+async function openWorldBoss(refresh = true) {
+  tutFlag('wboss', true);
+  if (refresh) { mgSet('#wbBody', '<p class="muted">📡 보스 소식을 받아 오는 중…</p>'); await wbFetch(); }
+  const boss = wbBoss(), me = wbMine(), { list, total } = wbBoard();
+  const left = Math.max(0, WB_HP - total), dead = left <= 0;
+  const endIn = (wbSlot() + 1) * WB_SLOT_MS - Date.now(), hh = Math.floor(endIn / 3600000), mm = Math.floor(endIn % 3600000 / 60000);
+  const myRank = list.findIndex(p => p.id === S.rankId) + 1;
+  showModal(`<div class="wb-box"><h3>🌍 월드 보스</h3>
+    <div class="wb-boss ${dead ? 'dead' : ''}"><span>${boss.e}</span><b>${boss.n}</b></div>
+    <div class="wb-hp"><div class="wb-fill" style="width:${(left / WB_HP * 100).toFixed(1)}%"></div><span>${dead ? '💀 쓰러뜨렸어요!' : `❤️ ${fmt(left)} / ${fmt(WB_HP)}`}</span></div>
+    <p class="muted">모든 사람이 같이 때려요! 👥 ${fmt(list.length)}명 참여 · ⏰ ${hh}시간 ${mm}분 뒤에 새 보스</p>
+    <div class="row">
+      ${dead ? (me.dmg && !me.claimed ? '<button class="btn big green" data-act="wbClaim">🎁 보상 받기</button>' : me.claimed ? '<p class="muted">✅ 보상을 받았어요! 다음 보스를 기다려요</p>' : '<p class="muted">이번 보스에는 공격하지 않았어요</p>')
+        : `<button class="btn big ${me.tries < WB_TRIES ? 'green' : ''}" data-act="wbHit" ${me.tries < WB_TRIES ? '' : 'disabled'}>⚔️ 공격! (남은 기회 ${WB_TRIES - me.tries}번)</button>`}
+    </div>
+    <p class="muted">내 데미지 💥 ${fmt(me.dmg)}${myRank ? ` · ${myRank}등` : ''} · 공격할 때마다 💎 5 · 쓰러뜨리면 💎 50 + 1등은 💎 100 더!</p>
+    <h4 class="sub">🏆 데미지 순위</h4>
+    <div class="wb-board">${list.length ? list.slice(0, 10).map((p, k) => `<div class="wb-row ${p.id === S.rankId ? 'me' : ''}"><b>${k + 1}</b><span>${esc(p.f)}</span><i>${esc(p.n)}</i><em>💥 ${fmt(p.d)}</em></div>`).join('') : '<p class="muted">아직 아무도 안 때렸어요. 첫 번째가 되어 봐요!</p>'}</div>
+    <div class="row"><button class="btn ghost small" data-act="wbOpen">🔄 새로 보기</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
+async function wbHit() {
+  const me = wbMine();
+  if (me.tries >= WB_TRIES) { toast('이번 보스에는 3번 다 공격했어요!'); return; }
+  if (!S.team.map(byUid).filter(Boolean).length) { toast('먼저 모험 팀을 짜 주세요 (⚡ 자동 편성)'); return; }
+  if (!S.rankId) myRankData();
+  const d = wbDamage();
+  me.tries++; me.dmg += d;
+  earn(5, 'gems'); sfx('win'); save(); updateHud();
+  const ok = await ntfyPost(WB_URL, { s: wbSlot(), id: S.rankId, n: safeName(String(S.nick || ACC.name || '플레이어').slice(0, 10)), f: (CAT[(byUid(S.team[0]) || {}).type] || {}).face || '⭐', d }, false);
+  toast(`💥 ${fmt(d)} 데미지! 💎 5${ok ? '' : ' (인터넷이 안 돼서 순위에는 나중에 보여요)'}`);
+  openWorldBoss(false);
+  const b = document.querySelector('.wb-boss'); if (b) { b.classList.add('hit'); setTimeout(() => b.classList.remove('hit'), 400); }
+}
+function wbClaim() {
+  const me = wbMine(), { list, total } = wbBoard();
+  if (me.claimed || !me.dmg || total < WB_HP) return;
+  const first = list[0] && list[0].id === S.rankId;
+  me.claimed = true;
+  earn(50 + (first ? 100 : 0), 'gems'); sfx('yay'); save(); updateHud();
+  toast(`🎁 보스를 쓰러뜨렸어요! 💎 ${50 + (first ? 100 : 0)}${first ? ' (🥇 1등 보너스!)' : ''}`);
+  openWorldBoss(false);
+}
 const GUILD_TOPIC = (id) => 'https://ntfy.sh/monhap-guild-v1-' + id;
 const guildPts = (members) => members.reduce((s, p) => s + p.tr + p.dex * 2 + 100, 0);
 const guildLvOf = (pts) => GUILD_LV.filter(x => pts >= x).length;
@@ -11394,6 +11472,10 @@ TUT.push(
   { text: '📊 위쪽 👤 계정에서 📊 내 기록을 눌러 봐요 (지금까지 게임한 시간이 나와요!)', done: () => tutFlag('records'),
     go: () => { closeModal(); openRecords(); } },
 );
+TUT.push(
+  { text: '🌍 ⚔️ 모험 탭의 🌍 월드 보스를 눌러 봐요 (모든 사람이 같이 거대 보스를 때려요!)', done: () => tutFlag('wboss'),
+    go: () => { closeModal(); tab = 'adventure'; render(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -11668,6 +11750,10 @@ function tutPoint(k) {
     case 63: // 내 기록
       if (inModal) return ['#modalBox [data-act=records]', '#modalBox [data-act=close]'];
       return ['[data-act=account]'];
+    case 64: // 월드 보스
+      if (inModal) return ['#modalBox [data-act=wbHit]', '#modalBox [data-act=close]'];
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return ['#view [data-act=wbOpen]'];
   }
   return null;
 }
@@ -11853,6 +11939,7 @@ const WELCOME = [
   { icon: '🔮', title: '몬스터 합치기 더!', text: '🐾 몬스터 탭 위쪽에서:<br><b>🔮 합성 제단</b>: 같은 등급 5마리를 바치면 <b>한 등급 위</b> 몬스터 알! (속성이 겹치는 몬스터가 잘 나와요)<br><b>⭐ 별 합성</b>: 같은 몬스터 3마리를 합치면 한 마리가 <b>★+1</b> (최대 ★5, 별마다 체력·공격 +20%, 골드 +30%)' },
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
+  { icon: '🌍', title: '월드 보스', text: '⚔️ 모험 탭의 🌍 월드 보스! 12시간마다 거대한 보스가 나타나요.<br>게임하는 모든 사람이 같이 때려요. 한 사람이 3번씩 공격할 수 있고, 팀이 셀수록 데미지가 커요.<br>공격하면 💎 5, 다 같이 쓰러뜨리면 💎 50, 데미지 1등은 💎 100 더!' },
   { icon: '📊', title: '내 기록', text: '위쪽 👤 계정에서 📊 내 기록을 누르면 ⏱️ 지금까지 게임한 시간이 나와요!<br>몬스터 수, 도감, 가장 긴 연승, 이긴 전투, 미니게임 판수 같은 기록도 한눈에 볼 수 있어요.' },
   { icon: '🧪', title: '합체 실험실', text: '🐾 몬스터 탭의 🧪 합체 실험실에서 내 몬스터 두 마리를 합체해 봐요!<br>살라맨더 + 거북 = 살라북?! 웃긴 이름과 모습, 성격이 나와요. 마음에 들면 📒 앨범에 저장!<br>재미로만 하는 거라 진짜 몬스터는 그대로예요.' },
   { icon: '💖', title: '최애 몬스터 · 섬 사진', text: '몬스터를 누르고 🤍 최애로를 누르면 카드에 💖가 붙어요. 🐾 몬스터 탭의 💖 최애만으로 좋아하는 몬스터만 모아 봐요!<br>섬 오른쪽 📸 버튼을 누르면 내 섬 사진을 찍어서 💾 저장할 수 있어요.' },
@@ -12078,6 +12165,9 @@ const ACTIONS = {
   syncOpen: () => openSync(),
   records: () => openRecords(),
   adminOpen: () => openAdmin(),
+  wbOpen: () => openWorldBoss(),
+  wbHit: () => wbHit(),
+  wbClaim: () => wbClaim(),
   adminTake: (d) => adminTake(d.w),
   adminFind: () => { ADMIN_FIND = (($('#findName') || {}).value || '').trim(); const o = $('#findOut'); if (o) o.innerHTML = ADMIN_FIND ? adminFindHTML(ADMIN_FIND) : ''; },
   adminPick: (d) => adminPick(d.n, d.to),

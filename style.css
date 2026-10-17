@@ -1717,3 +1717,18 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .find-btns { display: flex; flex-direction: column; gap: 4px; }
 .ban-tag { color: #ff6b6b; font-weight: 900; }
 .flash-in { box-shadow: 0 0 0 3px #ffe066 !important; transition: box-shadow .3s; }
+
+/* 🌍 월드 보스 */
+.wb-btn { background: linear-gradient(135deg, #ff6b3d, #7b2cff) !important; }
+.wb-boss { display: flex; flex-direction: column; align-items: center; margin: 6px 0; transition: transform .1s; }
+.wb-boss span { font-size: 84px; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .5)); animation: wbFloat 2.4s ease-in-out infinite; }
+.wb-boss.dead span { filter: grayscale(1) opacity(.6); animation: none; transform: rotate(-90deg); }
+.wb-boss.hit { transform: scale(.9) rotate(-4deg); }
+@keyframes wbFloat { 50% { transform: translateY(-8px); } }
+.wb-hp { position: relative; height: 26px; border-radius: 13px; background: rgba(255, 255, 255, .1); overflow: hidden; margin: 8px 0; }
+.wb-fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #ff3d3d, #ff9a3d); transition: width .4s; }
+.wb-hp span { position: relative; display: block; text-align: center; line-height: 26px; font-weight: 900; }
+.wb-board { display: flex; flex-direction: column; gap: 4px; }
+.wb-row { display: grid; grid-template-columns: 26px 30px 1fr auto; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 10px; background: rgba(255, 255, 255, .06); text-align: left; }
+.wb-row.me { background: rgba(255, 224, 102, .2); border: 1px solid rgba(255, 224, 102, .6); }
+.wb-row i { font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .wb-row em { font-style: normal; font-weight: 900; }

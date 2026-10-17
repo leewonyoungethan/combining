@@ -1,5 +1,15 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  '🌍 월드 보스': '🌍 World Boss', '모두 같이 거대 보스를 쓰러뜨려요! (12시간마다 새 보스)': 'Defeat a giant boss together! (new boss every 12 hours)',
+  '📡 보스 소식을 받아 오는 중…': '📡 Loading boss news…', '💀 쓰러뜨렸어요!': '💀 Defeated!', '모든 사람이 같이 때려요! 👥 {}명 참여 · ⏰ {}시간 {}분 뒤에 새 보스': 'Everyone fights together! 👥 {} players · ⏰ new boss in {}h {}m',
+  '🎁 보상 받기': '🎁 Claim reward', '✅ 보상을 받았어요! 다음 보스를 기다려요': '✅ Reward claimed! Wait for the next boss', '이번 보스에는 공격하지 않았어요': 'You did not attack this boss',
+  '⚔️ 공격! (남은 기회 {}번)': '⚔️ Attack! ({} tries left)', '🏆 데미지 순위': '🏆 Damage ranking', '아직 아무도 안 때렸어요. 첫 번째가 되어 봐요!': 'No one has attacked yet. Be the first!',
+  '🔄 새로 보기': '🔄 Refresh', '이번 보스에는 3번 다 공격했어요!': 'You used all 3 attacks on this boss!',
+  '💥 {} 데미지! 💎 5': '💥 {} damage! 💎 5', '🎁 보스를 쓰러뜨렸어요! 💎 {}': '🎁 The boss is down! 💎 {}', ' (🥇 1등 보너스!)': ' (🥇 1st place bonus!)',
+  '🌍 ⚔️ 모험 탭의 🌍 월드 보스를 눌러 봐요 (모든 사람이 같이 거대 보스를 때려요!)': '🌍 Open 🌍 World Boss in the ⚔️ Adventure tab (everyone fights a giant boss together!)',
+  '월드 보스': 'World Boss',
+  '심해의 대왕 크라켄': 'Kraken, King of the Deep', '고대 폭군 티라노': 'Ancient Tyrant Rex', '불꽃 대마왕 드레이크': 'Flame Overlord Drake', '우주 침략자 조그': 'Zorg the Space Invader',
+  '정글의 왕 콩콩': 'Kongkong, King of the Jungle', '얼음 거인 프로스티': 'Frosty the Ice Giant', '강철 거대 로봇 메카': 'Mecha the Steel Giant', '사막의 독전갈 킹': 'Desert Scorpion King',
   '🔍 사람 찾기': '🔍 Find a player', '이름으로 찾기': 'Search by name', '⛔ 계정 정지': '⛔ Suspend account', '⛔ 정지 중': '⛔ suspended',
   '랭킹에 올라온 사람을 이름으로 찾아요. 찾은 사람을 눌러 바로 정지하거나 가져갈 수 있어요.': 'Find players on the ranking by name, then suspend or take from them right away.',
   '찾는 사람이 없어요. (랭킹에 올라온 사람만 찾을 수 있어요 · 🔄 새로 받기를 눌러 봐요)': 'No one found. (Only players on the ranking can be found · try 🔄 Refresh)',
