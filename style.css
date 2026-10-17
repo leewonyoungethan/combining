@@ -1297,7 +1297,7 @@ body.ui-hidden .evt-btn, body.ui-hidden .quest-btn { opacity: .55; }
 .fr-inv, .fr-gifts { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; padding: 10px; margin: 8px 0; border-radius: 14px; }
 .fr-inv { background: linear-gradient(90deg, rgba(255, 107, 107, .3), rgba(255, 176, 32, .25)); border: 2px solid #ffb020; animation: ldBob 0.8s ease-in-out infinite alternate; }
 .fr-gifts { background: rgba(255, 105, 180, .18); border: 1px solid #ff69b4; }
-.rank-row.rk5 { grid-template-columns: 34px 34px minmax(0, 1fr) auto 28px; }
+.rank-row.rk5 { grid-template-columns: 30px 30px minmax(0, 1fr) auto 28px 28px; }
 .rk-fr { width: 28px; text-align: center; flex: none; }
 .rk-fr.add { border: 0; border-radius: 50%; height: 28px; background: #34d399; color: #fff; font-weight: 900; cursor: pointer; }
 
@@ -1734,3 +1734,11 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .wb-row i { font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .wb-row em { font-style: normal; font-weight: 900; }
 
 .ls-sp.power { grid-column: 1 / -1; font-size: 16px; }
+
+/* 💬 말 걸기 */
+.rk-fr.dm { border: 0; border-radius: 50%; height: 28px; background: #60a5fa; color: #fff; cursor: pointer; padding: 0; }
+.dm-say { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 8px 0; max-height: 40vh; overflow-y: auto; }
+.dm-talk { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; max-height: 26vh; overflow-y: auto; }
+.dm-msg { align-self: flex-start; background: rgba(127,127,127,.15); border-radius: 12px; padding: 5px 10px; }
+.dm-msg.me { align-self: flex-end; background: #60a5fa; color: #fff; }
+.dm-new { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: #ef4444; color: #fff; font-size: 12px; text-align: center; }

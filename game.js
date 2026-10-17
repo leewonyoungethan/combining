@@ -8107,7 +8107,7 @@ async function openRanking(cat) {
       <p class="muted">${c.desc} · 최근 2년 동안 게임을 한 플레이어 순위예요</p>
       <div class="rank-search"><input id="rankSearch" maxlength="12" placeholder="🔍 이름 · 길드 · 친구 코드로 찾기" value="${esc(rankQuery)}" autocomplete="off"><button class="btn small" data-act="rankSearch">찾기</button>${rankQuery ? '<button class="btn small ghost" data-act="rankSearchClear">✖</button>' : ''}</div>
       <div class="rank-list">${body}</div>
-      <div class="row"><button class="btn ghost small" data-act="rankRefresh">🔄 새로고침</button><button class="btn ghost small" data-act="close">닫기</button></div>`);
+      <div class="row"><button class="btn small" data-act="dmBox">📬 받은 말${dmNew() ? ` <b class="dm-new">${dmNew()}</b>` : ''}</button><button class="btn ghost small" data-act="rankRefresh">🔄 새로고침</button><button class="btn ghost small" data-act="close">닫기</button></div>`);
   };
   if (!rankCache || Date.now() - rankCache.t > 30000) {
     draw('<p class="muted rank-loading">⏳ 전 세계 순위를 불러오는 중…</p>');
@@ -8130,6 +8130,7 @@ async function openRanking(cat) {
       <span class="rk-name">${p.n === '제작자(이원영)' ? '👑 ' : ''}${esc(p.n)}${p.id === me.id ? ' <small>(나)</small>' : ''}<br>${tierBadge(p.tr)} <small class="rk-title">${titleName(p.tt)}</small></span>
       <span class="rk-val">${fmt(p[rankCat])}<small>${c.unit}</small></span>
       ${p.id !== me.id ? (frById(p.id) ? '<span class="rk-fr" title="친구">👫</span>' : `<button class="rk-fr add" data-act="frAddRank" data-id="${esc(p.id)}" title="친구 추가">➕</button>`) : '<span class="rk-fr"></span>'}
+      ${p.id !== me.id ? `<button class="rk-fr dm" data-act="dmSay" data-id="${esc(p.id)}" title="말 걸기">💬</button>` : '<span class="rk-fr"></span>'}
     </div>`;
   if (rankQuery.trim()) {
     // 찾기: 순위와 함께 길드 · 마지막 접속 · 친구 코드까지 보여 준다
@@ -8153,6 +8154,91 @@ const FR_BOX = (id) => 'https://ntfy.sh/monhap-fr-' + (RANK_TOPIC.includes('-dev
 const myFrCode = () => myRankData().id.slice(0, 6).toUpperCase();
 const frCodeOf = (id) => String(id).slice(0, 6).toUpperCase();
 const frById = (id) => (S.friends || []).find(f => f.id === id);
+// 💬 모르는 사람과 이야기: 아이들이 쓰니까 직접 글을 쓰지 않고 정해진 말만 보낸다 (번호만 보내서 받는 쪽도 안전)
+const DM_SAY = ['안녕! 👋', '반가워! 😊', '고마워! 🙏', '잘 가! 👋', '대단해! 👍', '섬 멋지다! 🏝️', '몬스터 멋지다! 🐉', '랭킹 1등 축하해! 🏆',
+  '같이 월드 보스 잡자! 🌍', '친구 하자! 👫', '대전 한 판 할래? ⚔️', '좋아! 👌', '미안, 지금은 바빠 🙇', '나중에 또 하자! 🕒', '화이팅! 💪', 'ㅋㅋㅋ 😂',
+  '😀', '😎', '🥳', '😢', '😮', '❤️', '🔥', '⭐'];
+const DM_KEEP = 150;
+const dmBlocked = (id) => (S.dmBlock || []).some(b => b.id === id);
+const dmNew = () => (S.dms || []).filter(x => !x.me && !x.read).length;
+let dmLast = 0;
+async function dmSend(id, m) {
+  m = Math.floor(Number(m));
+  if (!(m >= 0 && m < DM_SAY.length)) return;
+  if (!S.rankId || !ACC) { toast('계정이 있어야 말을 걸 수 있어요'); return; }
+  if (id === S.rankId) { toast('자기 자신에게는 보낼 수 없어요 😅'); return; }
+  if (dmBlocked(id)) { toast('🚫 차단한 사람이에요. 차단을 풀면 보낼 수 있어요'); return; }
+  if (Date.now() - dmLast < 4000) { toast('⏳ 조금만 천천히 보내요'); return; }
+  const day = new Date().toDateString();
+  if (!S.dmDay || S.dmDay.d !== day) S.dmDay = { d: day, n: 0 };
+  if (S.dmDay.n >= 60) { toast('💬 오늘은 말을 많이 보냈어요. 내일 또 해요!'); return; }
+  dmLast = Date.now();
+  const ok = await frPost(id, { k: 'dm', m });
+  if (!ok) { toast('⚠️ 인터넷으로 보내지 못했어요. 다시 해 주세요'); return; }
+  S.dmDay.n++;
+  const p = dmPerson(id);
+  S.dms = (S.dms || []).concat([{ id, n: p.n, f: p.f, m, t: Math.floor(Date.now() / 1000), me: 1 }]).slice(-DM_KEEP);
+  save();
+  toast(`💬 ${p.n}님에게 "${DM_SAY[m]}" 보냈어요 (받는 데 조금 걸려요)`);
+}
+// 이름 · 얼굴 찾기 (랭킹 → 친구 → 받은 말)
+function dmPerson(id) {
+  const r = rankCache && rankCache.list.find(x => x.id === id);
+  if (r) return { n: r.n, f: r.f };
+  const f = frById(id);
+  if (f) return { n: f.n, f: f.f };
+  const d = (S.dms || []).slice().reverse().find(x => x.id === id);
+  return d ? { n: d.n, f: d.f } : { n: '플레이어', f: '🥚' };
+}
+// 정해진 말 고르기
+function openDmSay(id) {
+  const p = dmPerson(id);
+  const talk = (S.dms || []).filter(x => x.id === id).slice(-8);
+  showModal(`<div class="dm-panel"><h3>💬 ${esc(p.f)} ${esc(p.n)}님에게 말 걸기</h3>
+    <p class="muted">🛡️ 안전을 위해 정해진 말과 이모지만 보낼 수 있어요</p>
+    ${talk.length ? `<div class="dm-talk">${talk.map(x => `<div class="dm-msg ${x.me ? 'me' : ''}">${x.me ? '' : esc(x.f) + ' '}${DM_SAY[x.m]}</div>`).join('')}</div>` : ''}
+    <div class="dm-say">${DM_SAY.map((s, i) => `<button class="btn small" data-act="dmSend" data-id="${esc(id)}" data-m="${i}">${s}</button>`).join('')}</div>
+    <div class="row">${dmBlocked(id) ? `<button class="btn small ghost" data-act="dmUnblock" data-id="${esc(id)}">🔓 차단 풀기</button>` : `<button class="btn small ghost" data-act="dmBlock" data-id="${esc(id)}">🚫 차단</button>`}
+      <button class="btn small ghost" data-act="dmBox">📬 받은 말</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
+// 받은 말 · 보낸 말 (사람별로 묶어서)
+function openDmBox() {
+  tutFlag('dm', true);
+  const all = S.dms || [];
+  const last = {};
+  all.forEach(x => { last[x.id] = x; });
+  const people = Object.values(last).sort((a, b) => b.t - a.t);
+  const unread = {};
+  all.forEach(x => { if (!x.me && !x.read) unread[x.id] = (unread[x.id] || 0) + 1; });
+  all.forEach(x => { x.read = 1; });
+  save(); frDot();
+  const blocks = S.dmBlock || [];
+  showModal(`<div class="dm-panel"><h3>📬 받은 말</h3>
+    <p class="muted">🏆 랭킹에서 사람 옆의 💬를 누르면 말을 걸 수 있어요. 싫은 사람은 🚫 차단!</p>
+    <div class="fr-list">${people.length ? people.map(x => `<div class="fr-row">
+      <span class="fr-face">${esc(x.f)}</span>
+      <span class="fr-name"><b>${esc(x.n)}</b> ${unread[x.id] ? `<span class="dm-new">${unread[x.id]}</span>` : ''}<br><small>${x.me ? '나: ' : ''}${DM_SAY[x.m]}</small> <small class="muted">${frAgo(x.t)}</small></span>
+      <span class="fr-btns"><button class="btn small green" data-act="dmSay" data-id="${esc(x.id)}">💬 답장</button>
+        <button class="btn small ghost" data-act="dmBlock" data-id="${esc(x.id)}" title="차단">🚫</button></span></div>`).join('') : '<p class="muted">아직 받은 말이 없어요.</p>'}</div>
+    ${blocks.length ? `<h4>🚫 차단한 사람 ${blocks.length}</h4>${blocks.map(b => `<div class="fr-row"><span class="fr-face">${esc(b.f)}</span><span class="fr-name"><b>${esc(b.n)}</b></span>
+      <span class="fr-btns"><button class="btn small ghost" data-act="dmUnblock" data-id="${esc(b.id)}">🔓 풀기</button></span></div>`).join('')}` : ''}
+    <div class="row"><button class="btn ghost small" data-act="dmRefresh">🔄 새로고침</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
+function dmBlock(id) {
+  const p = dmPerson(id);
+  if (!confirm(`🚫 ${p.n}님을 차단할까요?\n이 사람이 보낸 말이 더 이상 오지 않아요.`)) return;
+  S.dmBlock = (S.dmBlock || []).filter(b => b.id !== id).concat([{ id, n: p.n, f: p.f }]).slice(-200);
+  S.dms = (S.dms || []).filter(x => x.id !== id);
+  save(); frDot();
+  toast(`🚫 ${p.n}님을 차단했어요`);
+  openDmBox();
+}
+function dmUnblock(id) {
+  S.dmBlock = (S.dmBlock || []).filter(b => b.id !== id);
+  save();
+  toast('🔓 차단을 풀었어요');
+  openDmBox();
+}
 let frInviteTo = null, frBusy = false;
 // 친구에게 보여 줄 내 정보 (짧게)
 function frMe() { const d = myRankData(); return { id: d.id, n: d.n, f: d.f, tr: d.tr, dex: d.dex, st: d.st, pw: d.pw, tt: d.tt }; }
@@ -8219,6 +8305,13 @@ async function frPoll() {
         else if (!(S.frReq || []).some(r => r.id === from.id)) { S.frReq = (S.frReq || []).concat([from]).slice(-20); news++; toast(`👫 ${from.n}님이 친구 요청을 보냈어요!`); }
       } else if (d.k === 'ok') {
         if (fr && !fr.mutual) { fr.mutual = 1; toast(`🤝 ${from.n}님이 친구 요청을 받아 줬어요!`); }
+      } else if (d.k === 'dm') {
+        const m = Math.floor(Number(d.m));
+        if (m >= 0 && m < DM_SAY.length && !dmBlocked(from.id) && Date.now() / 1000 - ev.time < 12 * 3600) {
+          S.dms = (S.dms || []).concat([{ id: from.id, n: from.n, f: from.f, m, t: ev.time }]).slice(-DM_KEEP);
+          news++;
+          toast(`💬 ${from.n}님: ${DM_SAY[m]}`);
+        }
       } else if (d.k === 'gift') {
         if (fr) { S.frGifts = (S.frGifts || []).concat([{ id: from.id, n: from.n, f: from.f, t: ev.time }]).slice(-50); news++; }
       } else if (d.k === 'inv' && /^[A-Z0-9]{6}$/.test(String(d.code)) && Date.now() / 1000 - ev.time < 300) {
@@ -8233,11 +8326,12 @@ async function frPoll() {
   save();
   frDot();
   if (news && $('#modalBox .fr-panel')) openFriends();
+  if (news && $('#modalBox .dm-panel')) { const sid = ($('#modalBox [data-act=dmSend]') || {}).dataset; if (sid && sid.id) openDmSay(sid.id); else openDmBox(); }
 }
 setInterval(() => { if (!document.hidden) frPoll(); }, 45000);
 setTimeout(frPoll, 8000);
 const frInvOn = () => S.frInv && Date.now() / 1000 - S.frInv.t < 300;
-const frNewCount = () => (S.frReq || []).length + (S.frGifts || []).length + (frInvOn() ? 1 : 0);
+const frNewCount = () => (S.frReq || []).length + (S.frGifts || []).length + (frInvOn() ? 1 : 0) + dmNew();
 function frDot() {
   const b = document.querySelector('.pvp-box [data-act=friends] .fr-dot');
   const n = frNewCount();
@@ -8319,7 +8413,8 @@ async function openFriends(refresh) {
     <div class="fr-me">내 친구 코드 <b class="fr-code">${myFrCode()}</b> <button class="btn small" data-act="frCopy">📋 복사</button>
       <small class="muted">친구에게 알려 주면 나를 추가할 수 있어요</small></div>
     <div class="fr-add"><input id="frCode" maxlength="12" placeholder="친구 코드 6자리 (예: K7QM2P)" style="text-transform:uppercase"><button class="btn green" data-act="frAdd">➕ 추가</button></div>
-    <p class="muted fr-tip">🏆 랭킹에서 사람 옆의 ➕를 눌러도 친구가 돼요</p>
+    <p class="muted fr-tip">🏆 랭킹에서 사람 옆의 ➕를 눌러도 친구가 돼요 · 💬로 말 걸기</p>
+    <button class="btn small" data-act="dmBox">📬 받은 말${dmNew() ? ` <b class="dm-new">${dmNew()}</b>` : ''}</button>
     ${frInvOn() ? `<div class="fr-inv">${S.frInv.coop ? '🤝' : '⚔️'} <b>${esc(S.frInv.f)} ${esc(S.frInv.n)}</b>님이 ${S.frInv.coop ? '보스 레이드' : '대전'}에 초대했어요!
       <button class="btn green" data-act="frJoin">🔑 들어가기</button></div>` : ''}
     ${req.length ? `<h4>📨 친구 요청 ${req.length}</h4>${req.map(r => `<div class="fr-row req"><span class="fr-face">${esc(r.f)}</span>
@@ -8334,6 +8429,7 @@ async function openFriends(refresh) {
           ${tierBadge(f.tr)} <small>📖 ${fmt(f.dex)} · ⚔️ ${fmt(f.st)} · 💪 ${shortNum(f.pw)}</small><br><small class="muted">${frAgo(f.t)}</small></span>
         <span class="fr-btns">
           <button class="btn small ${g.sent.includes(f.id) ? 'ghost' : 'green'}" data-act="frGift" data-id="${esc(f.id)}" ${g.sent.includes(f.id) ? 'disabled' : ''}>💌${g.sent.includes(f.id) ? '✅' : ''}</button>
+          <button class="btn small" data-act="dmSay" data-id="${esc(f.id)}" title="말 걸기">💬</button>
           <button class="btn small" data-act="frInvite" data-id="${esc(f.id)}" title="대전 초대">⚔️</button>
           <button class="btn small coop-btn" data-act="frInvite" data-id="${esc(f.id)}" data-coop="1" title="레이드 초대">🤝</button>
           <button class="btn small ghost" data-act="frRemove" data-id="${esc(f.id)}" title="삭제">🗑️</button>
@@ -11524,6 +11620,10 @@ TUT.push(
   { text: '🌍 ⚔️ 모험 탭의 🌍 월드 보스를 눌러 봐요 (모든 사람이 같이 거대 보스를 때려요!)', done: () => tutFlag('wboss'),
     go: () => { closeModal(); tab = 'adventure'; render(); } },
 );
+TUT.push(
+  { text: '💬 🏆 랭킹에서 📬 받은 말을 열어 봐요 (사람 옆의 💬로 말을 걸 수 있어요!)', done: () => tutFlag('dm'),
+    go: () => { closeModal(); tab = 'adventure'; render(); openRanking(); } },
+);
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
 // 📜 퀘스트는 기본 튜토리얼 11단계 (이벤트 다음)
@@ -11802,6 +11902,10 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=wbHit]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['#view [data-act=wbOpen]'];
+    case 65: // 💬 말 걸기
+      if (inModal) return ['#modalBox [data-act=dmBox]', '#modalBox [data-act=close]'];
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return ['#view [data-act=ranking]'];
   }
   return null;
 }
@@ -11988,6 +12092,7 @@ const WELCOME = [
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
   { icon: '🌍', title: '월드 보스', text: '⚔️ 모험 탭의 🌍 월드 보스! 12시간마다 거대한 보스가 나타나요.<br>게임하는 모든 사람이 같이 때려요. 한 사람이 3번씩 공격할 수 있고, 팀이 셀수록 데미지가 커요.<br>공격하면 💎 5, 다 같이 쓰러뜨리면 💎 50, 데미지 1등은 💎 100 더!' },
+  { icon: '💬', title: '말 걸기', text: '🏆 랭킹에서 사람 옆의 💬를 누르면 모르는 사람에게도 말을 걸 수 있어요!<br>🛡️ 안전을 위해 정해진 말과 이모지만 보낼 수 있어요. 받은 말은 📬 받은 말에서 보고 💬 답장!<br>싫은 사람은 🚫 차단하면 더 이상 말이 오지 않아요.' },
   { icon: '📊', title: '내 기록', text: '위쪽 👤 계정에서 📊 내 기록을 누르면 ⏱️ 지금까지 게임한 시간이 나와요!<br>몬스터 수, 도감, 가장 긴 연승, 이긴 전투, 미니게임 판수 같은 기록도 한눈에 볼 수 있어요.' },
   { icon: '🧪', title: '합체 실험실', text: '🐾 몬스터 탭의 🧪 합체 실험실에서 내 몬스터 두 마리를 합체해 봐요!<br>살라맨더 + 거북 = 살라북?! 웃긴 이름과 모습, 성격이 나와요. 마음에 들면 📒 앨범에 저장!<br>재미로만 하는 거라 진짜 몬스터는 그대로예요.' },
   { icon: '💖', title: '최애 몬스터 · 섬 사진', text: '몬스터를 누르고 🤍 최애로를 누르면 카드에 💖가 붙어요. 🐾 몬스터 탭의 💖 최애만으로 좋아하는 몬스터만 모아 봐요!<br>섬 오른쪽 📸 버튼을 누르면 내 섬 사진을 찍어서 💾 저장할 수 있어요.' },
@@ -12292,6 +12397,12 @@ const ACTIONS = {
   frCopy: () => { const c = myFrCode(); try { navigator.clipboard.writeText(c); toast('📋 친구 코드 ' + c + ' 복사했어요!'); } catch (e) { toast('내 친구 코드: ' + c); } },
   frAccept: (d) => frAccept(d.id),
   frReject: (d) => frReject(d.id),
+  dmSay: (d) => openDmSay(d.id),
+  dmSend: (d) => dmSend(d.id, d.m).then(() => { if ($('#modalBox .dm-panel')) openDmSay(d.id); }),
+  dmBox: () => openDmBox(),
+  dmBlock: (d) => dmBlock(d.id),
+  dmUnblock: (d) => dmUnblock(d.id),
+  dmRefresh: () => frPoll().then(() => { if ($('#modalBox .dm-panel')) openDmBox(); }),
   frRemove: (d) => frRemove(d.id),
   frGift: (d) => frSendGift(d.id),
   frClaim: () => frClaimGifts(),
