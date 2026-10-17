@@ -8108,7 +8108,7 @@ async function openRanking(cat) {
   const row = (p, k) => `<div class="rank-row rk5 ${p.id === me.id ? 'me' : ''} ${k < 3 ? 'top' : ''}">
       <span class="rk-pos">${medal(k)}</span>
       <span class="rk-face">${esc(p.f)}</span>
-      <span class="rk-name">${esc(p.n)}${p.id === me.id ? ' <small>(나)</small>' : ''}<br>${tierBadge(p.tr)} <small class="rk-title">${titleName(p.tt)}</small></span>
+      <span class="rk-name">${p.n === '제작자(이원영)' ? '👑 ' : ''}${esc(p.n)}${p.id === me.id ? ' <small>(나)</small>' : ''}<br>${tierBadge(p.tr)} <small class="rk-title">${titleName(p.tt)}</small></span>
       <span class="rk-val">${fmt(p[rankCat])}<small>${c.unit}</small></span>
       ${p.id !== me.id ? (frById(p.id) ? '<span class="rk-fr" title="친구">👫</span>' : `<button class="rk-fr add" data-act="frAddRank" data-id="${esc(p.id)}" title="친구 추가">➕</button>`) : '<span class="rk-fr"></span>'}
     </div>`;
@@ -8814,7 +8814,8 @@ function nameTaken(name) {
   return Object.values(st).some(p => p && p.id !== me && !p.del && String(p.n || '').trim().toLowerCase() === n);
 }
 // 다른 사람 이름을 보여 줄 때: 부적절하면 가린다
-const safeName = (s, fb = '플레이어') => { const t = String(s || '').trim(); if (!t) return fb; return nameProblem(t) ? '🙊 ***' : t; };
+// 제작자 이름은 랭킹 등에서 가리지 않고 그대로 (이름을 새로 짓는 것만 막는다)
+const safeName = (s, fb = '플레이어') => { const t = String(s || '').trim(); if (!t) return fb; if (t === '제작자(이원영)') return t; return nameProblem(t) ? '🙊 ***' : t; };
 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const flipId = (id) => (!id ? id : id.startsWith('me') ? 'foe' + id.slice(2) : 'me' + id.slice(3));
 const newFx = () => ({ burn: 0, burnDmg: 0, poison: 0, poisonDmg: 0, stun: 0, shield: 0, buff: 0, curse: 0 });
@@ -10276,6 +10277,8 @@ function accRenameOk() {
   save();
   closeModal();
   toast(`✏️ 이름을 ${name}(으)로 바꿨어요`);
+  // 랭킹에도 바로 새 이름으로
+  S.rankLast = {}; setTimeout(() => { try { rankSubmit(true); } catch (e) { /* 인터넷 없음 */ } }, 800);
 }
 function accPinSet() {
   showModal(`<h3>🔒 비밀번호</h3>
