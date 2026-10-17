@@ -1,5 +1,6 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  '👑 이원영, 제작자': '👑 Lee Wonyoung, the Creator', '🐉 신화 이상 몬스터': '🐉 Mythic-or-higher monsters', '🎖️ 전설 이상 몬스터': '🎖️ Legendary-or-higher monsters',
   '👥 "{}" 찾은 사람 {}명 (최근 접속 순)': '👥 Found for "{}": {} players (most recent first)', '👥 랭킹에 올라온 사람 {}명 (최근 접속 순)': '👥 {} players on the ranking (most recent first)',
   '⬇️ 더 보기 ({}명 더)': '⬇️ Show more ({} more)',
   '⚡ 전투력 모드': '⚡ Power mode', '🔒 ⚡ 전투력 모드': '🔒 ⚡ Power mode', '⚡ 전투력 모드 · 전투력으로 바로 계산!': '⚡ Power mode · Calculated instantly from battle power!',

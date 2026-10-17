@@ -10146,7 +10146,15 @@ async function cmdTake(list) {
   lsSet('combining-cmds', JSON.stringify(st.filter(c => c.at > Date.now() - 7 * 86400000).slice(-60)));   // 7일 동안만 보관
   cmdApply();
 }
-const TAKE_WHAT = { origin: '🌌 근원 몬스터', top: '⭐ 신성 이상 몬스터', gold: '💰 돈 전부', gems: '💎 보석 전부' };
+const TAKE_WHAT = { creator: '👑 이원영, 제작자', origin: '🌌 근원 몬스터', top: '⭐ 신성 이상 몬스터', mythic: '🐉 신화 이상 몬스터', legend: '🎖️ 전설 이상 몬스터', gold: '💰 돈 전부', gems: '💎 보석 전부' };
+// 몬스터를 가져가는 종류: 어떤 몬스터가 해당하는지
+const TAKE_TEST = {
+  creator: (t) => t === 'X:creator',
+  origin: (t) => RANK[CAT[t].rarity] >= RANK.origin,
+  top: (t) => RANK[CAT[t].rarity] >= RANK.holy,
+  mythic: (t) => RANK[CAT[t].rarity] >= RANK.mythic,
+  legend: (t) => RANK[CAT[t].rarity] >= RANK.legendary,
+};
 // 내 계정 이름(또는 랭킹 이름)으로 온 명령을 한 번씩만 실행
 function cmdApply() {
   if (typeof S === 'undefined' || !S || !ACC || VISIT) return;
@@ -10158,13 +10166,13 @@ function cmdApply() {
   const notes = [];
   for (const c of mine) {
     done.add(c.sig.slice(0, 24));
-    if (c.what === 'origin' || c.what === 'top') {
-      const lim = c.what === 'origin' ? RANK.origin : RANK.holy;
-      const gone = new Set(S.monsters.filter(m => RANK[CAT[m.type].rarity] >= lim).map(m => m.uid));
+    if (TAKE_TEST[c.what]) {
+      const test = TAKE_TEST[c.what];
+      const gone = new Set(S.monsters.filter(m => CAT[m.type] && test(m.type)).map(m => m.uid));
       const h0 = S.hatch.length;
       S.monsters = S.monsters.filter(m => !gone.has(m.uid));
       S.team = S.team.filter(u => !gone.has(u));
-      S.hatch = S.hatch.filter(t => RANK[CAT[t].rarity] < lim);
+      S.hatch = S.hatch.filter(t => !(CAT[t] && test(t)));
       notes.push(`🫳 제작자가 ${TAKE_WHAT[c.what]} ${fmt(gone.size + h0 - S.hatch.length)}마리를 가져갔어요${c.text ? ' · ' + esc(c.text) : ''}`);
     } else if (c.what === 'gold' || c.what === 'gems') {
       S.infinite = false; S[c.what] = 0;
