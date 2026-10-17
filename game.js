@@ -7177,7 +7177,7 @@ function openLoopStart() {
     <p class="muted">몇 배속으로 할까요? 이기면 다음 스테이지로 자동으로 계속 싸워요. (전투 중에도 ⏩ 버튼으로 바꿀 수 있어요 · <b>Esc</b> 키로 나가기)</p>
     <p class="muted small-note">⚡ 1 · 2 · 4배는 무료! ⚡ 전투력 모드는 💰 10Qi로 열어요 (전투력이 클수록 훨씬 빨라져요!)</p>
     <div class="ls-grid">${SPEEDS_LOOP.map(sp => { const own = spOwned(sp), nx = spNextLocked() === sp; return `<button class="ls-sp ${sp === cur && own ? 'on' : ''} ${sp === POWER_SPEED ? 'hot power' : ''} ${own ? '' : 'locked'} ${nx ? 'next' : ''}" data-act="loopGo" data-sp="${sp}">${own ? spLabel(sp) : `🔒 ${spLabel(sp)}<small>💰 ${shortNum(speedPrice(sp))}</small>`}</button>`; }).join('')}</div>
-    <p class="muted small-note">⚡ 전투력 모드: 싸우는 장면 없이 전투력으로 바로 계산! 지금 내 팀이면 1초에 약 <b>${fmt(powerRate(unitsPower(S.team.map(byUid).filter(Boolean).map((m, i) => mkUnit(m, 'me', i)))))}</b> 스테이지</p>
+    <p class="muted small-note">⚡ 전투력 모드: 싸우는 장면 없이 전투력으로 바로 계산! 지금 내 팀이면 1초에 약 <b>${shortNum(powerRate(unitsPower(S.team.map(byUid).filter(Boolean).map((m, i) => mkUnit(m, 'me', i)))))}</b> 스테이지</p>
     <div class="row"><button class="btn ghost small" data-act="close">취소</button></div></div>`);
 }
 function startLoop() {
@@ -7218,10 +7218,10 @@ function quickLoop() {
   bt.classList.remove('hidden');
   const draw = (fp) => {
     const sec = Math.max(0.001, (performance.now() - L.t0) / 1000);
-    mgSet('#qrStage', `스테이지 ${fmt(S.stage)}`);
-    mgSet('#qrWins', fmt(L.wins)); mgSet('#qrRate', fmt(Math.round((L.wins - L.wins0) / sec)) + '판');
+    mgSet('#qrStage', `스테이지 ${shortNum(S.stage)}`);
+    mgSet('#qrWins', shortNum(L.wins)); mgSet('#qrRate', shortNum(Math.round((L.wins - L.wins0) / sec)) + '판');
     mgSet('#qrGold', '💰 ' + shortNum(L.gold)); mgSet('#qrGems', '💎 ' + shortNum(L.gems));
-    mgSet('#qrPow', `내 팀 ⚔️ ${shortNum(myPow)} vs 적 ⚔️ ${shortNum(fp)} · 전투력이 클수록 빨라요 (목표 1초에 ${fmt(powerRate(myPow))}판)`);
+    mgSet('#qrPow', `내 팀 ⚔️ ${shortNum(myPow)} vs 적 ⚔️ ${shortNum(fp)} · 전투력이 클수록 빨라요 (목표 1초에 ${shortNum(powerRate(myPow))}판)`);
   };
   const rate = powerRate(myPow);
   L.quota = 0; L.last = performance.now();
@@ -7233,13 +7233,10 @@ function quickLoop() {
     L.last = t0;
     const want = Math.floor(L.quota);
     let n = 0, g = 0, gm = 0, fp = 0;
-    // 내 팀이 어떤 적보다도 세면 몰아서
+    // 내 팀이 어떤 적보다도 세면: 한 판씩 세지 않고 한 번에 계산 (몇 경 판이어도 바로)
     if (S.stage > 60 && myPow >= foeCap()) {
-      const tour = evtOn('tourney') ? 2 : 1;
-      while (n < want && performance.now() - t0 < 12) {
-        const end = Math.min(want, n + 5000);
-        for (; n < end; n++) { const st = S.stage; g += stageGold(st) * tour; gm += st % 5 === 0 ? 20 : 5; S.stage++; }
-      }
+      const tour = evtOn('tourney') ? 2 : 1, a = S.stage, b = a + want;
+      g = goldSum(a, b) * tour; gm = gemSum(a, b); S.stage = b; n = want;
       fp = foeCap() / 1.3;
     } else
     while (n < want && performance.now() - t0 < 12) {
@@ -7259,7 +7256,7 @@ function quickLoop() {
       }
     }
     L.quota -= n;
-    if (n) { earn(g); earn(gm, 'gems'); mission('win', n); }
+    if (n) { earn(g); earn(gm, 'gems'); mission('win', Math.min(n, 1e6)); }
     L.gold += g; L.gems += gm; L.wins += n;
     draw(fp || foePower(S.stage));
     if (performance.now() - (L.hud || 0) > 300) { L.hud = performance.now(); updateHud(); }
@@ -7320,7 +7317,11 @@ const SPEED_EXP = [6, 9, 13, 18, 25, 34, 46, 62, 83, 110, 150, 210, 305];   // 1
 const speedPrice = (sp) => (sp === POWER_SPEED ? POWER_MODE_PRICE : 0);
 const spLabel = (sp) => (sp === POWER_SPEED ? '⚡ 전투력 모드' : `⏩ ${fmt(sp)}배`);
 // 전투력이 클수록 1초에 더 많은 스테이지 (전투력의 자릿수가 클수록 훨씬 빨라진다)
-const powerRate = (p) => Math.min(2e7, Math.round(10 * Math.pow(Math.log10(Math.max(10, p)), 3)));
+const powerRate = (p) => Math.max(5, Math.round(Math.pow(Math.max(10, p), 0.62)));
+// 스테이지 a ~ b-1을 한꺼번에 이겼을 때 받는 돈 (50스테이지 넘으면 st^2.5에 비례 → 더해서 한 번에)
+const GOLD_C = 120 * Math.pow(1.25, 49) / Math.pow(50, 2.5);
+const goldSum = (a, b) => GOLD_C * (Math.pow(b - 0.5, 3.5) - Math.pow(a - 0.5, 3.5)) / 3.5;
+const gemSum = (a, b) => 5 * (b - a) + 15 * (Math.floor((b - 1) / 5) - Math.floor((a - 1) / 5));
 // 예전에 비싼 배속을 산 사람은 전투력 모드를 그냥 준다
 function spMigrate() { const own = S.spdOwn || []; if (!own.includes(POWER_SPEED) && own.some(x => x >= 100 && x !== POWER_SPEED)) S.spdOwn = [...own, POWER_SPEED]; }
 const spOwned = (sp) => speedPrice(sp) === 0 || (S.spdOwn || []).includes(sp);
