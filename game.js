@@ -3381,7 +3381,7 @@ function todoBonus() {
 function updateTodoBtn() {
   const b = $('#todoBtn');
   if (!b) return;
-  b.classList.toggle('hidden', tab !== 'island' || !!VISIT);
+  b.classList.add('hidden'); return;   // 📅 오늘 할 일은 없앴어요
   const n = todoLeft(), bonus = !n && S.todoBonus !== dayKey();
   b.classList.toggle('ready', n > 0 || bonus);
   b.innerHTML = `📅<small>할 일</small>${n || bonus ? `<i class="todo-n">${bonus ? '🎁' : n}</i>` : ''}`;
@@ -10973,7 +10973,6 @@ const ACH_MORE = [
   ['memWin',   '🃏 짝 맞추기 끝내기', 'stat', [1, 10, 50, 200], [10, 30, 80, 250]],
   ['mgPlay',   '🎮 미니게임 하기', 'stat', [1, 20, 100, 500], [10, 40, 120, 400]],
   ['mystery',  '🎁 미스터리 상자 열기', 'stat', [1, 10, 50, 200], [10, 30, 80, 200]],
-  ['todoAll',  '📅 오늘 할 일 다 하기', 'stat', [1, 7, 30, 100], [10, 30, 100, 300]],
   ['friendGift', '💌 친구에게 하트 보내기', 'stat', [1, 10, 50, 200], [10, 30, 80, 200]],
   ['coopWin',  '🤝 협동 레이드 승리', 'stat', [1, 5, 20], [30, 80, 200]],
   ['fusepet',  '🧪 합성 펫 모으기', () => PETS.filter(p => p.fusion && petLv(p.id)).length, [1, 4, 8], [20, 80, 250]],
@@ -11654,7 +11653,6 @@ TUT.push(
   { text: '🎮 섬 왼쪽의 🎮 미니게임에서 게임을 하나 해 봐요 (20가지 · 하루 3판씩 무료!)', done: () => stat('mgPlay') > 0, go: () => { closeModal(); tab = 'island'; render(); openGames(); } },
 );
 TUT.push(
-  { text: '📅 섬 왼쪽의 📅 할 일에서 오늘 받을 수 있는 것들을 한눈에 봐요 (다 하면 💎10!)', done: () => tutFlag('todo'), go: () => { closeModal(); tab = 'island'; render(); openTodo(); } },
 );
 TUT.push(
   { text: '⏩ 🔁 연속 전투를 시작할 때 배속을 골라 봐요 (⚡ 전투력 모드는 💰 10Qi! Esc 키로 나가기)', done: () => tutFlag('speed') || (S.bSpeed || 1) > 1,
@@ -11925,82 +11923,78 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=mgStart]', '#modalBox .mg-card[data-id=whack]', '#modalBox [data-act=games]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#gameBtn'];
-    case 47: // 오늘 할 일
-      if (inModal) return ['#modalBox [data-act=todoGo]', '#modalBox [data-act=todoBonus]', '#modalBox [data-act=close]'];
-      if (tab !== 'island') return [bottomBtn('island')];
-      return ['#todoBtn'];
-    case 48: // 전투 배속
+    case 47: // 전투 배속
       if (inModal) return ['#modalBox [data-act=loopGo][data-sp="10"]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return S.team.length ? ['#view [data-act=fightLoop]'] : ['#view [data-act=teamAuto]'];
-    case 49: { // 한국 돈 단위
+    case 48: { // 한국 돈 단위
       const ut = document.querySelector('#modalBox .unit-table');
       if (ut && !ut.open) return ['#modalBox .unit-table summary'];
       if (ut) return [window.LANG === 'en' ? '#modalBox [data-act=close]' : '#modalBox [data-act=numStyle][data-s=kr]'];
       if (inModal) return ['#modalBox [data-act=close]'];
       return ['[data-act=resInfo][data-r=gold]'];
     }
-    case 50: // 새 미니게임 4개
+    case 49: // 새 미니게임 4개
       if (inModal) return ['#modalBox [data-act=mgStart][data-id=m2048]', '#modalBox .mg-card[data-id=m2048]', '#modalBox [data-act=games]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#gameBtn'];
-    case 51: // 없는 몬스터 전부 사기
+    case 50: // 없는 몬스터 전부 사기
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'shop') return [bottomBtn('shop')];
       if (shopTab !== 'egg') return ['#view [data-act=shopJump][data-tab=egg]'];
       return ['#view [data-act=buyAllMons]'];
-    case 52: // 섬 사기
+    case 51: // 섬 사기
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#islandBar [data-act=islList]'];
-    case 53: // 섬 전체에 서식지
+    case 52: // 섬 전체에 서식지
       if (inModal) return ['#modalBox [data-act=fillIslOpen]', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#islandBar [data-act=islList]'];
-    case 54: // 모든 몬스터 상점
+    case 53: // 모든 몬스터 상점
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'shop') return [bottomBtn('shop')];
       if (shopTab !== 'egg') return ['#view [data-act=shopJump][data-tab=egg]'];
       return ['#view [data-act=allShopPage][data-d="1"]'];
-    case 55: // 저장 버튼
+    case 54: // 저장 버튼
       if (inModal) return ['#modalBox [data-act=close]'];
       return ['#saveBtn'];
-    case 56: // 한 번에 키우기
+    case 55: // 한 번에 키우기
       if (inModal) return ['#modalBox [data-act=islBulkOpen]', '#modalBox [data-act=upAllHabsMax]', '#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#islandBar [data-act=islList]'];
-    case 57: // 도감 10만 마리
+    case 56: // 도감 10만 마리
       if (inModal) return ['#modalBox [data-act=close]'];
       return [bottomBtn('dex')];
-    case 58: // 등급별 값
+    case 57: // 등급별 값
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'shop') return [bottomBtn('shop')];
       if (shopTab !== 'egg') return ['#view [data-act=shopJump][data-tab=egg]'];
       return ['#view .price-table summary'];
-    case 59: // 이름 짓기
+    case 58: // 이름 짓기
       if (inModal) return ['#modalBox [data-act=nickOpen]', '#modalBox [data-act=nickOk]', '#modalBox [data-act=close]'];
       if (tab !== 'mons') return [bottomBtn('mons')];
       return ['#view [data-act=openMon]'];
-    case 60: // 최애
+    case 59: // 최애
       if (inModal) return ['#modalBox [data-act=favToggle]', '#modalBox [data-act=close]'];
       if (tab !== 'mons') return [bottomBtn('mons')];
       return ['#view [data-act=openMon]'];
-    case 61: // 섬 사진
+    case 60: // 섬 사진
       if (inModal) return ['#modalBox [data-act=close]'];
       if (tab !== 'island') return [bottomBtn('island')];
       return ['#zoomBtns [data-act=photo]'];
-    case 62: // 합체 실험실
+    case 61: // 합체 실험실
       if (inModal) return ['#modalBox [data-act=labGo]', '#modalBox [data-act=close]'];
       if (tab !== 'mons') return [bottomBtn('mons')];
       return ['#view [data-act=labOpen]'];
-    case 63: // 내 기록
+    case 62: // 내 기록
       if (inModal) return ['#modalBox [data-act=records]', '#modalBox [data-act=close]'];
       return ['[data-act=account]'];
-    case 64: // 월드 보스
+    case 63: // 월드 보스
       if (inModal) return ['#modalBox [data-act=wbHit]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['#view [data-act=wbOpen]'];
-    case 65: // 💬 말 걸기
+    case 64: // 💬 말 걸기
       if (inModal) return ['#modalBox [data-act=close]'];
       return ['.hud [data-act=dmBox]'];
   }
@@ -12206,7 +12200,6 @@ const WELCOME = [
   { icon: '🇰🇷', title: '한국 돈 단위', text: '돈이 커지면 K · M · B · T 같은 단위로 줄여서 보여 줘요.<br>위쪽 💰를 누르고 📏 돈 단위 보기에서 🇰🇷 한국 단위를 켜면<br>만 · 억 · 조 · 경 · 해 … 무량대수까지 17가지 한국 단위로 보여요!<br>🔤 aa · ab · ac 알파벳 단위나 🔬 1.2e45 과학 표기로도 볼 수 있어요.' },
   { icon: '⏩', title: '전투 배속', text: '전투 화면 위쪽 <b>⏩ 배속</b> 버튼을 누를 때마다 빨라져요!<br>보통 전투는 <b>4배</b>까지, <b>🔁 연속 전투</b>는 시작할 때 골라요: 1 · 2 · 4배는 무료, <b>⚡ 전투력 모드</b>는 💰 10Qi로 열어요. 전투력이 클수록 훨씬 빨라져요!<br>25배부터는 움직이는 장면을 건너뛰고 결과만 빠르게 보여 줘요. 전투 중에 <b>Esc</b> 키를 누르면 바로 나가요.' },
   { icon: '🛒', title: '상점 칸', text: '상점이 <b>6칸</b>으로 나뉘었어요! 위쪽 버튼으로 바꿔요.<br>🏠 건물 · 🥚 알 · 🎁 특가·상자 · 🧪 아이템 · 🏛️ 강해지기 · 💎 보석<br>새로 생긴 것: <b>🎁 미스터리 상자</b>(골드/보석) · 🪱 미끼 ×10 · 🍖 먹이 10,000 · 🎟️ 미니게임 티켓 · 🔥 레이드 도전권 · ⚔️ 길드전 공격권 · 📦 룬 상자 ×10' },
-  { icon: '📅', title: '오늘 할 일', text: '섬 왼쪽의 <b>📅 할 일</b>에 매일 받을 것들이 모여 있어요!<br>🎁 일일 보상 · 📋 미션 · 🎡 룰렛 · 🏁 경주 응원권 · 🎮 미니게임 · 🔥 레이드 · ⚔️ 길드전 · 💌 하트 …<br>남은 개수가 버튼에 숫자로 보이고, <b>가기 →</b>를 누르면 바로 가요. 다 하면 <b>💎 10</b> 보너스!' },
   { icon: '🎮', title: '미니게임 20가지', text: '섬 왼쪽의 <b>🎮 미니게임</b> 버튼에 게임이 20가지!<br>🎣 낚시 · 🏁 경주 · 🎡 룰렛 · 🃏 짝 맞추기 · 🔨 두더지 잡기 · ⚡ 반응 속도 · 🔢 숫자 순서 · 🎨 색깔 맞추기 · 🧠 순서 기억 · ➕ 빠른 계산 · 🎈 풍선 터뜨리기 · ✊ 가위바위보 · 🔍 다른 그림 찾기 · 🎲 높을까 낮을까 · 📘 속성 퀴즈 · 🎁 보물 상자 · 🧩 몬스터 2048 · 🐤 날아라 몬스터 · 🧱 탑 쌓기 · 🐍 먹보 몬스터<br>새 게임은 하루 3판씩 무료! 잘할수록 ⭐이 많고 💰💎 보상도 커져요.' },
   { icon: '🃏', title: '몬스터 짝 맞추기', text: '<b>🃏 짝 맞추기</b>(섬 왼쪽 버튼)에서 뒤집힌 카드 16장 중 <b>같은 몬스터 두 장</b>을 찾아요!<br>적게 뒤집을수록 ⭐이 많아요 (11번 이하면 ⭐⭐⭐). 보상은 ⭐만큼 💰골드와 💎!<br>하루 3판 무료, 그다음엔 💎5. 🏅 최고 기록에 도전해 봐요!' },
   { icon: '🎡', title: '행운의 룰렛', text: '<b>🎡 룰렛</b>(섬 왼쪽 버튼)을 하루 1번 <b>무료</b>로 돌려요! 💎10이면 5번 더.<br>💰 골드 · 🤑 골드 대박 · 💎 보석 · 🍖 먹이 · 📦 룬 · 🥚 희귀 알… 그리고 아주 가끔 <b>🎰 잭팟 💎100</b>!' },
