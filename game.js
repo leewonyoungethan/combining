@@ -2513,11 +2513,11 @@ function raceGo() {
     R.runners.forEach((r, i) => {
       // 속도는 조금씩 흔들리고, 이벤트 중이면 배수
       r.v += (Math.random() - 0.5) * 6 * dt; r.v = Math.max(9, Math.min(20, r.v));
-      const mult = r.fx && now < r.fxT ? r.fx[2] : 1;
+      const mult = r.rocket ? 9 : r.fx && now < r.fxT ? r.fx[2] : 1;
       if (r.fx && now >= r.fxT) r.fx = null;
       r.pos = Math.min(100, r.pos + r.v * mult * dt);
       const el = $('#rr' + i); if (el) el.style.left = r.pos * 0.9 + '%';
-      const fx = $('#rf' + i); if (fx) fx.textContent = r.fx ? r.fx[0] : '';
+      const fx = $('#rf' + i); if (fx) fx.textContent = r.rocket ? '🚀' : r.fx ? r.fx[0] : '';
       if (r.pos >= 100 && winner == null) winner = i;
     });
     if (winner != null) { raceEnd(winner); return; }
@@ -12492,7 +12492,19 @@ const ACTIONS = {
   memClose: () => { closeModal(); updateFishBtn(); openGames(); },
   wheelSpin: () => wheelSpin(),
   wheelClose: () => { if (WSPIN) { toast('룰렛이 멈추면 선물을 받아요!'); return; } closeModal(); openGames(); },
-  racePick: (d) => { if (RACE && RACE.st === 'pick') { RACE.pick = Number(d.i); raceDraw(); } },
+  racePick: (d) => {
+    if (RACE && RACE.st === 'pick') { RACE.pick = Number(d.i); raceDraw(); return; }
+    // 🥚 이스터에그: 달리는 중에 내가 응원한 몬스터를 빠르게 5번 누르면 비밀 로켓!
+    const R = RACE;
+    if (!R || R.st !== 'run' || Number(d.i) !== R.pick || R.runners[R.pick].rocket) return;
+    const now = Date.now();
+    R.taps = (R.taps || []).filter(t => now - t < 1500).concat([now]);
+    if (R.taps.length >= 5) {
+      R.runners[R.pick].rocket = true;
+      const m = $('#raceMsg'); if (m) m.textContent = '🚀🚀 비밀 로켓 발동!! 슈우우웅~';
+      sfx('yay'); tutFlag('raceRocket', true);
+    }
+  },
   raceBet: (d) => { if (RACE && RACE.st === 'pick') { RACE.bet = d.b; raceDraw(); } },
   raceGo: () => raceGo(),
   raceAgain: () => { raceNew(); raceDraw(); },
