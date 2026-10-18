@@ -9562,66 +9562,84 @@ function myPlayerId() {
   return S.playerId;
 }
 // 짧은 코드: 보내는 쪽이 창을 열어 둔 동안 4자리 숫자로 친구가 인터넷을 통해 바로 받아 간다 (PeerJS)
-const SHORT_PREFIX = 'monhap-x-';
-let SHARE = null;   // { peer, code, long, once, done, undo }
+const SHORT_URL = (c) => 'https://ntfy.sh/monhap-x2-' + (RANK_TOPIC.includes('-dev-') ? 'dev-' : '') + c;
+let SHARE = null;   // { code, sid, long, once, done, undo, timer }
+const shortMeta = (m) => encodeURIComponent(JSON.stringify(m));
+async function shortRead(code, maxAge) {
+  try {
+    const r = await fetch(SHORT_URL(code) + '/json?poll=1&since=all');
+    if (!r.ok) return [];
+    const now = Date.now() / 1000, out = [];
+    (await r.text()).split('\n').forEach(l => {
+      try { const ev = JSON.parse(l); if (ev.event !== 'message' || now - ev.time > maxAge) return; out.push({ ev, meta: JSON.parse(decodeURIComponent(ev.message)) }); } catch (e) { /* 다른 글 */ }
+    });
+    return out;
+  } catch (e) { return []; }
+}
 function stopShare() {
   const sh = SHARE;
   SHARE = null;
-  try { sh && sh.peer && sh.peer.destroy(); } catch (e) { /* 이미 닫힘 */ }
+  if (!sh) return;
+  if (sh.timer) clearInterval(sh.timer);
+  // 창을 닫으면 그 숫자는 더 이상 못 받게
+  if (sh.sid && !sh.done) fetch(SHORT_URL(sh.code), { method: 'POST', body: shortMeta({ t: 'closed', to: sh.sid }) }).catch(() => {});
 }
 function setShareStatus(html) { const el = $('#shareStatus'); if (el) el.innerHTML = html; }
-function startShare(long, once, retry = 0) {
-  if (!window.Peer || !navigator.onLine) { setShareStatus('📴 지금은 인터넷이 안 돼서 짧은 코드를 쓸 수 없어요. 아래 긴 코드를 보내 주세요'); return; }
+async function startShare(long, once) {
+  if (!navigator.onLine) { setShareStatus('📴 지금은 인터넷이 안 돼서 짧은 코드를 쓸 수 없어요. 아래 긴 코드를 보내 주세요'); return; }
   const code = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
-  const peer = new Peer(SHORT_PREFIX + code);
-  SHARE = { peer, code, long, once, done: false, undo: SHARE && SHARE.undo };
+  const sid = Math.random().toString(36).slice(2, 12);
+  SHARE = { code, sid, long, once, done: false, undo: SHARE && SHARE.undo };
   const mine = SHARE;
-  peer.on('open', () => {
-    if (SHARE !== mine) return;
-    const el = $('#shortCode');
-    if (el) el.textContent = code;
-    setShareStatus('📡 친구가 이 숫자를 넣을 때까지 <b>이 창을 열어 두세요</b>');
-  });
-  peer.on('connection', (conn) => {
-    conn.on('open', () => {
-      if (SHARE !== mine || mine.done) { conn.close(); return; }
-      conn.send({ t: 'code', code: long });
-      if (mine.once) {
-        mine.done = true;
-        setShareStatus('✅ 친구가 받아 갔어요!');
-        const u = $('#giftUndo');
-        if (u) u.remove();
-        toast('✅ 친구가 받아 갔어요!');
-        setTimeout(() => { if (SHARE === mine) stopShare(); }, 1500);
-      } else {
-        toast('👀 친구가 내 섬 코드를 받아 갔어요');
-      }
-    });
-  });
-  peer.on('error', (e) => {
-    if (SHARE !== mine) return;
-    if (e.type === 'unavailable-id' && retry < 5) { stopShare(); SHARE = { undo: mine.undo }; startShare(long, once, retry + 1); return; }
-    setShareStatus('⚠️ 짧은 코드를 만들지 못했어요. 아래 긴 코드를 보내 주세요');
-  });
+  let ok = false;
+  try {
+    const r = await fetch(SHORT_URL(code), { method: 'PUT', body: long, headers: { Filename: 'code.txt', Message: shortMeta({ t: 'code', sid, once: once ? 1 : 0 }) } });
+    ok = r.ok;
+  } catch (e) { ok = false; }
+  if (SHARE !== mine) return;
+  if (!ok) { setShareStatus('⚠️ 짧은 코드를 만들지 못했어요. 아래 긴 코드를 보내 주세요'); return; }
+  const el = $('#shortCode');
+  if (el) el.textContent = code;
+  setShareStatus('📡 다른 기기에서 이 숫자를 넣을 때까지 <b>이 창을 열어 두세요</b> (받는 데 30초쯤 걸릴 수 있어요)');
+  // 받아 갔는지 가끔 확인
+  mine.timer = setInterval(async () => {
+    if (SHARE !== mine || mine.done) return;
+    const got = (await shortRead(code, 3 * 3600)).some(x => x.meta.t === 'got' && x.meta.to === sid);
+    if (!got || SHARE !== mine) return;
+    if (mine.once) {
+      mine.done = true;
+      clearInterval(mine.timer);
+      setShareStatus('✅ 받아 갔어요!');
+      const u = $('#giftUndo');
+      if (u) u.remove();
+      toast('✅ 받아 갔어요!');
+      setTimeout(() => { if (SHARE === mine) stopShare(); }, 1500);
+    } else {
+      toast('👀 누군가 내 코드를 받아 갔어요');
+    }
+  }, 8000);
 }
-// 받는 쪽: 4자리 숫자면 인터넷으로 긴 코드를 받아 오고, 긴 코드면 그대로
-function resolveCode(input) {
+// 받는 쪽: 4자리 숫자면 인터넷 우편함에서 긴 코드를 받아 오고, 긴 코드면 그대로
+async function resolveCode(input) {
   const t = String(input || '').trim();
-  if (!/^\d{4}$/.test(t)) return Promise.resolve(t);
-  if (!window.Peer || !navigator.onLine) return Promise.reject(new Error('offline'));
-  toast('📡 코드를 받아 오는 중…');
-  return new Promise((resolve, reject) => {
-    const peer = new Peer();
-    let finished = false;
-    const end = (fn, v) => { if (finished) return; finished = true; try { peer.destroy(); } catch (e) { /* 닫힘 */ } fn(v); };
-    setTimeout(() => end(reject, new Error('timeout')), 12000);
-    peer.on('open', () => {
-      const conn = peer.connect(SHORT_PREFIX + t, { reliable: true });
-      conn.on('data', (d) => { if (d && d.t === 'code') end(resolve, String(d.code)); });
-      conn.on('error', () => end(reject, new Error('conn')));
-    });
-    peer.on('error', (e) => end(reject, new Error(e.type || 'peer')));
-  });
+  if (!/^\d{4}$/.test(t)) return t;
+  if (!navigator.onLine) throw new Error('offline');
+  toast('📡 코드를 받아 오는 중… (30초쯤 걸릴 수 있어요)');
+  const t0 = Date.now();
+  while (Date.now() - t0 < 75000) {
+    const list = await shortRead(t, 3 * 3600);
+    const closed = new Set(list.filter(x => x.meta.t === 'closed').map(x => x.meta.to));
+    const got = new Set(list.filter(x => x.meta.t === 'got').map(x => x.meta.to));
+    const it = list.filter(x => x.meta.t === 'code' && x.ev.attachment && !closed.has(x.meta.sid) && !(x.meta.once && got.has(x.meta.sid)))
+      .sort((p, q) => q.ev.time - p.ev.time)[0];
+    if (it) {
+      const long = await (await fetch(it.ev.attachment.url)).text();
+      fetch(SHORT_URL(t), { method: 'POST', body: shortMeta({ t: 'got', to: it.meta.sid }) }).catch(() => {});
+      return long;
+    }
+    await new Promise(r => setTimeout(r, 6000));
+  }
+  throw new Error('timeout');
 }
 function shortCodeFail(e) {
   toast(e && e.message === 'offline' ? '📴 인터넷이 안 돼서 4자리 코드를 쓸 수 없어요. 긴 코드를 받아 주세요'
