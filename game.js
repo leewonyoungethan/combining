@@ -9591,13 +9591,14 @@ async function startShare(long, once) {
   const sid = Math.random().toString(36).slice(2, 12);
   SHARE = { code, sid, long, once, done: false, undo: SHARE && SHARE.undo };
   const mine = SHARE;
-  let ok = false;
+  let ok = false, why = '';
   try {
     const r = await fetch(SHORT_URL(code), { method: 'PUT', body: long, headers: { Filename: 'code.txt', Message: shortMeta({ t: 'code', sid, once: once ? 1 : 0 }) } });
-    ok = r.ok;
-  } catch (e) { ok = false; }
+    ok = r.ok; why = 'HTTP ' + r.status;
+    if (!ok) { try { const j = await r.json(); if (j && j.error) why += ' · ' + j.error; } catch (e) { /* 글 없음 */ } }
+  } catch (e) { ok = false; why = String(e && e.message || e).slice(0, 60); }
   if (SHARE !== mine) return;
-  if (!ok) { setShareStatus('⚠️ 짧은 코드를 만들지 못했어요. 아래 긴 코드를 보내 주세요'); return; }
+  if (!ok) { setShareStatus(`⚠️ 짧은 코드를 만들지 못했어요. 아래 긴 코드를 보내 주세요<br><small>(${esc(why)} · 크기 ${(long.length / 1048576).toFixed(1)}MB)</small>`); return; }
   const el = $('#shortCode');
   if (el) el.textContent = code;
   setShareStatus('📡 다른 기기에서 이 숫자를 넣을 때까지 <b>이 창을 열어 두세요</b> (받는 데 30초쯤 걸릴 수 있어요)');
@@ -10146,7 +10147,7 @@ async function cloudUpload(force) {
   const fp = cloudFp();
   const keepAlive = Date.now() - CLOUD.lastUp > 150 * 60 * 1000;   // 2시간 반마다 다시 올려서 3시간 안에 안 사라지게
   if (!force && fp === S.cloudFp && !keepAlive) return false;
-  if (!force && Date.now() - CLOUD.lastUp < 4 * 60 * 1000) return false;
+  if (!force && Date.now() - CLOUD.lastUp < (lastJsonLen > 2e6 ? 30 : 4) * 60 * 1000) return false;
   if (!ntfyBgOk()) return false;
   CLOUD.busy = true;
   try {
@@ -10218,7 +10219,7 @@ setInterval(() => {
 }, 60 * 1000);
 document.addEventListener('visibilitychange', () => {
   if (typeof S === 'undefined' || !S || !S.syncKey) return;
-  if (document.hidden) cloudUpload(true);
+  if (document.hidden) cloudUpload(lastJsonLen < 2e6 || Date.now() - CLOUD.lastUp > 10 * 60 * 1000);
   else setTimeout(cloudCheck, 800);
 });
 function syncFinish(msg) {
