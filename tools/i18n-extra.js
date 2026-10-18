@@ -1,5 +1,14 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  '📤 내 섬을 올리는 중…': '📤 Uploading my island…', '⚠️ 섬을 올리지 못했어요. 다시 해 주세요': "⚠️ Couldn't upload the island. Try again",
+  '다른 기기에서: 👤 계정 → 🔄 다른 기기와 맞추기 → 🔢 숫자 넣기. 다 될 때까지': 'On the other device: 👤 Account → 🔄 Sync with another device → 🔢 Enter number. Until it finishes,',
+  '. (와이파이 · 데이터가 달라도 돼요!)': '. (Different Wi-Fi or mobile data is OK!)', '⌛ 시간이 다 됐어요. 다시 해 주세요': '⌛ Time ran out. Try again',
+  '📥 다른 기기 섬을 받는 중…': "📥 Receiving the other device's island…", '⚠️ 받은 섬이 없어요. 다시 해 주세요': '⚠️ No island received. Try again',
+  '🔗 연결됐어요! 다른 기기에서 어느 섬으로 맞출지 고르고 있어요…': '🔗 Connected! The other device is choosing which island to keep…',
+  '📡 찾는 중… (30초쯤 걸릴 수 있어요)': '📡 Searching… (may take about 30 seconds)', '📥 찾았어요! 섬을 받는 중…': '📥 Found it! Receiving the island…',
+  '⚠️ 찾을 수 없어요. 숫자가 맞는지, 다른 기기의 숫자 창이 열려 있는지 확인해 주세요': "⚠️ Not found. Check the number and that the other device's number window is open",
+  '📤 이 기기 섬을 보내는 중…': "📤 Sending this device's island…", '⚠️ 보내지 못했어요. 다시 눌러 주세요': "⚠️ Couldn't send. Tap again",
+  '✅ 이 기기의 섬을 보냈어요! 다른 기기에 30초쯤 뒤에 들어가요 · ☁️ 이제 자동으로 맞춰져요': "✅ Sent this device's island! It reaches the other device in about 30 seconds · ☁️ Auto sync is on",
   '⚡ 1 · 2 · 4배는 무료! ⏩ 10배 ~ 1000만배는 💰로 하나씩 열어요 (싸우는 장면 없이 계산해서 렉이 없어요) · ⚡ 전투력 모드는 💰 10Qi': '⚡ 1 · 2 · 4× are free! ⏩ Unlock 10× ~ 10,000,000× one by one with 💰 (calculated without battle scenes, so no lag) · ⚡ Power mode is 💰 10Qi',
   '⏩ {}배 연속 전투': '⏩ {}× streak battle', '내 팀 ⚔️ {} vs 적 ⚔️ {} · ⏩ {}배 (목표 1초에 {}판)': 'My team ⚔️ {} vs enemy ⚔️ {} · ⏩ {}× (target {} stages/s)',
   '🔒 먼저 {}를 열어야 해요': '🔒 Unlock {} first', '🔁 연속 전투 시작! 위쪽 ⏩ 배속 버튼으로 바꿀 수 있어요 · Esc 키로 나가기': '🔁 Streak started! Change speed with ⏩ at the top · Esc to exit',

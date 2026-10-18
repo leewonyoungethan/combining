@@ -9919,8 +9919,34 @@ function accPinOk(id) {
 }
 // ===================== 🔄 기기끼리 맞추기 (두 기기에서 동시에 켜고 4자리 숫자) =====================
 const SYNC_PREFIX = 'monhap-sync-';
-let SYNC = null;   // { peer, conn, role, mine, theirs, done }
-function syncStop() { const s = SYNC; SYNC = null; try { s && s.conn && s.conn.close(); } catch (e) { /* 닫힘 */ } try { s && s.peer && s.peer.destroy(); } catch (e) { /* 닫힘 */ } }
+let SYNC = null;   // { role, code, sid, t0, theirs, done, timer }
+const SYNC_URL = (c) => 'https://ntfy.sh/monhap-sync2-' + (RANK_TOPIC.includes('-dev-') ? 'dev-' : '') + c;
+function syncStop() { const s = SYNC; SYNC = null; if (s && s.timer) clearInterval(s.timer); }
+// 우편함에 보내기 (이름이 한글이라 메타는 글자를 바꿔서 넣는다)
+async function syncSend(code, meta, body) {
+  try {
+    const r = body != null
+      ? await fetch(SYNC_URL(code), { method: 'PUT', body, headers: { Filename: 'sync.txt', Message: encodeURIComponent(JSON.stringify(meta)) } })
+      : await fetch(SYNC_URL(code), { method: 'POST', body: encodeURIComponent(JSON.stringify(meta)) });
+    return r.ok;
+  } catch (e) { return false; }
+}
+// 우편함 읽기: [{ meta, ev }] (내가 보낸 것 · 오래된 것은 빼고)
+async function syncRead(me, maxAge) {
+  let txt;
+  try { const r = await fetch(SYNC_URL(me.code) + '/json?poll=1&since=all'); if (!r.ok) return []; txt = await r.text(); } catch (e) { return []; }
+  const out = [], now = Date.now() / 1000;
+  txt.split('\n').forEach(l => {
+    try {
+      const ev = JSON.parse(l);
+      if (ev.event !== 'message' || now - ev.time > maxAge) return;
+      const meta = JSON.parse(decodeURIComponent(ev.message));
+      if (meta && meta.sid !== me.sid) out.push({ meta, ev });
+    } catch (e) { /* 다른 글 */ }
+  });
+  return out;
+}
+const syncSid = () => Math.random().toString(36).slice(2, 12);
 function syncSnapshot() {
   S.last = Date.now();
   const json = JSON.stringify(S);
@@ -9944,29 +9970,44 @@ function openSync() {
     ${S.syncKey ? `<div class="cloud-on">☁️ 자동 맞추기 <b>켜짐</b> · 게임을 켜면 다른 기기에서 한 것을 가져오고, 하는 동안 몇 분마다 올려요 (3시간 안에 다른 기기를 켜야 해요)<div class="row"><button class="btn small" data-act="cloudNow">☁️ 지금 맞추기</button><button class="btn ghost small" data-act="cloudOff">끄기</button></div></div>` : ''}
     <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
 }
-function syncHook(conn) {
-  SYNC.conn = conn;
-  conn.on('open', () => { if (SYNC && SYNC.conn === conn) { conn.send(syncSnapshot()); syncStatus('📨 내 섬을 보냈어요. 상대 섬을 기다리는 중…'); } });
-  conn.on('data', (d) => syncData(d));
-  conn.on('close', () => { if (SYNC && SYNC.conn === conn && !SYNC.done) syncStatus('⚠️ 연결이 끊겼어요. 다시 해 주세요'); });
-  conn.on('error', () => syncStatus('⚠️ 연결에 문제가 생겼어요. 다시 해 주세요'));
-}
 function syncStatus(h) { const e = $('#syncStatus'); if (e) e.innerHTML = h; }
-function syncHost(retry = 0) {
+async function syncHost() {
   syncStop();
-  if (!window.Peer || !navigator.onLine) { toast('📴 인터넷이 필요해요'); return; }
+  if (!navigator.onLine) { toast('📴 인터넷이 필요해요'); return; }
   const code = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
-  const peer = new Peer(SYNC_PREFIX + code);
-  SYNC = { peer, role: 'host', code };
-  const me = SYNC;
+  const me = SYNC = { role: 'host', code, sid: syncSid(), t0: Date.now() / 1000 };
   showModal(`<div class="sync-box"><h3>📡 이 숫자를 다른 기기에 넣어요</h3>
     <div class="short-code">${code}</div>
-    <p class="muted" id="syncStatus">📡 준비 중…</p>
-    <p class="muted small-note">다른 기기에서: 👤 계정 → 🔄 다른 기기와 맞추기 → 🔢 숫자 넣기. 다 될 때까지 <b>이 창을 열어 두세요</b>.</p>
+    <p class="muted" id="syncStatus">📤 내 섬을 올리는 중…</p>
+    <p class="muted small-note">다른 기기에서: 👤 계정 → 🔄 다른 기기와 맞추기 → 🔢 숫자 넣기. 다 될 때까지 <b>이 창을 열어 두세요</b>. (와이파이 · 데이터가 달라도 돼요!)</p>
     <div class="row"><button class="btn ghost small" data-act="syncCancel">취소</button></div></div>`);
-  peer.on('open', () => { if (SYNC === me) syncStatus('✅ 준비됐어요! 다른 기기에서 숫자를 넣어 주세요'); });
-  peer.on('connection', (conn) => { if (SYNC !== me || me.conn) { conn.close(); return; } syncHook(conn); syncStatus('🔗 연결됐어요! 섬을 주고받는 중…'); });
-  peer.on('error', (e) => { if (SYNC !== me) return; if (e.type === 'unavailable-id' && retry < 5) { syncHost(retry + 1); return; } syncStatus('⚠️ 숫자를 만들지 못했어요. 다시 해 주세요'); });
+  await new Promise(r => setTimeout(r, 50));
+  const snap = syncSnapshot();
+  const ok = await syncSend(code, { t: 'save', sid: me.sid, name: snap.name, sum: snap.sum, last: snap.last, key: snap.key }, snap.z);
+  if (SYNC !== me) return;
+  if (!ok) { syncStatus('⚠️ 섬을 올리지 못했어요. 다시 해 주세요'); return; }
+  syncStatus('✅ 준비됐어요! 다른 기기에서 숫자를 넣어 주세요');
+  const tick = async () => {
+    if (SYNC !== me || me.busy) return;
+    if (Date.now() / 1000 - me.t0 > 600) { syncStatus('⌛ 시간이 다 됐어요. 다시 해 주세요'); syncStop(); return; }
+    me.busy = true;
+    try {
+      const list = (await syncRead(me, 700)).filter(x => x.meta.to === me.sid);
+      if (SYNC !== me) return;
+      const pick = list.find(x => x.meta.t === 'pick');
+      if (pick) {
+        if (pick.meta.keep === 'join') {
+          syncStatus('📥 다른 기기 섬을 받는 중…');
+          if (!pick.ev.attachment) { syncStatus('⚠️ 받은 섬이 없어요. 다시 해 주세요'); return; }
+          const z = await (await fetch(pick.ev.attachment.url)).text();
+          if (SYNC !== me) return;
+          clearInterval(me.timer);
+          syncApply({ z, sum: pick.meta.sum });
+        } else { clearInterval(me.timer); cloudPaired(false); syncFinish('✅ 이 기기의 섬으로 두 기기를 맞췄어요! ☁️ 이제 자동으로 맞춰져요'); }
+      } else if (list.some(x => x.meta.t === 'hello')) syncStatus('🔗 연결됐어요! 다른 기기에서 어느 섬으로 맞출지 고르고 있어요…');
+    } catch (e) { /* 다음에 다시 */ } finally { me.busy = false; }
+  };
+  me.timer = setInterval(tick, 6000);
 }
 function syncJoinOpen() {
   syncStop();
@@ -9976,31 +10017,36 @@ function syncJoinOpen() {
     <div class="row"><button class="btn green" data-act="syncJoin">🔗 연결하기</button><button class="btn ghost small" data-act="syncCancel">취소</button></div></div>`);
   const i = $('#syncCode'); if (i) { i.focus(); i.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) syncJoin(); }); }
 }
-function syncJoin() {
+async function syncJoin() {
   const code = (($('#syncCode') || {}).value || '').trim();
   if (!/^\d{4}$/.test(code)) { toast('숫자 4자리를 넣어 주세요'); return; }
-  if (!window.Peer || !navigator.onLine) { toast('📴 인터넷이 필요해요'); return; }
+  if (!navigator.onLine) { toast('📴 인터넷이 필요해요'); return; }
   syncStop();
-  const peer = new Peer();
-  SYNC = { peer, role: 'join' };
-  const me = SYNC;
-  syncStatus('📡 연결하는 중…');
-  const tm = setTimeout(() => { if (SYNC === me && !me.theirs) syncStatus('⚠️ 찾을 수 없어요. 숫자와, 다른 기기의 창이 열려 있는지 확인해 주세요'); }, 15000);
-  peer.on('open', () => { if (SYNC !== me) return; syncHook(peer.connect(SYNC_PREFIX + code, { reliable: true })); });
-  peer.on('error', () => { if (SYNC !== me) return; clearTimeout(tm); syncStatus('⚠️ 찾을 수 없어요. 숫자를 다시 확인해 주세요'); });
+  const me = SYNC = { role: 'join', code, sid: syncSid(), t0: Date.now() / 1000 };
+  syncStatus('📡 찾는 중… (30초쯤 걸릴 수 있어요)');
+  const tick = async () => {
+    if (SYNC !== me || me.busy || me.theirs) return;
+    if (Date.now() / 1000 - me.t0 > 90) { clearInterval(me.timer); syncStatus('⚠️ 찾을 수 없어요. 숫자가 맞는지, 다른 기기의 숫자 창이 열려 있는지 확인해 주세요'); SYNC = null; return; }
+    me.busy = true;
+    try {
+      // 10분 안에 만든 숫자 중 가장 최근 것
+      const saves = (await syncRead(me, 600)).filter(x => x.meta.t === 'save' && x.ev.attachment).sort((p, q) => q.ev.time - p.ev.time);
+      if (SYNC !== me || !saves.length) return;
+      const { meta, ev } = saves[0];
+      syncStatus('📥 찾았어요! 섬을 받는 중…');
+      const z = await (await fetch(ev.attachment.url)).text();
+      if (SYNC !== me) return;
+      lzUnpack(z);
+      clearInterval(me.timer);
+      me.theirs = { z, last: meta.last, name: meta.name, sum: meta.sum, key: meta.key, sid: meta.sid };
+      syncSend(code, { t: 'hello', sid: me.sid, to: meta.sid });
+      syncChoose();
+    } catch (e) { syncStatus('⚠️ 받은 섬이 깨졌어요. 다시 해 주세요'); } finally { me.busy = false; }
+  };
+  tick();
+  me.timer = setInterval(tick, 6000);
 }
-function syncData(d) {
-  const me = SYNC;
-  if (!me || !d) return;
-  if (d.t === 'save') {
-    me.theirs = d;
-    if (me.role === 'join') syncChoose();
-    else syncStatus('📨 상대 섬을 받았어요! 다른 기기에서 어느 섬으로 맞출지 고르고 있어요…');
-  } else if (d.t === 'pick') {
-    // 상대(숫자 넣은 쪽)가 고른 것: keep = 'host' | 'join'
-    if (d.keep === 'join') syncApply(me.theirs); else { cloudPaired(false); syncFinish('✅ 이 기기의 섬으로 두 기기를 맞췄어요! ☁️ 이제 자동으로 맞춰져요'); }
-  }
-}
+function syncData() { /* 예전 직접 연결용 (안 씀) */ }
 function syncChoose() {
   const me = SYNC, mine = { last: Date.now(), name: ACC.name, sum: syncSum(S) }, th = me.theirs;
   const newer = th.last > (S.savedAt || S.last || 0) ? 'host' : 'join';
@@ -10013,13 +10059,24 @@ function syncChoose() {
     <p class="muted" id="syncStatus">&nbsp;</p>
     <div class="row"><button class="btn ghost small" data-act="syncCancel">취소</button></div></div>`);
 }
-function syncPick(keep) {
+async function syncPick(keep) {
   const me = SYNC;
-  if (!me || !me.conn || !me.theirs) return;
+  if (!me || !me.theirs || me.picking) return;
   if (!confirm(keep === 'host' ? '다른 기기의 섬으로 이 기기를 바꿀까요?\n(이 기기의 지금 섬은 사라져요)' : '이 기기의 섬을 다른 기기에도 보낼까요?\n(다른 기기의 지금 섬은 사라져요)')) return;
-  me.conn.send({ t: 'pick', keep });
-  if (keep === 'host') syncApply(me.theirs);
-  else { S.syncKey = me.theirs.key; cloudPaired(true); setTimeout(() => syncFinish('✅ 이 기기의 섬으로 두 기기를 맞췄어요! ☁️ 이제 자동으로 맞춰져요'), 600); }
+  me.picking = true;
+  if (keep === 'host') {
+    syncSend(me.code, { t: 'pick', keep, sid: me.sid, to: me.theirs.sid });
+    syncApply(me.theirs);
+    return;
+  }
+  syncStatus('📤 이 기기 섬을 보내는 중…');
+  S.syncKey = me.theirs.key;
+  S.last = Date.now();
+  const ok = await syncSend(me.code, { t: 'pick', keep, sid: me.sid, to: me.theirs.sid, sum: syncSum(S) }, lzPack(JSON.stringify(S)));
+  if (SYNC !== me) return;
+  if (!ok) { me.picking = false; syncStatus('⚠️ 보내지 못했어요. 다시 눌러 주세요'); return; }
+  cloudPaired(true);
+  syncFinish('✅ 이 기기의 섬을 보냈어요! 다른 기기에 30초쯤 뒤에 들어가요 · ☁️ 이제 자동으로 맞춰져요');
 }
 // 받은 섬으로 지금 계정을 바꾼다 (계정은 그대로, 섬만)
 function syncApply(d) {
