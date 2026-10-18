@@ -1,5 +1,6 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  '💰 진짜 왕창!': '💰 REALLY big!', '배! 대신 잘 안 돼요)': '×! but hard to win)', '💰 진짜 왕창은 가진 돈의 절반을 걸고': '💰 REALLY big bets half your gold for', '(대신 맞히기 훨씬 어려워요)!': '(but much harder to win)!',
   '🚀🚀 비밀 로켓 발동!! 슈우우웅~': '🚀🚀 Secret rocket activated!! Whoooosh~',
   '📡 다른 기기에서 이 숫자를 넣을 때까지': '📡 Until the other device enters this number,', '(받는 데 30초쯤 걸릴 수 있어요)': '(it may take about 30 seconds)',
   '✅ 받아 갔어요!': '✅ Received!', '👀 누군가 내 코드를 받아 갔어요': '👀 Someone received my code', '📡 코드를 받아 오는 중… (30초쯤 걸릴 수 있어요)': '📡 Fetching the code… (may take about 30 seconds)',

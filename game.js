@@ -2438,6 +2438,8 @@ setInterval(() => { if (typeof S !== 'undefined' && S) updateFishBtn(); }, 30000
 // ===================== 🏁 몬스터 경주 =====================
 // 몬스터 5마리가 달리기 시합! 1등을 맞히면 건 골드의 4.5배. 하루 1번은 🎟️ 무료 응원권 (맞히면 💎)
 const RACE_N = 5, RACE_PAY = 4.5, RACE_FREE_GEMS = 15;
+// 💰 진짜 왕창: 가진 돈의 절반을 걸고, 맞히면 15배! 대신 내 몬스터가 긴장해서 조금 느려진다 (맞힐 확률 약 8%)
+const RACE_BIG_PAY = 15, RACE_BIG_SLOW = 0.9;
 const RACE_EVENTS = [
   ['💨', '부스터 발동!', 1.9], ['🍌', '바나나 껍질에 미끄러졌어요!', 0.25], ['😴', '잠깐 낮잠…', 0.1],
   ['🔥', '불꽃 질주!', 1.6], ['🌪️', '회오리 바람을 탔어요!', 1.7], ['🪨', '돌에 걸려 넘어졌어요!', 0.3], ['🎵', '신나는 음악에 춤을 춰요~', 0.5],
@@ -2461,7 +2463,7 @@ function raceBets() {
     { id: 'free', label: `🎟️ 무료 응원권`, sub: raceFreeOk() ? `맞히면 💎 ${RACE_FREE_GEMS}` : '내일 또 받아요', amt: 0, ok: raceFreeOk() },
     { id: 's', label: '💰 조금', amt: Math.max(100, Math.floor(g * 0.01)) },
     { id: 'm', label: '💰 보통', amt: Math.max(500, Math.floor(g * 0.05)) },
-    { id: 'l', label: '💰 왕창', amt: Math.max(2000, Math.floor(g * 0.1)) },
+    { id: 'l', label: '💰 진짜 왕창!', amt: Math.max(2000, Math.floor(g * 0.5)), pay: RACE_BIG_PAY },
   ].map(b => ({ ...b, ok: b.id === 'free' ? b.ok : (S.infinite || S.gold >= b.amt) }));
 }
 function openRace() {
@@ -2480,9 +2482,9 @@ function raceDraw() {
   showModal(`<div class="race-panel"><h3>🏁 몬스터 경주</h3>
     <div class="race-msg" id="raceMsg">${R.st === 'pick' ? '누가 1등 할까요? 응원할 몬스터를 눌러요!' : R.st === 'run' ? '달린다~!' : ''}</div>
     <div class="race-lanes">${lanes}</div>
-    <div id="raceCtl">${R.st === 'pick' ? `<div class="race-bets">${bets.map(b => `<button class="race-bet ${R.bet === b.id ? 'on' : ''}" data-act="raceBet" data-b="${b.id}" ${b.ok ? '' : 'disabled'}><b>${b.label}</b><small>${b.id === 'free' ? b.sub : '💰 ' + shortNum(b.amt) + ' → ' + shortNum(b.amt * RACE_PAY)}</small></button>`).join('')}</div>
+    <div id="raceCtl">${R.st === 'pick' ? `<div class="race-bets">${bets.map(b => `<button class="race-bet ${R.bet === b.id ? 'on' : ''}" data-act="raceBet" data-b="${b.id}" ${b.ok ? '' : 'disabled'}><b>${b.label}</b><small>${b.id === 'free' ? b.sub : '💰 ' + shortNum(b.amt) + ' → ' + shortNum(b.amt * (b.pay || RACE_PAY)) + (b.pay ? ' (' + b.pay + '배! 대신 잘 안 돼요)' : '')}</small></button>`).join('')}</div>
       <div class="row"><button class="btn big green" data-act="raceGo" ${R.pick != null && R.bet ? '' : 'disabled'}>🏁 출발!</button></div>
-      <p class="muted race-help">1등을 맞히면 건 골드의 <b>${RACE_PAY}배</b>! 달리는 중에 💨부스터 · 🍌미끄러짐 같은 일이 생겨요.</p>` : ''}</div>
+      <p class="muted race-help">1등을 맞히면 건 골드의 <b>${RACE_PAY}배</b>! 💰 진짜 왕창은 가진 돈의 절반을 걸고 <b>${RACE_BIG_PAY}배</b> (대신 맞히기 훨씬 어려워요)! 달리는 중에 💨부스터 · 🍌미끄러짐 같은 일이 생겨요.</p>` : ''}</div>
     <div class="row"><button class="btn ghost small" data-act="raceClose">닫기</button></div></div>`);
 }
 function raceGo() {
@@ -2492,7 +2494,7 @@ function raceGo() {
   if (!b || !b.ok) { toast('그건 지금 걸 수 없어요'); return; }
   if (b.id === 'free') S.raceFree = dayKey();
   else if (!spend(b.amt)) return;
-  R.amt = b.amt; R.st = 'run'; R.t0 = performance.now(); R.last = R.t0; R.nextEv = R.t0 + 900;
+  R.amt = b.amt; R.pay = b.pay || RACE_PAY; R.st = 'run'; R.t0 = performance.now(); R.last = R.t0; R.nextEv = R.t0 + 900;
   save(); updateHud();
   raceDraw();
   sfx('breed');
@@ -2515,7 +2517,8 @@ function raceGo() {
       r.v += (Math.random() - 0.5) * 6 * dt; r.v = Math.max(9, Math.min(20, r.v));
       const mult = r.rocket ? 9 : r.fx && now < r.fxT ? r.fx[2] : 1;
       if (r.fx && now >= r.fxT) r.fx = null;
-      r.pos = Math.min(100, r.pos + r.v * mult * dt);
+      const slow = R.bet === 'l' && i === R.pick && !r.rocket ? RACE_BIG_SLOW : 1;
+      r.pos = Math.min(100, r.pos + r.v * mult * slow * dt);
       const el = $('#rr' + i); if (el) el.style.left = r.pos * 0.9 + '%';
       const fx = $('#rf' + i); if (fx) fx.textContent = r.rocket ? '🚀' : r.fx ? r.fx[0] : '';
       if (r.pos >= 100 && winner == null) winner = i;
@@ -2533,7 +2536,7 @@ function raceEnd(w) {
   if (win) {
     statAdd('raceWin', 1);
     if (R.bet === 'free') { earn(RACE_FREE_GEMS, 'gems'); msg = `🎉 맞혔어요! ${r.face} ${r.name} 1등! 💎 ${RACE_FREE_GEMS}`; }
-    else { const got = Math.round(R.amt * RACE_PAY); earn(got); msg = `🎉 맞혔어요! ${r.face} ${r.name} 1등! 💰 ${shortNum(got)}`; }
+    else { const got = Math.round(R.amt * (R.pay || RACE_PAY)); earn(got); msg = `🎉 맞혔어요! ${r.face} ${r.name} 1등! 💰 ${shortNum(got)}`; }
     sfx('win');
   } else {
     msg = `😢 아쉬워요… 1등은 ${r.face} ${r.name}! (내가 응원한 건 ${R.runners[R.pick].face})`;
