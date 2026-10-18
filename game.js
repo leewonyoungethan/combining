@@ -9948,7 +9948,7 @@ async function syncRead(me, maxAge) {
   });
   return out;
 }
-const gameVer = () => { const m = ((document.querySelector('script[src*="game.js"]') || {}).src || '').match(/v=(d+)/); return m ? m[1] : '?'; };
+const gameVer = () => { const m = ((document.querySelector('script[src*="game.js"]') || {}).src || '').match(/v=(\d+)/); return m ? m[1] : '?'; };
 const syncVerTag = () => `<p class="muted small-note">🔖 버전 ${gameVer()} · 두 기기의 버전 숫자가 같아야 해요. 다르면 ✨ 새 버전 적용 또는 새로 고침!</p>`;
 const syncSid = () => Math.random().toString(36).slice(2, 12);
 function syncSnapshot() {
