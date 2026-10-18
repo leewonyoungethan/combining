@@ -1,5 +1,9 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  '⚡ 1 · 2 · 4배는 무료! ⏩ 10배 ~ 1000만배는 💰로 하나씩 열어요 (싸우는 장면 없이 계산해서 렉이 없어요) · ⚡ 전투력 모드는 💰 10Qi': '⚡ 1 · 2 · 4× are free! ⏩ Unlock 10× ~ 10,000,000× one by one with 💰 (calculated without battle scenes, so no lag) · ⚡ Power mode is 💰 10Qi',
+  '⏩ {}배 연속 전투': '⏩ {}× streak battle', '내 팀 ⚔️ {} vs 적 ⚔️ {} · ⏩ {}배 (목표 1초에 {}판)': 'My team ⚔️ {} vs enemy ⚔️ {} · ⏩ {}× (target {} stages/s)',
+  '🔒 먼저 {}를 열어야 해요': '🔒 Unlock {} first', '🔁 연속 전투 시작! 위쪽 ⏩ 배속 버튼으로 바꿀 수 있어요 · Esc 키로 나가기': '🔁 Streak started! Change speed with ⏩ at the top · Esc to exit',
+  '⏩ 🔁 연속 전투에서는 1000만배까지 빨라져요!': '⏩ Streak battles go up to 10,000,000×!',
   '💬 위쪽 💬 채팅 버튼을 눌러 봐요 (메신저처럼 다른 사람과 이야기해요!)': '💬 Tap the 💬 Chat button at the top (talk to others like a messenger!)',
   '💬 채팅': '💬 Chat', '채팅': 'Chat', '대화 목록': 'Chats', '메시지 보내기…': 'Message…', '빠른 말 · 이모지': 'Quick phrases · emojis',
   '👋 {}님에게 첫 인사를 보내 봐요!': '👋 Say hi to {}!', '🛡️ 전화번호 · 주소 · 학교 · 다른 앱 연락처 같은 개인정보는 보낼 수 없어요': "🛡️ Personal info like phone numbers, addresses, schools or other app contacts can't be sent",

@@ -7176,7 +7176,7 @@ function openLoopStart() {
   const cur = S.bSpeed || 1;
   showModal(`<div class="loop-start"><h3>🔁 연속 전투</h3>
     <p class="muted">몇 배속으로 할까요? 이기면 다음 스테이지로 자동으로 계속 싸워요. (전투 중에도 ⏩ 버튼으로 바꿀 수 있어요 · <b>Esc</b> 키로 나가기)</p>
-    <p class="muted small-note">⚡ 1 · 2 · 4배는 무료! ⚡ 전투력 모드는 💰 10Qi로 열어요 (전투력이 클수록 훨씬 빨라져요!)</p>
+    <p class="muted small-note">⚡ 1 · 2 · 4배는 무료! ⏩ 10배 ~ 1000만배는 💰로 하나씩 열어요 (싸우는 장면 없이 계산해서 렉이 없어요) · ⚡ 전투력 모드는 💰 10Qi</p>
     <div class="ls-grid">${SPEEDS_LOOP.map(sp => { const own = spOwned(sp), nx = spNextLocked() === sp; return `<button class="ls-sp ${sp === cur && own ? 'on' : ''} ${sp === POWER_SPEED ? 'hot power' : ''} ${own ? '' : 'locked'} ${nx ? 'next' : ''}" data-act="loopGo" data-sp="${sp}">${own ? spLabel(sp) : `🔒 ${spLabel(sp)}<small>💰 ${shortNum(speedPrice(sp))}</small>`}</button>`; }).join('')}</div>
     <p class="muted small-note">⚡ 전투력 모드: 싸우는 장면 없이 전투력으로 바로 계산! 지금 내 팀이면 1초에 약 <b>${shortNum(powerRate(unitsPower(S.team.map(byUid).filter(Boolean).map((m, i) => mkUnit(m, 'me', i)))))}</b> 스테이지</p>
     <div class="row"><button class="btn ghost small" data-act="close">취소</button></div></div>`);
@@ -7185,8 +7185,8 @@ function startLoop() {
   tutFlag('loop', true);
   if (!S.team.map(byUid).filter(Boolean).length) { toast('먼저 팀을 짜 주세요 (⚡ 자동 편성)'); return; }
   LOOP = { wins: 0, start: S.stage, gold: S.gold };
-  if (bSpeed() >= 100000) { quickLoop(); return; }
-  toast(tutFlag('speed') ? '🔁 연속 전투 시작! 지거나 ⏹ 멈추기를 누르면 끝나요' : '🔁 연속 전투 시작! 위쪽 ⏩ 배속 버튼으로 최대 10000배까지 · Esc 키로 나가기');
+  if (bSpeed() >= 10) { quickLoop(); return; }
+  toast(tutFlag('speed') ? '🔁 연속 전투 시작! 지거나 ⏹ 멈추기를 누르면 끝나요' : '🔁 연속 전투 시작! 위쪽 ⏩ 배속 버튼으로 바꿀 수 있어요 · Esc 키로 나가기');
   startBattle();
 }
 // 전투력 = 체력/5 + 공격×2 + 속도 (내 팀은 펫·왕국·우주 보너스까지)
@@ -7205,11 +7205,12 @@ function quickLoop() {
   const team = S.team.map(byUid).filter(Boolean);
   if (!team.length || !LOOP) return;
   const myPow = unitsPower(team.map((m, i) => mkUnit(m, 'me', i)));
+  const sp = bSpeed(), isPow = sp === POWER_SPEED, rate = isPow ? powerRate(myPow) : fixedRate(sp);
   Object.assign(LOOP, { quick: true, myPow, t0: performance.now(), wins0: LOOP.wins, gold: 0, gems: 0 });
   const L = LOOP;
   const bt = $('#battle');
   bt.innerHTML = `<div class="b-inner quick-run">
-    <h2>⚡ 전투력 모드 · 전투력으로 바로 계산!</h2>
+    <h2>${isPow ? '⚡ 전투력 모드 · 전투력으로 바로 계산!' : `⏩ ${fmt(sp)}배 연속 전투`}</h2>
     <p class="muted">싸우는 장면 없이 내 팀 전투력과 적 전투력을 비교해서 이기면 바로 다음 스테이지로!</p>
     <div class="qr-stage" id="qrStage"></div>
     <div class="qr-grid"><div><small>연승</small><b id="qrWins">0</b></div><div><small>1초에</small><b id="qrRate">0</b></div><div><small>번 돈</small><b id="qrGold">0</b></div><div><small>번 보석</small><b id="qrGems">0</b></div></div>
@@ -7222,9 +7223,8 @@ function quickLoop() {
     mgSet('#qrStage', `스테이지 ${shortNum(S.stage)}`);
     mgSet('#qrWins', shortNum(L.wins)); mgSet('#qrRate', shortNum(Math.round((L.wins - L.wins0) / sec)) + '판');
     mgSet('#qrGold', '💰 ' + shortNum(L.gold)); mgSet('#qrGems', '💎 ' + shortNum(L.gems));
-    mgSet('#qrPow', `내 팀 ⚔️ ${shortNum(myPow)} vs 적 ⚔️ ${shortNum(fp)} · 전투력이 클수록 빨라요 (목표 1초에 ${shortNum(powerRate(myPow))}판)`);
+    mgSet('#qrPow', isPow ? `내 팀 ⚔️ ${shortNum(myPow)} vs 적 ⚔️ ${shortNum(fp)} · 전투력이 클수록 빨라요 (목표 1초에 ${shortNum(rate)}판)` : `내 팀 ⚔️ ${shortNum(myPow)} vs 적 ⚔️ ${shortNum(fp)} · ⏩ ${fmt(sp)}배 (목표 1초에 ${shortNum(rate)}판)`);
   };
-  const rate = powerRate(myPow);
   L.quota = 0; L.last = performance.now();
   const step = () => {
     if (LOOP !== L) return;
@@ -7273,13 +7273,13 @@ function stopLoop(reason) {
   if (l.wins > (S.bestStreak || 0)) S.bestStreak = l.wins;
   save(); updateHud();
   if (l.quick) { $('#battle').classList.add('hidden'); render(); }
-  toast(`⏹ 연속 전투 끝! ${l.wins}연승 (스테이지 ${l.start} → ${S.stage})${reason ? ' · ' + reason : ''}`);
+  toast(`⏹ 연속 전투 끝! ${shortNum(l.wins)}연승 (스테이지 ${shortNum(l.start)} → ${shortNum(S.stage)})${reason ? ' · ' + reason : ''}`);
   if (B) drawBattle();
 }
 function loopNext() {
   if (!LOOP || !B || !B.over || B.pvp || B.gwar || B.raid || B.bossIdx != null) return;
   if (!B.result.win) { stopLoop('패배'); return; }
-  if (bSpeed() >= 100000) { LOOP.wins++; clearTimeout(B.timer); B = null; quickLoop(); return; }
+  if (bSpeed() >= 10) { LOOP.wins++; clearTimeout(B.timer); B = null; quickLoop(); return; }
   LOOP.wins++;
   clearTimeout(B.timer);
   B = null;
@@ -7311,11 +7311,15 @@ function logB(msg) {
 }
 // 배속: 보통 전투 1·2·4배, 🔁 연속 전투는 10·25·50·100배까지
 const POWER_SPEED = 1e9;   // ⚡ 전투력 모드 (배속 대신 전투력으로 빨라진다)
-const SPEEDS_LOOP = [1, 2, 4, POWER_SPEED], SPEEDS = [1, 2, 4];
+const SPEEDS_FAST = [10, 100, 1000, 10000, 100000, 1000000, 10000000];
+const SPEEDS_LOOP = [1, 2, 4, ...SPEEDS_FAST, POWER_SPEED], SPEEDS = [1, 2, 4];
+const FAST_PRICE = { 10: 1e6, 100: 1e8, 1000: 1e10, 10000: 1e12, 100000: 1e14, 1000000: 1e16, 10000000: 1e18 };
+// 1배 = 3초에 1판쯤 → N배 = 1초에 N/3판
+const fixedRate = (sp) => Math.max(1, Math.round(sp / 3));
 const POWER_MODE_PRICE = 1e19;   // 10Qi
 // 값: 10배 1M → 단계가 오를수록 곱하는 수도 커진다 → 10000000배는 최대 돈 전부(100Ce)!
 const SPEED_EXP = [6, 9, 13, 18, 25, 34, 46, 62, 83, 110, 150, 210, 305];   // 10배 · 25배 · … · 10000000배 값의 0의 개수
-const speedPrice = (sp) => (sp === POWER_SPEED ? POWER_MODE_PRICE : 0);
+const speedPrice = (sp) => (sp === POWER_SPEED ? POWER_MODE_PRICE : FAST_PRICE[sp] || 0);
 const spLabel = (sp) => (sp === POWER_SPEED ? '⚡ 전투력 모드' : `⏩ ${fmt(sp)}배`);
 // 전투력이 클수록 1초에 더 많은 스테이지 (전투력의 자릿수가 클수록 훨씬 빨라진다)
 const powerRate = (p) => Math.max(5, Math.round(Math.pow(Math.max(10, p), 0.62)));
@@ -7324,7 +7328,7 @@ const GOLD_C = 120 * Math.pow(1.25, 49) / Math.pow(50, 2.5);
 const goldSum = (a, b) => GOLD_C * (Math.pow(b - 0.5, 3.5) - Math.pow(a - 0.5, 3.5)) / 3.5;
 const gemSum = (a, b) => 5 * (b - a) + 15 * (Math.floor((b - 1) / 5) - Math.floor((a - 1) / 5));
 // 예전에 비싼 배속을 산 사람은 전투력 모드를 그냥 준다
-function spMigrate() { const own = S.spdOwn || []; if (!own.includes(POWER_SPEED) && own.some(x => x >= 100 && x !== POWER_SPEED)) S.spdOwn = [...own, POWER_SPEED]; }
+function spMigrate() { if (S.spMig2) return; S.spMig2 = 1; const own = S.spdOwn || []; if (!own.includes(POWER_SPEED) && own.some(x => x >= 100 && x !== POWER_SPEED)) S.spdOwn = [...own, POWER_SPEED]; }
 const spOwned = (sp) => speedPrice(sp) === 0 || (S.spdOwn || []).includes(sp);
 const spTop = () => SPEEDS_LOOP.filter(spOwned).pop() || 1;
 const spNextLocked = () => SPEEDS_LOOP.find(sp => !spOwned(sp));
@@ -7332,7 +7336,7 @@ function buySpeed(sp) {
   sp = Number(sp);
   if (spOwned(sp)) return true;
   const nx = spNextLocked();
-  if (sp !== nx) { toast(`🔒 먼저 ⏩ ${fmt(nx)}배를 열어야 해요`); return false; }
+  if (sp !== nx && sp !== POWER_SPEED && !SPEEDS_LOOP.slice(0, SPEEDS_LOOP.indexOf(sp)).every(spOwned)) { toast(`🔒 먼저 ${spLabel(nx)}를 열어야 해요`); return false; }
   if (!confirm(`${spLabel(sp)}를 열까요?\n💰 ${shortNum(speedPrice(sp))}`)) return false;
   if (!spend(speedPrice(sp))) return false;
   S.spdOwn = [...(S.spdOwn || []), sp];
@@ -7365,7 +7369,7 @@ const _clearTimeout = window.clearTimeout.bind(window);
 window.clearTimeout = (t) => { if (t && typeof t === 'object' && 'dead' in t) t.dead = true; else _clearTimeout(t); };
 function bSpeed() {
   let s = S.bSpeed || (S.fastBattle ? 4 : 1);
-  if (!SPEEDS_LOOP.includes(s)) s = s > 4 && spOwned(POWER_SPEED) ? POWER_SPEED : Math.min(4, s);
+  if (!SPEEDS_LOOP.includes(s)) s = SPEEDS_LOOP.filter(x => x !== POWER_SPEED && x <= s && spOwned(x)).pop() || 1;
   if (!spOwned(s)) s = Math.min(s, spTop());
   return LOOP ? s : Math.min(4, s);
 }
@@ -12325,8 +12329,10 @@ const ACTIONS = {
     const list = (LOOP ? SPEEDS_LOOP : SPEEDS).filter(spOwned), cur = bSpeed();
     const next = list[(list.indexOf(cur) + 1) % list.length] || 1;
     S.bSpeed = next; S.fastBattle = next > 1; B.fast = next > 1;
-    if (!LOOP && next === 4) toast('⏩ 🔁 연속 전투에서는 100배속까지 빨라져요!');
-    save(); drawBattle();
+    if (!LOOP && next === 4) toast('⏩ 🔁 연속 전투에서는 1000만배까지 빨라져요!');
+    save();
+    if (LOOP && next >= 10 && B && !B.over) { clearTimeout(B.timer); B = null; quickLoop(); return; }
+    drawBattle();
   },
   bAuto: () => {
     if (!B || (B.pvp && !B.coop)) return;
