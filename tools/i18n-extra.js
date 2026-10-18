@@ -1,5 +1,6 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  '🔖 버전 {} · 두 기기의 버전 숫자가 같아야 해요. 다르면 ✨ 새 버전 적용 또는 새로 고침!': '🔖 Version {} · Both devices need the same version number. If not, apply ✨ the new version or refresh!',
   '📤 내 섬을 올리는 중…': '📤 Uploading my island…', '⚠️ 섬을 올리지 못했어요. 다시 해 주세요': "⚠️ Couldn't upload the island. Try again",
   '다른 기기에서: 👤 계정 → 🔄 다른 기기와 맞추기 → 🔢 숫자 넣기. 다 될 때까지': 'On the other device: 👤 Account → 🔄 Sync with another device → 🔢 Enter number. Until it finishes,',
   '. (와이파이 · 데이터가 달라도 돼요!)': '. (Different Wi-Fi or mobile data is OK!)', '⌛ 시간이 다 됐어요. 다시 해 주세요': '⌛ Time ran out. Try again',

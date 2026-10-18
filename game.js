@@ -7972,9 +7972,11 @@ async function ntfyPost(url, obj, bg) {
     }
     if (bg) d.n++;
     lsSet('combining-ntfy', JSON.stringify(d));
+    SYNC_ERR = r.ok ? '' : 'HTTP ' + r.status;
     return r.ok;
-  } catch (e) { return false; }
+  } catch (e) { SYNC_ERR = String(e && e.message || e).slice(0, 40); return false; }
 }
+let SYNC_ERR = '';
 const RANK_CATS = [
   { id: 'tr',  name: '🏆 트로피',  unit: '', desc: '🌍 랜덤 대전에서 이기면 올라가요' },
   { id: 'dex', name: '📖 도감',    unit: '마리', desc: '모은 몬스터 종류' },
@@ -9946,6 +9948,8 @@ async function syncRead(me, maxAge) {
   });
   return out;
 }
+const gameVer = () => { const m = ((document.querySelector('script[src*="game.js"]') || {}).src || '').match(/v=(d+)/); return m ? m[1] : '?'; };
+const syncVerTag = () => `<p class="muted small-note">🔖 버전 ${gameVer()} · 두 기기의 버전 숫자가 같아야 해요. 다르면 ✨ 새 버전 적용 또는 새로 고침!</p>`;
 const syncSid = () => Math.random().toString(36).slice(2, 12);
 function syncSnapshot() {
   S.last = Date.now();
@@ -9980,12 +9984,12 @@ async function syncHost() {
     <div class="short-code">${code}</div>
     <p class="muted" id="syncStatus">📤 내 섬을 올리는 중…</p>
     <p class="muted small-note">다른 기기에서: 👤 계정 → 🔄 다른 기기와 맞추기 → 🔢 숫자 넣기. 다 될 때까지 <b>이 창을 열어 두세요</b>. (와이파이 · 데이터가 달라도 돼요!)</p>
-    <div class="row"><button class="btn ghost small" data-act="syncCancel">취소</button></div></div>`);
+    ${syncVerTag()}<div class="row"><button class="btn ghost small" data-act="syncCancel">취소</button></div></div>`);
   await new Promise(r => setTimeout(r, 50));
   const snap = syncSnapshot();
   const ok = await syncSend(code, { t: 'save', sid: me.sid, name: snap.name, sum: snap.sum, last: snap.last, key: snap.key }, snap.z);
   if (SYNC !== me) return;
-  if (!ok) { syncStatus('⚠️ 섬을 올리지 못했어요. 다시 해 주세요'); return; }
+  if (!ok) { syncStatus(`⚠️ 섬을 올리지 못했어요. 다시 해 주세요<br><small>(${esc(SYNC_ERR)} · 섬 크기 ${(snap.z.length / 1048576).toFixed(1)}MB)</small>`); return; }
   syncStatus('✅ 준비됐어요! 다른 기기에서 숫자를 넣어 주세요');
   const tick = async () => {
     if (SYNC !== me || me.busy) return;
@@ -10014,7 +10018,7 @@ function syncJoinOpen() {
   showModal(`<div class="sync-box"><h3>🔢 다른 기기의 숫자 넣기</h3>
     <input id="syncCode" inputmode="numeric" maxlength="4" placeholder="4자리 숫자" autocomplete="off">
     <p class="muted" id="syncStatus">&nbsp;</p>
-    <div class="row"><button class="btn green" data-act="syncJoin">🔗 연결하기</button><button class="btn ghost small" data-act="syncCancel">취소</button></div></div>`);
+    <div class="row"><button class="btn green" data-act="syncJoin">🔗 연결하기</button><button class="btn ghost small" data-act="syncCancel">취소</button></div>${syncVerTag()}</div>`);
   const i = $('#syncCode'); if (i) { i.focus(); i.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) syncJoin(); }); }
 }
 async function syncJoin() {
