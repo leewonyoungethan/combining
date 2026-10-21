@@ -1780,3 +1780,17 @@ body.ui-hidden .todo-btn { opacity: .55; }
 .fame-gift { font-weight: 900; color: #ffd24a; }
 .fame-bar { background: rgba(255, 255, 255, .12); border-radius: 6px; overflow: hidden; }
 .fame-bar i { display: block; height: 100%; background: linear-gradient(90deg, #ffd24a, #ff8a3d); }
+
+/* ⭐ 평판 */
+.rate-panel { text-align: center; }
+.rate-stars { display: flex; justify-content: center; gap: 6px; margin: 10px 0 4px; }
+.rate-star { font-size: 34px; background: none; border: 0; cursor: pointer; filter: grayscale(1) opacity(.45); transition: transform .12s, filter .12s; padding: 2px; }
+.rate-star.on { filter: none; transform: scale(1.1); }
+.rate-word { font-weight: 900; min-height: 1.4em; }
+.rate-avg { font-size: 22px; margin: 6px 0; } .rate-avg b { font-size: 34px; color: #ffd24a; }
+.rate-dist { display: flex; flex-direction: column; gap: 3px; margin: 6px auto 10px; max-width: 300px; }
+.rate-dist div { display: grid; grid-template-columns: 34px 1fr 30px; align-items: center; gap: 6px; font-size: 12px; }
+.rate-dist i { display: block; height: 8px; border-radius: 4px; background: #ffd24a; min-width: 2px; }
+.rate-list { display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow-y: auto; text-align: left; }
+.rate-row { padding: 8px 10px; border-radius: 12px; background: rgba(255, 255, 255, .07); }
+.sorry-box { text-align: left; margin: 8px 0 12px; padding: 12px 14px; border-radius: 14px; background: rgba(255, 120, 150, .14); border: 1px solid rgba(255, 120, 150, .4); line-height: 1.6; }

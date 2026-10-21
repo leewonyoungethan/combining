@@ -9118,9 +9118,9 @@ function myTeamData() {
 function netUnit(d, side, idx) {
   if (!d || !CAT[d.type]) return null;
   const num = (v, lo, hi) => Math.max(lo, Math.min(hi, Number(v) || lo));
-  const hp = num(d.hp, 1, 1e7);
+  const hp = num(d.hp, 1, 1e300);
   return { id: side + idx, side, c: CAT[d.type], lv: num(d.lv, 1, MAX_LV), maxHp: hp, hp, dispHp: hp, shownDead: false,
-    atk: num(d.atk, 1, 1e6), spd: num(d.spd, 1, 1e4), sta: 2, fx: newFx() };
+    atk: num(d.atk, 1, 1e300), spd: num(d.spd, 1, 1e4), sta: 2, fx: newFx() };
 }
 
 function openPvp() {
@@ -9486,7 +9486,7 @@ function startCoopGuest(msg) {
   const def = coopBossDef(msg.bk);
   const num = (v, lo, hi) => Math.max(lo, Math.min(hi, Number(v) || lo));
   const units = msg.units.map(d => {
-    if (d.boss) { const hp = num(d.hp, 1, 1e9); return { id: 'foe0', side: 'foe', c: def, lv: num(d.lv, 1, 99), boss: true, turns: num(d.turns, 1, 5), maxHp: hp, hp, dispHp: hp, shownDead: false, atk: num(d.atk, 1, 1e7), spd: num(d.spd, 1, 1e4), sta: 4, fx: newFx() }; }
+    if (d.boss) { const hp = num(d.hp, 1, 1e300); return { id: 'foe0', side: 'foe', c: def, lv: num(d.lv, 1, 99), boss: true, turns: num(d.turns, 1, 5), maxHp: hp, hp, dispHp: hp, shownDead: false, atk: num(d.atk, 1, 1e7), spd: num(d.spd, 1, 1e4), sta: 4, fx: newFx() }; }
     const u = netUnit(d, d.side === 'foe' ? 'foe' : 'me', 0);
     if (!u) return null;
     u.id = String(d.id).slice(0, 6);
@@ -9556,7 +9556,7 @@ function applyPvpState(msg) {
     u.hp = su.hp;
     u.sta = su.sta;
     u.fx = su.fx || newFx();
-    if (!B.anim) u.dispHp = su.dispHp;
+    if (!B.anim) u.dispHp = su.hp;
     if (su.shownDead) u.shownDead = true;
   });
   B.round = msg.round || 0;
@@ -9574,7 +9574,12 @@ function playPvpSkill(msg) {
   if (!att || !sk) return;
   const events = (msg.events || []).map(e => ({ ...e, t: unitById(gflip(e.t)) })).filter(e => e.t);
   B.anim++;
-  playSkill(att, sk, events).finally(() => { if (B) B.anim = Math.max(0, B.anim - 1); });
+  playSkill(att, sk, events).finally(() => {
+    if (!B) return;
+    B.anim = Math.max(0, B.anim - 1);
+    // 애니메이션이 끝나면 진짜 체력으로 맞추기
+    if (!B.anim) B.units.forEach(u => { if (u.dispHp !== u.hp) { u.dispHp = u.hp; updateUnit(u); } });
+  });
 }
 
 // ===================== 코드로 선물·섬 주고받기 =====================
@@ -10559,6 +10564,7 @@ async function openAdmin(fresh = true) {
   }
   const bans = Object.values(banStore()).filter(b => b.until > Date.now()).sort((a, b) => a.until - b.until);
   showModal(`<div class="admin-box"><h3>🛡️ 제작자 메뉴</h3>
+    <div class="row"><button class="btn" data-act="rateList">⭐ 평판 보기 (별점 · 이유)</button></div>
     <h4 class="sub">🔍 사람 찾기</h4>
     <div class="row as-search"><input id="findName" maxlength="20" placeholder="이름으로 찾기" autocomplete="off" value="${esc(ADMIN_FIND)}"><button class="btn small" data-act="adminFind">🔍 찾기</button></div>
     <div id="findOut">${adminFindHTML(ADMIN_FIND)}</div>
@@ -10632,6 +10638,7 @@ function openAccountMenu() {
       <button class="build-opt" data-act="music" style="--hc:#b388ff"><span class="bo-ico">${musicOn() ? '🎵' : '🔈'}</span><span class="bo-nm">배경음악 ${musicOn() ? '켜짐 (누르면 끄기)' : '꺼짐 (누르면 켜기)'}</span></button>
       <button class="build-opt" data-act="sound" style="--hc:#7dff8f"><span class="bo-ico">${soundOn() ? '🔊' : '🔇'}</span><span class="bo-nm">소리 ${soundOn() ? '켜짐 (누르면 끄기)' : '꺼짐 (누르면 켜기)'}</span></button>
       <button class="build-opt" data-act="code" style="--hc:#a8b2c1"><span class="bo-ico">🔑</span><span class="bo-nm">비밀코드 입력</span></button>
+      <button class="build-opt" data-act="rateOpen" style="--hc:#ffd24a"><span class="bo-ico">⭐</span><span class="bo-nm">게임 평가하기<br><small>별점과 이유를 제작자에게 보내요</small></span></button>
       <button class="build-opt" data-act="hardRefresh" style="--hc:#5cc8ff"><span class="bo-ico">🔄</span><span class="bo-nm">최신 버전으로 새로고침<br><small>앱이 옛날 모습이면 눌러 보세요 (섬은 그대로예요)</small></span></button>
     </div>
     <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
@@ -11047,11 +11054,12 @@ setInterval(() => {
   if (st > S.fameSt) { addFame((st - S.fameSt) * 6); S.fameSt = st; }
   if (dx > S.fameDx) { addFame((dx - S.fameDx) * 5); S.fameDx = dx; }
   // 🌱 새 시즌 안내 (창이 없을 때 한 번)
-  if (S.seasonNews && !modalOpen() && !B && $('#login') && $('#login').classList.contains('hidden')) { delete S.seasonNews; save(); openSeasonNews(); }
+  if ((S.seasonNews || !S.s2sorry) && !modalOpen() && !B && $('#login') && $('#login').classList.contains('hidden')) { delete S.seasonNews; S.s2sorry = 1; save(); openSeasonNews(); }
 }, 3000);
 function openSeasonNews() {
   const h = (S.hall || [])[S.hall.length - 1];
   showModal(`<div class="fame-panel"><h3>🌱 시즌 ${S.season || SEASON} 시작!</h3>
+    <div class="sorry-box"><b>🙇 정말 미안해요!</b><br>시즌 2가 시작되면서 그동안 열심히 키운 섬과 몬스터, 모아 둔 돈이 <b>모두 지워졌어요.</b><br>여러분이 얼마나 오랫동안 열심히 했는지 알아서 정말 마음이 아파요. 😢<br>그런데 너무 빨리 끝나 버리면 금방 심심해질 것 같아서, 더 오래오래 재밌게 할 수 있도록 새로 시작하기로 했어요.<br>지난 기록은 🏆 <b>명예의 전당</b>에 영원히 남아 있어요. 이번 시즌도 함께해 줘서 고마워요! 💖<br><small>— 제작자 이원영 올림</small></div>
     <p>모두가 <b>새로 시작</b>해요! 이번 시즌은 천천히, 오래오래 즐기는 시즌이에요.</p>
     <ul class="fame-list">
       <li>💰 돈은 천천히 모여요 (서식지 · 모험 골드 ¼)</li>
@@ -11078,6 +11086,77 @@ function openFame() {
     ${hall.length ? `<div class="fame-hall">${hall.map(h => `<div class="fh-row"><b>시즌 ${h.season}</b><small>🐾 ${fmt(h.mons)} · 📖 ${fmt(h.dex)} · ⚔️ ${shortNum(h.stage)} · 💰 ${h.gold < 0 ? '∞' : shortNum(h.gold)}${h.top >= 0 ? ' · 최고 ' + RAR[RAR_ORDER[h.top]].name.slice(0, 12) : ''}</small></div>`).join('')}</div>` : '<p class="muted">시즌이 끝나면 여기에 기록이 남아요.</p>'}
     <p class="muted small-note">🌱 지금은 시즌 ${S.season || SEASON}</p>
     <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
+const RATE_URL = 'https://ntfy.sh/monhap-rate-' + (RANK_TOPIC.includes('-dev') ? 'dev-' : 'v1-') + 'h6p2';
+const RATE_EVERY = 14 * 86400000;   // 한 번 평가하면 2주 동안은 안 물어본다
+let RATE_PICK = 0;
+const RATE_FACE = ['', '😢', '😕', '🙂', '😄', '🤩'];
+const RATE_WORD = ['', '별로예요', '조금 아쉬워요', '괜찮아요', '재밌어요', '최고예요!'];
+function openRate(auto) {
+  if (auto) { S.rateAsk = Date.now(); save(); }
+  RATE_PICK = RATE_PICK || 0;
+  showModal(`<div class="rate-panel"><h3>⭐ 몬스터 합치기, 어때요?</h3>
+    <p class="muted">별점을 매기고 왜 그렇게 생각하는지 적어 주세요. 제작자가 읽고 게임을 더 재밌게 만들어요!</p>
+    <div class="rate-stars">${[1, 2, 3, 4, 5].map(n => `<button class="rate-star ${n <= RATE_PICK ? 'on' : ''}" data-act="ratePick" data-n="${n}">⭐</button>`).join('')}</div>
+    <p class="rate-word" id="rateWord">${RATE_PICK ? RATE_FACE[RATE_PICK] + ' ' + RATE_WORD[RATE_PICK] : '별을 눌러 골라요'}</p>
+    <textarea id="rateWhy" class="code-box" maxlength="${GCHAT_MAX}" placeholder="왜 그렇게 생각해요? (예: 교배가 재밌어요 / 돈 모으기가 너무 어려워요)"></textarea>
+    <p class="muted small-note">🛡️ 이름 · 전화번호 같은 개인정보는 적지 마세요</p>
+    <div class="row"><button class="btn big green" data-act="rateSend">📨 보내기</button><button class="btn ghost small" data-act="close">${auto ? '나중에' : '닫기'}</button></div></div>`);
+}
+async function rateSend() {
+  const why = ((($('#rateWhy') || {}).value) || '').trim();
+  if (!RATE_PICK) { toast('⭐ 별을 먼저 골라 주세요'); return; }
+  if (why.length < 2) { toast('✏️ 왜 그렇게 생각하는지도 적어 주세요'); return; }
+  const bad = chatProblem(why);
+  if (bad) { toast(bad); return; }
+  S.rateId = S.rateId || Math.random().toString(36).slice(2, 12);
+  S.myRate = { id: S.rateId, s: RATE_PICK, r: why, n: S.nick || (ACC && ACC.name) || '플레이어', lv: fameLv(), at: Date.now() };
+  const ok = await ntfyPost(RATE_URL, { v: 1, rate: S.myRate });
+  if (!ok) { toast('⚠️ 인터넷으로 보내지 못했어요. 다시 해 주세요'); return; }
+  const first = Date.now() - (S.rateAt || 0) > RATE_EVERY;
+  S.rateAt = Date.now(); S.rateSent = Date.now();
+  if (first) earn(20, 'gems');
+  save(); updateHud(); closeModal(); sfx('yay');
+  toast(`💌 고마워요! 제작자에게 전해졌어요${first ? ' · 💎 20' : ''}`);
+  RATE_PICK = 0;
+}
+// 가끔 물어보기: 게임을 30분 넘게 했고, 2주 동안 평가 안 했고, 이틀 동안 안 물어봤으면 (가끔만)
+setInterval(() => {
+  if (typeof S === 'undefined' || !S || VISIT || B || modalOpen() || document.hidden) return;
+  if (!$('#login') || !$('#login').classList.contains('hidden')) return;
+  const now = Date.now();
+  // 내 평가는 인터넷 우편함에서 12시간이면 사라지니까 10시간마다 다시 올려 둔다
+  if (S.myRate && now - (S.rateSent || 0) > 10 * 3600000 && now - S.myRate.at < 120 * 86400000 && ntfyBgOk()) { S.rateSent = now; ntfyPost(RATE_URL, { v: 1, rate: S.myRate }, true); save(); return; }
+  if ((S.playSec || 0) < 1800 || now - (S.rateAt || 0) < RATE_EVERY || now - (S.rateAsk || 0) < 2 * 86400000) return;
+  if (Math.random() < 0.15) openRate(true);
+}, 60000);
+// 제작자: 받은 평가를 모아 보기 (이 기기에 쌓아 둔다)
+async function openRatings() {
+  let store = {};
+  try { store = JSON.parse(lsGet('combining-ratings') || '{}') || {}; } catch (e) { store = {}; }
+  try {
+    const txt = await (await fetch(RATE_URL + '/json?poll=1&since=all')).text();
+    txt.split('\n').forEach(l => {
+      try {
+        const ev = JSON.parse(l); if (ev.event !== 'message') return;
+        const r = (JSON.parse(ev.message) || {}).rate;
+        if (!r || typeof r.id !== 'string' || !(r.s >= 1 && r.s <= 5)) return;
+        const c = { id: r.id.slice(0, 12), s: Math.round(r.s), r: String(r.r || '').slice(0, GCHAT_MAX), n: String(r.n || '').slice(0, 10), lv: Number(r.lv) || 1, at: Number(r.at) || ev.time * 1000 };
+        if (!store[c.id] || store[c.id].at <= c.at) store[c.id] = c;
+      } catch (e) { /* 다른 글 */ }
+    });
+    lsSet('combining-ratings', JSON.stringify(store));
+  } catch (e) { toast('📴 새 평가를 받아 오지 못했어요 (저장해 둔 것만 보여요)'); }
+  const list = Object.values(store).sort((a, b) => b.at - a.at);
+  const avg = list.length ? list.reduce((s, x) => s + x.s, 0) / list.length : 0;
+  const cnt = [0, 0, 0, 0, 0, 0]; list.forEach(x => cnt[x.s]++);
+  showModal(`<div class="rate-panel"><h3>⭐ 평판 (${list.length}명)</h3>
+    ${list.length ? `<div class="rate-avg"><b>${avg.toFixed(1)}</b> / 5 ${'⭐'.repeat(Math.round(avg))}</div>
+      <div class="rate-dist">${[5, 4, 3, 2, 1].map(n => `<div><span>${n}⭐</span><i style="width:${list.length ? cnt[n] / list.length * 100 : 0}%"></i><small>${cnt[n]}</small></div>`).join('')}</div>
+      <div class="rate-list">${list.map(x => `<div class="rate-row"><div><b>${'⭐'.repeat(x.s)}</b> <small class="muted">${esc(x.n)} · 🎖️${x.lv} · ${syncWhen(x.at)}</small></div><div>${esc(x.r)}</div></div>`).join('')}</div>`
+      : '<p class="muted">아직 받은 평가가 없어요. 사람들이 게임을 30분 넘게 하면 가끔 물어봐요.</p>'}
+    <p class="muted small-note">💡 평가는 인터넷 우편함에 12시간 남아요. 이 창을 열 때마다 이 기기에 쌓아 둬요.</p>
+    <div class="row"><button class="btn ghost small" data-act="adminOpen">← 제작자 메뉴</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
 }
 function statAdd(k, n) { S.stat = S.stat || {}; S.stat[k] = (S.stat[k] || 0) + n; }
 // 🏆 새 업적 (단계별로 쭉)
@@ -12643,6 +12722,11 @@ const ACTIONS = {
   dmEmoji: (d) => { dmEmojiOpen = !dmEmojiOpen; openDmSay(d.id); },
   dmBox: () => openDmBox(),
   fame: () => openFame(),
+  rateOpen: () => openRate(false),
+  ratePick: (d) => { RATE_PICK = Number(d.n) || 0; document.querySelectorAll('#modalBox .rate-star').forEach((b, i) => b.classList.toggle('on', i < RATE_PICK)); mgSet('#rateWord', RATE_FACE[RATE_PICK] + ' ' + RATE_WORD[RATE_PICK]); },
+  rateSend: () => rateSend(),
+  rateList: () => { if (isAdminAcc()) openRatings(); },
+  adminOpen: () => openAdmin(false),
   dmWrite: (d) => { const i = $('#dmText'); dmSend(d.id, 0, i ? i.value : '').then(ok => { if (ok && $('#modalBox .dm-panel')) openDmSay(d.id); }); },
   dmBlock: (d) => dmBlock(d.id),
   dmUnblock: (d) => dmUnblock(d.id),
