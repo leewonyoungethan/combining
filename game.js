@@ -3435,12 +3435,12 @@ const RES_INFO = {
 function unitTableHTML() {
   const st = numStyle(), ex = 3.2e180;
   const pick = (s, label) => `<button class="btn small ${st === s ? 'green' : 'ghost'}" data-act="numStyle" data-s="${s}">${label}</button>`;
-  const kr = `<div class="ut-kr"><p class="muted">💰 돈을 어떤 단위로 볼까요? (예: ${shortNumAs(ex, 'en')} · ${window.LANG === 'en' ? '' : shortNumAs(ex, 'kr') + ' · '}${shortNumAs(ex, 'abc')} · ${shortNumAs(ex, 'sci')})</p>
-    <div class="row ut-pick">${pick('en', '📏 K · M · B')}${window.LANG === 'en' ? '' : pick('kr', '🇰🇷 만 · 억 · 조')}${pick('abc', '🔤 aa · ab · ac')}${pick('sci', '🔬 1.2e45')}</div>
+  const kr = `<div class="ut-kr"><p class="muted">💰 돈을 어떤 단위로 볼까요? (예: ${shortNumAs(ex, 'en')} · ${window.LANG !== 'ko' ? '' : shortNumAs(ex, 'kr') + ' · '}${shortNumAs(ex, 'abc')} · ${shortNumAs(ex, 'sci')})</p>
+    <div class="row ut-pick">${pick('en', '📏 K · M · B')}${window.LANG !== 'ko' ? '' : pick('kr', '🇰🇷 만 · 억 · 조')}${pick('abc', '🔤 aa · ab · ac')}${pick('sci', '🔬 1.2e45')}</div>
     ${st === 'kr' ? `<p class="muted">1만 배마다 바뀌어요. 무량대수보다 크면 "3천양 무량대수²"처럼 무량대수를 겹쳐 써요</p><div class="ut-grid">${KR_UNITS.map(([u, s], i) => `<span><b>${s}</b><small>10<sup>${4 * (i + 1)}</sup></small></span>`).join('')}<span><b>무량대수²</b><small>10<sup>136</sup></small></span><span><b>무량대수³</b><small>10<sup>204</sup></small></span><span><b>무량대수⁴</b><small>10<sup>272</sup></small></span></div>` : ''}
     ${st === 'abc' ? `<p class="muted">K · M · B · T 다음부터는 1000배마다 aa → ab → ac … 로 바뀌어요</p><div class="ut-grid">${Array.from({ length: 97 }, (_, i) => `<span><b>${abcUnit(i)}</b><small>10<sup>${15 + 3 * i}</sup></small></span>`).join('')}</div>` : ''}
     ${st === 'sci' ? '<p class="muted">1.2e45 = 1.2 뒤에 0이 45개라는 뜻이에요 (1.2 × 10<sup>45</sup>)</p>' : ''}</div>`;
-  return `<details class="unit-table" ${UT_OPEN ? 'open' : ''}><summary>${window.LANG === 'en' ? `📏 돈 단위 보기 (K → Ce, ${NUM_UNITS.length}가지)` : `📏 돈 단위 보기 (4가지 단위 · K → Ce ${NUM_UNITS.length}가지 + 만 → 무량대수 + aa → ds)`}</summary>${kr}
+  return `<details class="unit-table" ${UT_OPEN ? 'open' : ''}><summary>${window.LANG !== 'ko' ? `📏 돈 단위 보기 (K → Ce, ${NUM_UNITS.length}가지)` : `📏 돈 단위 보기 (4가지 단위 · K → Ce ${NUM_UNITS.length}가지 + 만 → 무량대수 + aa → ds)`}</summary>${kr}
     <p class="muted">1000배마다 단위가 바뀌어요. 예) 1K = 1,000 · 1M = 1,000K</p>
     <div class="ut-grid">${NUM_UNITS.slice().reverse().map(([u, s], i) => `<span><b>${s}</b><small>10<sup>${3 * (i + 1)}</sup></small></span>`).join('')}</div></details>`;
 }
@@ -3715,7 +3715,7 @@ const NUM_UNITS = (() => {
   return out.reverse();
 })();
 const KR_UNITS = ['만', '억', '조', '경', '해', '자', '양', '구', '간', '정', '재', '극', '항하사', '아승기', '나유타', '불가사의', '무량대수'].map((s, i) => [Math.pow(10, 4 * (i + 1)), s]);
-const numStyle = () => { const s = (typeof S !== 'undefined' && S && (S.numStyle || (S.krUnits ? 'kr' : 'en'))) || 'en'; return s === 'kr' && window.LANG === 'en' ? 'en' : s; };
+const numStyle = () => { const s = (typeof S !== 'undefined' && S && (S.numStyle || (S.krUnits ? 'kr' : 'en'))) || 'en'; return s === 'kr' && window.LANG !== 'ko' ? 'en' : s; };
 const krOn = () => numStyle() === 'kr';
 const SUP = (k) => String(k).split('').map(d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d]).join('');
 const numTrim = (v) => { v *= 1 + 1e-12; const d = Math.abs(v) >= 100 ? 0 : 1, p = Math.pow(10, d); return (Math.floor(v * p) / p).toFixed(d).replace(/\.0$/, ''); };
@@ -8971,7 +8971,7 @@ let gChatTimer = null, gReadAt = 0, gArcAt = 0;
 const GLOG_MAX = 400, GARC_BATCH = 14, GARC_POSTS = 2, GARC_OLD = 10 * 3600;
 const gLogKey = () => `combining-gchat:${ACC ? ACC.id : ''}:${S.guild ? S.guild.id : ''}`;
 const gKey = (d) => d.id + '|' + d.t + '|' + d.m;
-const gDay = (t) => new Date(t * 1000).toLocaleDateString(window.LANG === 'en' ? 'en-US' : 'ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
+const gDay = (t) => new Date(t * 1000).toLocaleDateString(langLocale(), { month: 'long', day: 'numeric', weekday: 'short' });
 async function guildChatLoad() {
   clearTimeout(gChatTimer);
   const box = $('#gChat');
@@ -9035,7 +9035,7 @@ async function guildChatLoad() {
     if (!b) return;
     b.innerHTML = msgs.length ? msgs.map(d => dayLine(d) + (d.sys
       ? `<div class="gc-sys">${esc(d.m)}</div>`
-      : `<div class="gc-msg ${d.id === me ? 'mine' : ''}"><span class="gc-face">${esc(String(d.f || '🥚').slice(0, 4))}</span><div><b>${esc(safeName(String(d.n || '').slice(0, 10)))}${d.id !== me && typeof d.id === 'string' ? ` <button class="gc-mute" data-act="gMute" data-id="${esc(d.id)}" title="이 사람 숨기기">🙈</button>` : ''}</b><span${d.sys || GUILD_CHAT.includes(d.m) ? '' : ' translate="no"'}>${esc(d.m)}</span></div><small>${unread(d) ? `<i class="gc-unread">${unread(d)}</i>` : ''}${new Date(d.t * 1000).toLocaleTimeString(window.LANG === 'en' ? 'en-US' : 'ko-KR', { hour: '2-digit', minute: '2-digit' })}</small></div>`)).join('')
+      : `<div class="gc-msg ${d.id === me ? 'mine' : ''}"><span class="gc-face">${esc(String(d.f || '🥚').slice(0, 4))}</span><div><b>${esc(safeName(String(d.n || '').slice(0, 10)))}${d.id !== me && typeof d.id === 'string' ? ` <button class="gc-mute" data-act="gMute" data-id="${esc(d.id)}" title="이 사람 숨기기">🙈</button>` : ''}</b><span${d.sys || GUILD_CHAT.includes(d.m) ? '' : ' translate="no"'}>${esc(d.m)}</span></div><small>${unread(d) ? `<i class="gc-unread">${unread(d)}</i>` : ''}${new Date(d.t * 1000).toLocaleTimeString(langLocale(), { hour: '2-digit', minute: '2-digit' })}</small></div>`)).join('')
       : '<p class="muted">아직 메시지가 없어요. 첫 인사를 해 봐요! 👋</p>';
     if ((S.gMute || []).length) b.innerHTML += `<div class="gc-sys"><button class="chip" data-act="gUnmuteAll">🙉 숨긴 사람 ${S.gMute.length}명 다시 보기</button></div>`;
     b.scrollTop = b.scrollHeight;
@@ -9963,7 +9963,7 @@ function openLogin() {
       <button class="btn" data-act="accNew">➕ 새 계정 만들기</button>
       <button class="btn ghost" data-act="accImport">📥 다른 기기에서 가져오기</button>
     </div>
-    <div class="row"><button class="btn ghost small" data-act="lang" translate="no">🌐 ${window.LANG === 'en' ? '한국어' : 'English'}</button></div>
+    <div class="row"><button class="btn ghost small" data-act="lang" translate="no">🌐 ${langName()}</button></div>
     <p class="muted small-note">계정은 이 기기(브라우저)에 저장돼요. 다른 기기로 옮기려면 게임 안 👤 메뉴의 📤 옮기기 코드를 쓰세요.</p>
   </div>`;
   el.classList.remove('hidden');
@@ -10633,7 +10633,7 @@ function openAccountMenu() {
       <button class="build-opt" data-act="accRename" style="--hc:#ffb020"><span class="bo-ico">✏️</span><span class="bo-nm">이름 바꾸기</span></button>
       <button class="build-opt" data-act="accPinSet" style="--hc:#ff5ce1"><span class="bo-ico">🔒</span><span class="bo-nm">비밀번호 ${ACC.pin ? '바꾸기 / 없애기' : '만들기'}</span></button>
       ${isPhone() && !isStandalone() ? `<button class="build-opt" data-act="fullscreen" style="--hc:#ffb020"><span class="bo-ico">⛶</span><span class="bo-nm">전체화면 ${isFull() ? '끄기' : '켜기'}<br><small>주소창·상태바 없이 게임만 꽉 차게</small></span></button>` : ''}
-      <button class="build-opt" data-act="lang" style="--hc:#5cc8ff" translate="no"><span class="bo-ico">🌐</span><span class="bo-nm">${window.LANG === 'en' ? '한국어로 바꾸기 (Korean)' : 'English (영어로 바꾸기)'}</span></button>
+      <button class="build-opt" data-act="lang" style="--hc:#5cc8ff" translate="no"><span class="bo-ico">🌐</span><span class="bo-nm">🌐 언어 · Language<br><small>${langName()}</small></span></button>
       <button class="build-opt" data-act="mute" style="--hc:#ff6b6b"><span class="bo-ico">${muteOn() ? '🔇' : '🔊'}</span><span class="bo-nm">무음 모드 ${muteOn() ? '켜짐 (누르면 소리 켜기)' : '꺼짐 (누르면 모든 소리 끄기)'}</span></button>
       <button class="build-opt" data-act="music" style="--hc:#b388ff"><span class="bo-ico">${musicOn() ? '🎵' : '🔈'}</span><span class="bo-nm">배경음악 ${musicOn() ? '켜짐 (누르면 끄기)' : '꺼짐 (누르면 켜기)'}</span></button>
       <button class="build-opt" data-act="sound" style="--hc:#7dff8f"><span class="bo-ico">${soundOn() ? '🔊' : '🔇'}</span><span class="bo-nm">소리 ${soundOn() ? '켜짐 (누르면 끄기)' : '꺼짐 (누르면 켜기)'}</span></button>
@@ -10704,7 +10704,7 @@ function openFirstAccount() {
     <input id="firstPin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="비밀번호 4자리 (없어도 돼요)">
     <div class="row"><button class="btn big green" data-act="firstAccOk">✨ 계정 만들고 시작하기</button></div>
     <p class="muted small-note">🙅 욕설이나 전화번호 같은 개인정보는 이름에 쓸 수 없어요.</p>
-    <div class="row"><button class="btn ghost small" data-act="accImport">📥 다른 기기에서 하던 섬 가져오기</button><button class="btn ghost small" data-act="lang" translate="no">🌐 ${window.LANG === 'en' ? '한국어' : 'English'}</button></div>
+    <div class="row"><button class="btn ghost small" data-act="accImport">📥 다른 기기에서 하던 섬 가져오기</button><button class="btn ghost small" data-act="lang" translate="no">🌐 ${langName()}</button></div>
   </div>`;
   el.classList.remove('hidden');
   const inp = $('#firstName');
@@ -11319,7 +11319,7 @@ function openMenu() {
       ${it('account', '👤', '계정', esc(ACC ? ACC.name : ''))}
       ${it('help', '🎓', '튜토리얼', '')}
       ${isPhone() && !isStandalone() ? it('fullscreen', '⛶', '전체화면', isFull() ? '끄기' : '켜기') : ''}
-      ${it('lang', '🌐', window.LANG === 'en' ? '한국어' : 'English', window.LANG === 'en' ? '한국어로 바꾸기' : 'Switch to English', 'translate="no"')}
+      ${it('lang', '🌐', langName(), '언어 · Language', 'translate="no"')}
       ${it('mute', muteOn() ? '🔇' : '🔊', '무음 모드', muteOn() ? '켜짐 (소리 없음)' : '꺼짐')}
       ${it('music', musicOn() ? '🎵' : '🔈', '음악', musicOn() ? '켜짐' : '꺼짐')}
       ${it('sound', soundOn() ? '🔊' : '🔇', '효과음', soundOn() ? '켜짐' : '꺼짐')}
@@ -11629,6 +11629,16 @@ function goBreed(a, b) {
 }
 
 // ===================== 비밀코드 =====================
+// 🌐 언어 고르기
+const LANG_LOCALE = { ko: 'ko-KR', en: 'en-US', zh: 'zh-CN', ja: 'ja-JP', de: 'de-DE' };
+const langLocale = () => LANG_LOCALE[window.LANG] || 'en-US';
+const langName = () => ((window.LANGS || []).find(x => x[0] === window.LANG) || [0, '🌐'])[1];
+function openLang() {
+  const list = window.LANGS || [['ko', '🇰🇷 한국어'], ['en', '🇺🇸 English']];
+  showModal(`<div class="lang-pick" translate="no"><h3>🌐 언어 · Language · 语言 · 言語 · Sprache</h3>
+    <div class="build-list">${list.map(([k, n]) => `<button class="build-opt" data-act="langPick" data-l="${k}" style="--hc:#5cc8ff"><span class="bo-nm">${n}${k === window.LANG ? ' ✅' : ''}</span></button>`).join('')}</div>
+    <div class="row"><button class="btn ghost small" data-act="close">✖</button></div></div>`);
+}
 function openCode() {
   showModal(`
     <h3>🔒 비밀코드</h3>
@@ -11866,7 +11876,7 @@ TUT.push(
     go: () => { closeModal(); tab = 'adventure'; render(); } },
 );
 TUT.push(
-  { text: '🇰🇷 위쪽 💰를 눌러 📏 돈 단위 보기를 열고, 🇰🇷 한국 단위(만 · 억 · 조)를 켜 봐요', done: () => tutFlag('krunit') || !!S.krUnits || (window.LANG === 'en' && tutFlag('unitTable')),
+  { text: '🇰🇷 위쪽 💰를 눌러 📏 돈 단위 보기를 열고, 🇰🇷 한국 단위(만 · 억 · 조)를 켜 봐요', done: () => tutFlag('krunit') || !!S.krUnits || (window.LANG !== 'ko' && tutFlag('unitTable')),
     go: () => { closeModal(); UT_OPEN = true; openResInfo('gold'); UT_OPEN = false; } },
 );
 TUT.push(
@@ -12141,7 +12151,7 @@ function tutPoint(k) {
     case 48: { // 한국 돈 단위
       const ut = document.querySelector('#modalBox .unit-table');
       if (ut && !ut.open) return ['#modalBox .unit-table summary'];
-      if (ut) return [window.LANG === 'en' ? '#modalBox [data-act=close]' : '#modalBox [data-act=numStyle][data-s=kr]'];
+      if (ut) return [window.LANG !== 'ko' ? '#modalBox [data-act=close]' : '#modalBox [data-act=numStyle][data-s=kr]'];
       if (inModal) return ['#modalBox [data-act=close]'];
       return ['[data-act=resInfo][data-r=gold]'];
     }
@@ -12861,7 +12871,8 @@ const ACTIONS = {
   richCur: (d) => { RICH_CUR = d.k; const v = ($('#richAmt') || {}).value || ''; openRichGift(); const i = $('#richAmt'); if (i) { i.value = v; i.dispatchEvent(new Event('input')); } },
   richQuick: (d) => { const i = $('#richAmt'); if (i) { i.value = d.q; i.dispatchEvent(new Event('input')); } },
   richGo: () => richGo(),
-  lang: () => { tutFlag('lang', true); save(); window.setLang(window.LANG === 'en' ? 'ko' : 'en'); },
+  lang: () => { tutFlag('lang', true); openLang(); },
+  langPick: (d) => { save(); flushSave(); window.setLang(d.l); },
   saveNow: () => saveNow(),
   mute: () => { toggleMute(); if ($('#modalBox .build-opt[data-act=mute]')) openAccountMenu(); },
   fullscreen: () => toggleFullscreen(),

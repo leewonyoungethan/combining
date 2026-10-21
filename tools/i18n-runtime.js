@@ -1,22 +1,11 @@
 'use strict';
-// ===================== 🌐 영어 모드 =====================
+// ===================== 🌐 다른 나라 말 모드 (영어 · 중국어 · 일본어 · 독일어) =====================
 // 게임 코드는 한국어로 그대로 두고, 화면에 나오는 글자를 영어 사전으로 바꿔 준다.
 // (화면 글자 · 버튼 설명 · 입력칸 안내 · 캔버스 이름표 · 확인 창)
 (function () {
-  const LANG_KEY = 'combining-lang';
-  let lang = null;
-  try { lang = localStorage.getItem(LANG_KEY); } catch (e) { /* 저장 불가 */ }
-  // 처음이면 브라우저 언어로 정한다 (한국어가 아니면 영어)
-  if (lang !== 'ko' && lang !== 'en') lang = /^ko/i.test(navigator.language || 'ko') ? 'ko' : 'en';
-  window.LANG = lang;
-  window.setLang = function (l) {
-    try { localStorage.setItem(LANG_KEY, l); } catch (e) { /* 저장 불가 */ }
-    location.reload();
-  };
-  window.tr = (s) => s;
-  if (lang !== 'en') return;
-
-  document.documentElement.lang = 'en';
+  // 로더(i18n.js)가 정한 언어. 한국어면 이 파일은 불러오지 않는다
+  const lang = window.LANG || 'en';
+  document.documentElement.lang = lang;
   const DICT = /*DICT*/{};
   const KO = /[가-힣ㄱ-ㅎㅏ-ㅣ]/;
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -40,7 +29,11 @@
   // 단어 사전: 몬스터 이름처럼 낱말을 이어 붙인 글자를 낱말마다 바꾼다
   const WORD = {};
   for (const k of Object.keys(DICT)) if (!k.includes('{}') && !/\s/.test(k) && DICT[k]) WORD[k] = DICT[k];
-  const UNIT = { '개': '', '마리': '', '곳': '', '칸': '', '명': '', '번': '×', '일': 'd', '시간': 'h', '분': 'm', '초': 's', '회': '×', '장': '', '배': '×', '종': ' kinds' };
+  const UNIT = /*UNIT*/{};
+  const CJK = lang === 'zh' || lang === 'ja';
+  const CJK_CH = /[぀-ヿ㐀-鿿]/;
+  // 중국어 · 일본어 글자끼리는 띄우지 않고 붙인다
+  const cjkJoin = (a, b) => (CJK && CJK_CH.test(String(a).slice(-1)) && CJK_CH.test(String(b).charAt(0)) ? a + b : a + ' ' + b);
   const PARTICLES = ['에서', '으로', '에게', '까지', '부터', '의', '을', '를', '이', '가', '은', '는', '에', '로', '와', '과', '도', '만', '님'];
   function fill(en, caps) {
     let seq = 0;
@@ -86,7 +79,9 @@
       }
       out.push(word(t));
     }
-    return out.join('').replace(/ {2,}/g, ' ');
+    const s2 = out.join('').replace(/ {2,}/g, ' ');
+    // 중국어 · 일본어는 낱말 사이를 띄우지 않는다
+    return CJK ? s2.replace(/([぀-ヿ㐀-鿿])\s+(?=[぀-ヿ㐀-鿿])/g, '$1') : s2;
   }
   const SPLITS = [' · ', '\n', ' → ', ': ', ' | '];
   const CACHE = new Map();
@@ -118,11 +113,11 @@
       const toks = core.split(' ');
       for (let j = toks.length - 1; j >= 1 && out == null; j--) {
         const head = toks.slice(0, j).join(' ');
-        if (DICT[head] != null && KO.test(head)) out = DICT[head] + ' ' + tr(toks.slice(j).join(' '));
+        if (DICT[head] != null && KO.test(head)) out = cjkJoin(DICT[head], tr(toks.slice(j).join(' ')));
       }
       for (let j = 1; j < toks.length && out == null; j++) {
         const tail = toks.slice(j).join(' ');
-        if (DICT[tail] != null && KO.test(tail)) out = tr(toks.slice(0, j).join(' ')) + ' ' + DICT[tail];
+        if (DICT[tail] != null && KO.test(tail)) out = cjkJoin(tr(toks.slice(0, j).join(' ')), DICT[tail]);
       }
     }
     // 앞에 이모지·기호가 붙은 문장: "⚡⚡ 한 턴에 2번 행동" → "⚡⚡ " + 번역
