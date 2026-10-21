@@ -11099,7 +11099,7 @@ function openRate(auto) {
     <p class="muted">별점을 매기고 왜 그렇게 생각하는지 적어 주세요. 제작자가 읽고 게임을 더 재밌게 만들어요!</p>
     <div class="rate-stars">${[1, 2, 3, 4, 5].map(n => `<button class="rate-star ${n <= RATE_PICK ? 'on' : ''}" data-act="ratePick" data-n="${n}">⭐</button>`).join('')}</div>
     <p class="rate-word" id="rateWord">${RATE_PICK ? RATE_FACE[RATE_PICK] + ' ' + RATE_WORD[RATE_PICK] : '별을 눌러 골라요'}</p>
-    <textarea id="rateWhy" class="code-box" maxlength="${GCHAT_MAX}" placeholder="왜 그렇게 생각해요? (예: 교배가 재밌어요 / 돈 모으기가 너무 어려워요)"></textarea>
+    <textarea id="rateWhy" class="code-box" maxlength="${GCHAT_MAX}" placeholder="왜 그렇게 생각해요? (예: 몬스터 모으기가 재밌어요 / 돈 모으기가 너무 어려워요)"></textarea>
     <p class="muted small-note">🛡️ 이름 · 전화번호 같은 개인정보는 적지 마세요</p>
     <div class="row"><button class="btn big green" data-act="rateSend">📨 보내기</button><button class="btn ghost small" data-act="close">${auto ? '나중에' : '닫기'}</button></div></div>`);
 }

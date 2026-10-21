@@ -6,7 +6,7 @@ module.exports = {
   '지난 기록은 🏆': 'Your past records stay in the 🏆', '명예의 전당': 'Hall of Fame', '에 영원히 남아 있어요. 이번 시즌도 함께해 줘서 고마워요! 💖': ' forever. Thank you for playing this season with us! 💖', '— 제작자 이원영 올림': '— From the creator, Lee Wonyoung',
   '⭐ 몬스터 합치기, 어때요?': '⭐ How do you like Monster Merge?', '별점을 매기고 왜 그렇게 생각하는지 적어 주세요. 제작자가 읽고 게임을 더 재밌게 만들어요!': 'Give a star rating and tell us why. The creator reads it to make the game more fun!',
   '별로예요': 'Not good', '조금 아쉬워요': 'A bit meh', '괜찮아요': "It's okay", '재밌어요': "It's fun", '최고예요!': "It's the best!", '별을 눌러 골라요': 'Tap a star',
-  '왜 그렇게 생각해요? (예: 교배가 재밌어요 / 돈 모으기가 너무 어려워요)': 'Why do you think so? (e.g. Breeding is fun / Saving gold is too hard)',
+  '왜 그렇게 생각해요? (예: 몬스터 모으기가 재밌어요 / 돈 모으기가 너무 어려워요)': 'Why do you think so? (e.g. Collecting monsters is fun / Saving gold is too hard)',
   '🛡️ 이름 · 전화번호 같은 개인정보는 적지 마세요': "🛡️ Don't write personal info like names or phone numbers", '📨 보내기': '📨 Send', '나중에': 'Later',
   '⭐ 별을 먼저 골라 주세요': '⭐ Pick stars first', '✏️ 왜 그렇게 생각하는지도 적어 주세요': '✏️ Please also write why',
   '💌 고마워요! 제작자에게 전해졌어요{}': '💌 Thanks! Sent to the creator{}', '⭐ 평판 ({}명)': '⭐ Reviews ({})', '⭐ 평판 보기 (별점 · 이유)': '⭐ View reviews (stars · reasons)',
