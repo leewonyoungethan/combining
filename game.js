@@ -632,7 +632,7 @@ const shuffle = (arr) => {
   return a;
 };
 
-const SHOP_BREED_CHANCE = [0.15, 0.08, 0.02];   // 전설 상점 몬스터: 약한 부모와 같은 등급 / 한 단계 위 / 두 단계 위
+const SHOP_BREED_CHANCE = [0.06, 0.025, 0.005];   // 전설 상점 몬스터: 약한 부모와 같은 등급 / 한 단계 위 / 두 단계 위
 // 근원은 교배 확률표에서 빼고, 아래 "근원의 문"으로만 아주아주 드물게 나온다
 const SHOP_BREED_MUL = { origin: 0 };
 // 🌌 근원의 문: 게임한 시간 1000시간(하루 1시간씩 약 3년)에 한 번쯤 열린다.
@@ -643,8 +643,8 @@ function originLuck() {
   S.oriLuckAt = now;
   return Math.random() < Math.min(1, Math.max(0, now - last) / ORIGIN_EVERY_SEC);
 }
-const LEGEND_RECIPE_CHANCE = 0.4;               // 족보를 맞췄을 때 레전더리 한 마리당 확률
-const LUCKY_LEGEND = { rare: 0.04, epic: 0.1 }; // 두 부모가 모두 레어 이상 / 에픽 이상일 때 행운의 레전더리
+const LEGEND_RECIPE_CHANCE = 0.15;               // 족보를 맞췄을 때 레전더리 한 마리당 확률
+const LUCKY_LEGEND = { rare: 0.01, epic: 0.03 }; // 두 부모가 모두 레어 이상 / 에픽 이상일 때 행운의 레전더리
 
 // 두 부모로 교배했을 때 각 몬스터가 나올 확률 { type: 확률 }
 function breedDist(ta, tb) {
@@ -913,12 +913,34 @@ function newState() {
   return s;
 }
 
+// 🌱 시즌: 숫자가 올라가면 모든 계정이 한 번 새로 시작한다
+const SEASON = 2;
+// 새 시즌에도 남기는 것: 이름 · 친구 · 채팅 · 길드 · 튜토리얼 · 게임한 시간 · 기기 맞추기 · 명예의 전당
+const SEASON_KEEP = ['nick', 'rankId', 'playerId', 'friends', 'frSeen', 'frReq', 'dms', 'dmBlock', 'guild', 'gMute', 'gReadSent', 'tutFlags', 'tutOff', 'welcomed',
+  'loginDays', 'lastLoginDay', 'playSec', 'playSince', 'syncKey', 'rev', 'revBase', 'numStyle', 'krUnits', 'hideUI', 'monView', 'teamView', 'breedView', 'labAlbum',
+  'cmdDone', 'usedGifts', 'hall', 'fame'];
+function seasonReset(old, id) {
+  // 혹시 몰라 예전 섬은 이 기기에 한 번 보관 (자리가 있으면)
+  try { const k = 'combining-s' + (old.season || 1) + '-' + id, raw = lsGet(accKey(id)); if (raw && !lsGet(k) && raw.length < 3e6) lsSet(k, raw); } catch (e) { /* 자리 없음 */ }
+  const s = newState();
+  SEASON_KEEP.forEach(k => { if (old[k] !== undefined) s[k] = old[k]; });
+  let top = -1;
+  for (const m of old.monsters || []) { const c = CAT[m.type]; if (c && RANK[c.rarity] > top) top = RANK[c.rarity]; }
+  s.hall = (s.hall || []).concat([{ season: old.season || 1, at: Date.now(), mons: (old.monsters || []).length, dex: Object.keys(old.dex || {}).length,
+    stage: old.stage || 1, gold: old.infinite ? -1 : (old.gold || 0), top, tr: old.trophies || 0 }]).slice(-20);
+  s.season = SEASON;
+  s.oriLuckAt = s.playSec || 0;   // 근원의 문은 새 시즌부터 다시 센다
+  s.gems += 300; s.gold += 20000;  // 새 시즌 선물
+  s.seasonNews = 1;
+  return s;
+}
 function load(id = ACC && ACC.id) {
   try {
     const raw = readSave(id);
     if (!raw) return null;
-    const s = JSON.parse(raw);
+    let s = JSON.parse(raw);
     if (!s || !Array.isArray(s.monsters) || !Array.isArray(s.plots)) return null;
+    if ((s.season || 1) < SEASON) s = seasonReset(s, id);
     while (s.plots.length < PLOTS) s.plots.push(null);
     if (s.plots.length % ISLAND_PLOTS) while (s.plots.length % ISLAND_PLOTS) s.plots.push(null);
     if ((s.isl || 0) * ISLAND_PLOTS >= s.plots.length) s.isl = 0;   // 예전(섬 1개) 저장도 이어 하기
@@ -1155,6 +1177,8 @@ const habCap = (i) => Math.max(2, S.plots[i].lv);
 const habLvBonus = (i) => (S.plots[i].lv - 1) * HAB_LV_BONUS;
 let INC_T = { t: -1e9, s: null, n: -1, ml: -1, arr: null };
 const incDirty = () => { INC_T.t = -1e9; };
+// 🌱 시즌 2: 서식지에서 버는 골드 · 모험 골드를 4분의 1로 (너무 빨리 부자가 되지 않게)
+const ECON_INC = 0.25;
 function incTable() {
   const now = performance.now();
   if (INC_T.arr && INC_T.s === S && INC_T.n === S.plots.length && INC_T.ml === S.monsters.length && now - INC_T.t < 1000) return INC_T.arr;
@@ -1165,7 +1189,7 @@ function incTable() {
     const p = S.plots[i];
     if (!p || p.kind !== 'hab' || !arr[i]) { arr[i] = 0; continue; }
     const em = evm[p.el] != null ? evm[p.el] : (evm[p.el] = evtGoldMult(p.el));
-    arr[i] *= (1 + (habLvBonus(i) + decoPercent(islandOf(i)) + glob) / 100) * boost * em;
+    arr[i] *= (1 + (habLvBonus(i) + decoPercent(islandOf(i)) + glob) / 100) * boost * em * ECON_INC;
   }
   INC_T = { t: now, s: S, n: S.plots.length, ml: S.monsters.length, arr };
   return arr;
@@ -1214,7 +1238,7 @@ function spend(cost, cur = 'gold') {
 const MONEY_CAP = 1e305;
 function earn(n, cur = 'gold') { if (!S.infinite) S[cur] = Math.min(MONEY_CAP, S[cur] + n); }
 // 모험 골드: 50스테이지까지는 1.25배씩, 그 뒤로는 1.03배씩만 (예전엔 끝없이 1.25배라 숫자가 폭발했음)
-const stageGold = (st) => st <= 50 ? 120 * Math.pow(1.25, st - 1) : 120 * Math.pow(1.25, 49) * Math.pow(st / 50, 2.5);
+const stageGold = (st) => ECON_INC * (st <= 50 ? 120 * Math.pow(1.25, st - 1) : 120 * Math.pow(1.25, 49) * Math.pow(st / 50, 2.5));
 
 // ----- 효과음 -----
 let AC = null;
@@ -3500,30 +3524,45 @@ const QUESTS = [
   { text: '초월 몬스터를 얻어요', say: '마지막 시험이에요. 신들의 세계, 초월 등급에 닿아 봐요!', now: () => (maxRank() >= RANK.divine ? 1 : 0), need: 1, r: { gems: 300, legend: 1 } },
 ];
 const QLIST = QUESTS.filter(q => !q.ch);
-const qChapter = (k) => { let ch = '', idx = -1; for (const q of QUESTS) { if (q.ch) ch = q.ch; else { idx++; if (idx === k) return ch; } } return ch; };
+const Q_SAY = ['더 먼 곳에서 새로운 몬스터 소리가 들려요!', '이 세상에는 아직 모르는 게 너무 많아요.', '당신의 이름이 온 섬에 퍼지고 있어요!',
+  '끝없는 모험… 정말 끝이 없네요! 계속 가 봐요.', '옛날 전설에 이런 날이 온다고 쓰여 있었어요.', '몬스터들이 당신을 믿고 따라와요!', '하늘의 별처럼 많은 몬스터를 모아 봐요!'];
+// k번째 퀘스트 (30개 다음부터는 장마다 5개씩 끝없이)
+function qGet(k) {
+  if (k < QLIST.length) return QLIST[k];
+  const j = k - QLIST.length, n = Math.floor(j / 5) + 1, slot = j % 5, say = Q_SAY[j % Q_SAY.length];
+  const r = { gems: 30 + n * 5, ...(slot === 4 && n % 3 === 0 ? { legend: 1 } : {}), ...(slot === 2 ? { gold: Math.round(5000 * Math.pow(1.3, n)) } : {}) };
+  if (slot === 0) return { text: `모험 스테이지 ${30 + n * 8}에 가요`, say, now: () => S.stage, need: 30 + n * 8, r };
+  if (slot === 1) return { text: `도감을 ${fmt(200 + n * 150)}마리 채워요`, say, now: () => Object.keys(S.dex).length, need: 200 + n * 150, r };
+  if (slot === 2) return { text: `교배를 ${30 + n * 10}번 해요`, say, count: 'breed', need: 30 + n * 10, r };
+  if (slot === 3) return { text: `🎖️ 명성 Lv.${5 + n * 3}이 돼요`, say, now: fameLv, need: 5 + n * 3, r };
+  return { text: `몬스터를 ${20 + n * 8}마리 태어나게 해요`, say, count: 'hatch', need: 20 + n * 8, r };
+}
+const qChapter = (k) => (k >= QLIST.length ? `${7 + Math.floor((k - QLIST.length) / 5)}장 · 끝없는 모험` : qChapter0(k));
+const qChapter0 = (k) => { let ch = '', idx = -1; for (const q of QUESTS) { if (q.ch) ch = q.ch; else { idx++; if (idx === k) return ch; } } return ch; };
 function qState() {
   S.quest = S.quest || { k: 0, base: {} };
-  const q = QLIST[S.quest.k];
+  const q = qGet(S.quest.k);
   // 횟수 퀘스트는 받았을 때부터 센다
   if (q && q.count && S.quest.base[S.quest.k] == null) S.quest.base[S.quest.k] = stat(q.count);
   return S.quest;
 }
 function qProg(k) {
-  const q = QLIST[k], st = qState();
+  const q = qGet(k), st = qState();
   if (!q) return 0;
   const v = q.count ? stat(q.count) - (st.base[k] || 0) : q.now();
   return Math.max(0, Math.min(q.need, v));
 }
-const qReady = () => { const st = qState(), q = QLIST[st.k]; return !!q && qProg(st.k) >= q.need; };
+const qReady = () => { const st = qState(), q = qGet(st.k); return !!q && qProg(st.k) >= q.need; };
 function qClaim() {
-  const st = qState(), q = QLIST[st.k];
+  const st = qState(), q = qGet(st.k);
   if (!q || qProg(st.k) < q.need) return;
   const got = qReward(q.r);
+  addFame(50);
   st.k++;
   qState();
   save(); updateHud(); sfx('yay');
   toast(`📜 퀘스트 완료! ${got}`);
-  if (!QLIST[st.k]) toast('🎉 루나: 모든 이야기를 끝냈어요! 당신은 최고의 조련사예요!');
+  if (st.k === QLIST.length) setTimeout(() => toast('🎉 루나: 30개 이야기를 다 끝냈어요! 이제 끝없는 모험이 시작돼요!'), 1200);
   else if (qChapter(st.k) !== qChapter(st.k - 1)) setTimeout(() => toast(`📖 새 이야기: ${qChapter(st.k)}`), 1200);
   openQuests('story');
 }
@@ -3553,6 +3592,7 @@ function weekClaim(id) {
   if (!def || w.got.includes(id) || wProg(id) < def.need) return;
   w.got.push(id);
   const got = qReward(WEEK_REWARD);
+  addFame(30);
   save(); updateHud(); sfx('coin'); toast('📆 주간 퀘스트 완료! ' + got);
   openQuests('week');
 }
@@ -3575,15 +3615,15 @@ let questTab = 'story';
 function openQuests(t) {
   tutFlag('quest', true);
   if (t) questTab = t;
-  const st = qState(), q = QLIST[st.k];
+  const st = qState(), q = qGet(st.k), endless = st.k >= QLIST.length;
   let body = '';
   if (questTab === 'story') {
     if (!q) body = `<div class="q-npc"><span class="q-face">${QNPC.face}</span><div class="q-say"><b>${QNPC.name}</b>모든 이야기를 끝냈어요! 당신은 이 세상 최고의 몬스터 조련사예요. 고마워요! 💖</div></div>`;
     else {
       const p = qProg(st.k), ok = p >= q.need;
-      const chIdx = QUESTS.filter(x => x.ch).findIndex(x => x.ch === qChapter(st.k));
-      const inCh = (() => { let n = -1, c = 0; for (const x of QUESTS) { if (x.ch) { n++; continue; } if (n === chIdx) c++; } return c; })();
-      const before = (() => { let n = -1, idx = -1, c = 0; for (const x of QUESTS) { if (x.ch) { n++; continue; } idx++; if (n === chIdx && idx < st.k) c++; } return c; })();
+      const chIdx = endless ? -9 : QUESTS.filter(x => x.ch).findIndex(x => x.ch === qChapter(st.k));
+      const inCh = endless ? 5 : (() => { let n = -1, c = 0; for (const x of QUESTS) { if (x.ch) { n++; continue; } if (n === chIdx) c++; } return c; })();
+      const before = endless ? (st.k - QLIST.length) % 5 : (() => { let n = -1, idx = -1, c = 0; for (const x of QUESTS) { if (x.ch) { n++; continue; } idx++; if (n === chIdx && idx < st.k) c++; } return c; })();
       body = `<div class="q-ch">📖 ${qChapter(st.k)} <small>${before + 1} / ${inCh}</small></div>
         <div class="q-npc"><span class="q-face">${QNPC.face}</span><div class="q-say"><b>${QNPC.name}</b>${q.say}</div></div>
         <div class="q-goal ${ok ? 'ok' : ''}">
@@ -3592,8 +3632,8 @@ function openQuests(t) {
           <div class="q-rew">보상: ${rText(q.r)}</div>
           <button class="btn big ${ok ? 'green' : ''}" data-act="qClaim" ${ok ? '' : 'disabled'}>${ok ? '🎁 보상 받고 다음 이야기' : '진행 중…'}</button>
         </div>
-        <div class="q-dots">${QLIST.map((_, k) => `<i class="${k < st.k ? 'done' : k === st.k ? 'now' : ''}"></i>`).join('')}</div>
-        <p class="muted">스토리 퀘스트 ${st.k} / ${QLIST.length} 완료</p>`;
+        ${endless ? '' : `<div class="q-dots">${QLIST.map((_, k) => `<i class="${k < st.k ? 'done' : k === st.k ? 'now' : ''}"></i>`).join('')}</div>`}
+        <p class="muted">${endless ? `♾️ 끝없는 모험 · 지금까지 퀘스트 ${fmt(st.k)}개 완료` : `스토리 퀘스트 ${st.k} / ${QLIST.length} 완료`}</p>`;
     }
   } else if (questTab === 'week') {
     const w = weekState();
@@ -3614,7 +3654,7 @@ function openQuests(t) {
 
 function nextGoal() {
   // 스토리 퀘스트가 있으면 그게 먼저
-  const qs = qState(), qq = QLIST[qs.k];
+  const qs = qState(), qq = qGet(qs.k);
   if (qq) return qProg(qs.k) >= qq.need ? { text: '📜 퀘스트 보상을 받을 수 있어요! 눌러서 받기', ready: true, quest: true } : { text: `📜 ${qq.text} <b>${fmt(qProg(qs.k))}/${fmt(qq.need)}</b> → ${rText(qq.r)}`, quest: true };
   const m = misToday();
   const misReady = m.ids.some(id => (m.prog[id] || 0) >= MISSIONS.find(x => x.id === id).need && !m.got.includes(id)) || (!m.bonus && m.got.length >= 3);
@@ -7018,6 +7058,7 @@ function merge(t, lv) {
 
 // ===================== 화면: 모험 =====================
 const ENEMY_POOLS = { n: -1, p: {} };
+const foeScale = (st) => (st > 40 ? Math.pow(1.035, st - 40) : 1);
 function enemyTeam(stage) {
   let seed = stage * 7919 + 13;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -7030,7 +7071,7 @@ function enemyTeam(stage) {
     const pool = ENEMY_POOLS.p[ri] || (ENEMY_POOLS.p[ri] = CAT_LIST.filter(c => c.rarity === RAR_ORDER[ri]));
     const c = pool[Math.floor(rnd() * pool.length)];
     const lv = Math.min(MAX_LV, stage + Math.floor(rnd() * 2));
-    res.push({ type: c.id, lv });
+    res.push({ type: c.id, lv, sc: foeScale(stage) });
   }
   return res;
 }
@@ -7161,6 +7202,7 @@ let B = null;
 function mkUnit(m, side, idx) {
   const c = CAT[m.type], st = stats(m);
   // 내 몬스터는 함께하는 펫의 전투 보너스를 받는다
+  if (side === 'foe' && m.sc > 1) { st.hp = Math.min(1e300, st.hp * m.sc); st.atk = Math.min(1e300, st.atk * m.sc); }
   if (side === 'me') { st.atk = Math.round(st.atk * (1 + (petPct('atk') + kdLv('army') * 5 + cosLv('war') * 25 + (S.potBattleOn ? 30 : 0)) / 100)); st.hp = Math.round(st.hp * (1 + (petPct('hp') + kdLv('army') * 5 + cosLv('war') * 25) / 100)); }
   return {
     id: side + idx, side, c, lv: m.lv, nick: side === 'me' && m.nick ? m.nick : '',
@@ -7198,6 +7240,7 @@ const foePower = (st) => unitsPower(enemyTeam(st).map((f, i) => mkUnit(f, 'foe',
 // 나올 수 있는 가장 센 적 (몇 천 스테이지를 살펴보고 조금 넉넉하게)
 let FOE_CAP = 0;
 function foeCap() {
+  return Infinity;   // 🌱 시즌 2: 적이 끝없이 강해지니까 '가장 센 적'은 없다
   if (FOE_CAP) return FOE_CAP;
   let mx = 0;
   for (let k = 0; k < 3000; k++) mx = Math.max(mx, foePower(60 + k * 37));
@@ -7327,7 +7370,7 @@ const spLabel = (sp) => (sp === POWER_SPEED ? '⚡ 전투력 모드' : `⏩ ${fm
 // 전투력이 클수록 1초에 더 많은 스테이지 (전투력의 자릿수가 클수록 훨씬 빨라진다)
 const powerRate = (p) => Math.max(5, Math.round(Math.pow(Math.max(10, p), 0.62)));
 // 스테이지 a ~ b-1을 한꺼번에 이겼을 때 받는 돈 (50스테이지 넘으면 st^2.5에 비례 → 더해서 한 번에)
-const GOLD_C = 120 * Math.pow(1.25, 49) / Math.pow(50, 2.5);
+const GOLD_C = ECON_INC * 120 * Math.pow(1.25, 49) / Math.pow(50, 2.5);
 const goldSum = (a, b) => GOLD_C * (Math.pow(b - 0.5, 3.5) - Math.pow(a - 0.5, 3.5)) / 3.5;
 const gemSum = (a, b) => 5 * (b - a) + 15 * (Math.floor((b - 1) / 5) - Math.floor((a - 1) / 5));
 // 예전에 비싼 배속을 산 사람은 전투력 모드를 그냥 준다
@@ -7950,7 +7993,7 @@ function pvpTrophy(win) {
 
 // ----- 전 세계 랭킹 (ntfy.sh에 점수를 올리고 읽는다. 서버는 12시간만 보관하지만 기기 저장 + 다시 올리기로 최대 2년) -----
 // 내 컴퓨터에서 시험할 때(localhost)는 진짜 랭킹을 건드리지 않게 따로 쓴다
-const RANK_TOPIC = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) ? 'monhap-rank-dev-q7x2k9' : 'monhap-rank-v1-q7x2k9';
+const RANK_TOPIC = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) ? 'monhap-rank-dev2-q7x2k9' : 'monhap-rank-v2-q7x2k9';
 // 랭킹에서 숨길 기록 (시험하다가 잘못 올라간 것)
 const RANK_HIDE = new Set(['7d7sb06fon1l', 'ut7q8bq5onn3', 'i8pxkadifqn4']);
 const RANK_URL = 'https://ntfy.sh/' + RANK_TOPIC;
@@ -10944,6 +10987,7 @@ function misToday() {
 }
 function mission(id, n = 1) {
   evtToken(id, n);
+  if (FAME_XP[id]) addFame(FAME_XP[id] * Math.min(n, 1000));
   S.stat = S.stat || {};
   S.stat[id] = (S.stat[id] || 0) + n;
   updateQuestBtn();
@@ -10973,6 +11017,68 @@ const ACH = [
   ...[200, 500, 900, 1400].map((n, k) => ({ id: 'troph' + n, text: `🏆 트로피 ${fmt(n)} 모으기`, now: () => S.trophies || 0, need: n, gems: [10, 20, 40, 60][k] })),
   ...[3, 6, 10, 20].map((n, k) => ({ id: 'habs' + n, text: `🏠 서식지 ${n}개 짓기`, now: () => S.plots.filter(p => p && p.kind === 'hab').length, need: n, gems: [5, 10, 20, 30][k] })),
 ];
+// 무엇을 하면 명성 경험치를 얼마나 받는지
+const FAME_XP = { hatch: 2, breed: 4, collect: 1, harvest: 2, gwar: 15 };
+const fameNeed = (lv) => Math.round(100 * Math.pow(lv, 1.7));
+const fameLv = () => (S.fame && S.fame.lv) || 1;
+function addFame(n) {
+  if (!S || !(n > 0)) return;
+  S.fame = S.fame || { lv: 1, xp: 0 };
+  S.fame.xp += n;
+  let up = 0;
+  while (S.fame.xp >= fameNeed(S.fame.lv) && up < 100) {
+    S.fame.xp -= fameNeed(S.fame.lv); S.fame.lv++; up++;
+    const lv = S.fame.lv, gems = 10 + lv + (lv % 10 === 0 ? lv * 5 : 0);
+    earn(gems, 'gems');
+    setTimeout(() => toast(`🎖️ 명성 Lv.${lv}! 💎 ${gems}${lv % 10 === 0 ? ' · 새 칭호: ' + fameTitle(lv) : ''}`), 200 + up * 900);
+  }
+  if (up) { sfx('level'); updateHud(); }
+  const e = $('#fameLv'); if (e) e.textContent = fameLv();
+}
+const FAME_TITLES = ['🌱 새싹', '🐣 초보 조련사', '🧭 모험가', '🛡️ 용감한 조련사', '⚔️ 전사', '🏹 사냥꾼', '🔮 마법사', '🐉 용 조련사', '👑 왕국의 영웅', '🌟 별의 조련사',
+  '🌙 달의 수호자', '☀️ 태양의 기사', '🌌 은하 탐험가', '🪐 행성의 주인', '💫 우주의 전설', '♾️ 끝없는 전설'];
+const fameTitle = (lv) => FAME_TITLES[Math.min(FAME_TITLES.length - 1, Math.floor(lv / 10))];
+// 스테이지 기록 · 새 도감은 몇 초마다 확인해서 경험치로
+setInterval(() => {
+  if (typeof S === 'undefined' || !S || VISIT) return;
+  const st = S.stage || 1, dx = Object.keys(S.dex || {}).length;
+  if (S.fameSt == null) S.fameSt = st;
+  if (S.fameDx == null) S.fameDx = dx;
+  if (st > S.fameSt) { addFame((st - S.fameSt) * 6); S.fameSt = st; }
+  if (dx > S.fameDx) { addFame((dx - S.fameDx) * 5); S.fameDx = dx; }
+  // 🌱 새 시즌 안내 (창이 없을 때 한 번)
+  if (S.seasonNews && !modalOpen() && !B && $('#login') && $('#login').classList.contains('hidden')) { delete S.seasonNews; save(); openSeasonNews(); }
+}, 3000);
+function openSeasonNews() {
+  const h = (S.hall || [])[S.hall.length - 1];
+  showModal(`<div class="fame-panel"><h3>🌱 시즌 ${S.season || SEASON} 시작!</h3>
+    <p>모두가 <b>새로 시작</b>해요! 이번 시즌은 천천히, 오래오래 즐기는 시즌이에요.</p>
+    <ul class="fame-list">
+      <li>💰 돈은 천천히 모여요 (서식지 · 모험 골드 ¼)</li>
+      <li>🐉 전설 · 신화 같은 좋은 몬스터는 훨씬 드물게</li>
+      <li>⚔️ 모험 적은 <b>끝없이</b> 강해져요. 어디까지 갈 수 있을까요?</li>
+      <li>🎖️ <b>명성 레벨</b>은 끝이 없어요. 10레벨마다 새 칭호!</li>
+      <li>📜 스토리 퀘스트는 30개가 끝나도 <b>끝없는 모험</b>이 계속돼요</li>
+    </ul>
+    ${h ? `<p class="muted">🏆 지난 시즌 기록은 🎖️ 명성 → 명예의 전당에 남았어요 (몬스터 ${fmt(h.mons)} · 도감 ${fmt(h.dex)} · 스테이지 ${shortNum(h.stage)})</p>` : ''}
+    <p class="fame-gift">🎁 새 시즌 선물: 💎 300 · 💰 20,000</p>
+    <div class="row"><button class="btn big green" data-act="close">좋아요! 🚀</button></div></div>`);
+}
+function openFame() {
+  tutFlag('fame', true);
+  const lv = fameLv(), xp = (S.fame && S.fame.xp) || 0, need = fameNeed(lv);
+  const hall = (S.hall || []).slice().reverse();
+  showModal(`<div class="fame-panel"><h3>🎖️ 명성 Lv.${lv}</h3>
+    <p class="fame-title">${fameTitle(lv)}</p>
+    <div class="bar fame-bar"><i style="width:${Math.min(100, xp / need * 100)}%"></i></div>
+    <p class="muted">다음 레벨까지 ${fmt(Math.max(0, need - xp))} · 레벨마다 💎, 10레벨마다 새 칭호와 💎 왕창! (레벨은 끝이 없어요)</p>
+    <h4>⭐ 명성 얻는 법</h4>
+    <ul class="fame-list"><li>📖 새 도감 1마리 +5</li><li>⚔️ 모험 최고 스테이지 1 올리기 +6</li><li>🏔️ 교배 +4 · 🐣 태어나기 +2 · 🌾 수확 +2 · 💰 골드 걷기 +1</li><li>📜 스토리 퀘스트 +50 · 📆 주간 퀘스트 +30 · 🛡️ 길드전 +15</li></ul>
+    <h4>🏆 명예의 전당</h4>
+    ${hall.length ? `<div class="fame-hall">${hall.map(h => `<div class="fh-row"><b>시즌 ${h.season}</b><small>🐾 ${fmt(h.mons)} · 📖 ${fmt(h.dex)} · ⚔️ ${shortNum(h.stage)} · 💰 ${h.gold < 0 ? '∞' : shortNum(h.gold)}${h.top >= 0 ? ' · 최고 ' + RAR[RAR_ORDER[h.top]].name.slice(0, 12) : ''}</small></div>`).join('')}</div>` : '<p class="muted">시즌이 끝나면 여기에 기록이 남아요.</p>'}
+    <p class="muted small-note">🌱 지금은 시즌 ${S.season || SEASON}</p>
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
 function statAdd(k, n) { S.stat = S.stat || {}; S.stat[k] = (S.stat[k] || 0) + n; }
 // 🏆 새 업적 (단계별로 쭉)
 const ACH_MORE = [
@@ -11503,7 +11609,7 @@ function submitCode() {
   const inp = $('#codeInput');
   if (!inp) return;
   const v = inp.value.replace(/\s/g, '');
-  if (v === CE_CODE) { openRichGift(); return; }
+  if (v === CE_CODE && isAdminAcc()) { openRichGift(); return; }
   if (v === '제작자') {
     closeModal();
     if (isAdminAcc()) { openAdmin(); return; }
@@ -11514,7 +11620,7 @@ function submitCode() {
       <div class="row"><button class="btn green" data-act="adminKeySet">🔑 비밀번호 넣기</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
     return;
   }
-  if (v === SECRET_CODE) {
+  if (v === SECRET_CODE && isAdminAcc()) {
     closeModal();
     // 한 번 더 넣으면 돈 무한을 끈다
     if (S.infinite) {
@@ -11737,6 +11843,10 @@ TUT.push(
 TUT.push(
   { text: '🌍 ⚔️ 모험 탭의 🌍 월드 보스를 눌러 봐요 (모든 사람이 같이 거대 보스를 때려요!)', done: () => tutFlag('wboss'),
     go: () => { closeModal(); tab = 'adventure'; render(); } },
+);
+TUT.push(
+  { text: '🎖️ 위쪽 🎖️ 명성 버튼을 눌러 봐요 (끝이 없는 레벨! 명예의 전당도 있어요)', done: () => tutFlag('fame'),
+    go: () => { closeModal(); openFame(); } },
 );
 TUT.push(
   { text: '💬 위쪽 💬 채팅 버튼을 눌러 봐요 (메신저처럼 다른 사람과 이야기해요!)', done: () => tutFlag('dm'),
@@ -12016,7 +12126,10 @@ function tutPoint(k) {
       if (inModal) return ['#modalBox [data-act=wbHit]', '#modalBox [data-act=close]'];
       if (tab !== 'adventure') return [bottomBtn('adventure')];
       return ['#view [data-act=wbOpen]'];
-    case 64: // 💬 말 걸기
+    case 64: // 🎖️ 명성
+      if (inModal) return ['#modalBox [data-act=close]'];
+      return ['.hud [data-act=fame]'];
+    case 65: // 💬 말 걸기
       if (inModal) return ['#modalBox [data-act=close]'];
       return ['.hud [data-act=dmBox]'];
   }
@@ -12205,6 +12318,7 @@ const WELCOME = [
   { icon: '🛒', title: '상점 알뜰 사용법', text: '상점 위쪽 <b>분류 버튼</b>(🏠 🥚 🔥 🧪 🏛️ …)을 누르면 그 칸으로 바로 가요.<br><b>🔥 오늘의 특가</b>: 매일 4가지 할인, 하나씩만! (💎10으로 새로고침)<br><b>🧪 물약</b>: 🍀 행운(교배 두 번 뽑기) · ⏳ 모래시계(바로 완료) · 📈 성장(+3레벨) · 💪 전투(공격 +30%)<br><b>💱 교환소</b>: 골드로 보석 사기 (살수록 비싸지고 자정에 다시 싸져요)' },
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
   { icon: '🌍', title: '월드 보스', text: '⚔️ 모험 탭의 🌍 월드 보스! 12시간마다 거대한 보스가 나타나요.<br>게임하는 모든 사람이 같이 때려요. 한 사람이 3번씩 공격할 수 있고, 팀이 셀수록 데미지가 커요.<br>공격하면 💎 5, 다 같이 쓰러뜨리면 💎 50, 데미지 1등은 💎 100 더!' },
+  { icon: '🌱', title: '시즌 2 · 명성 레벨', text: '시즌 2에서는 모두 새로 시작해요! 돈은 천천히 모이고, 좋은 몬스터는 더 드물고, 모험 적은 끝없이 강해져요.<br>위쪽 <b>🎖️ 명성</b>은 끝이 없는 레벨! 도감 · 모험 · 교배 · 퀘스트로 올리고, 10레벨마다 새 칭호!<br>📜 스토리 퀘스트도 30개 뒤에 <b>♾️ 끝없는 모험</b>이 계속돼요. 지난 시즌 기록은 명예의 전당에!' },
   { icon: '💬', title: '말 걸기', text: '위쪽 💬 채팅 버튼을 누르면 메신저처럼 대화 목록이 나와요! 🏆 랭킹에서 사람 옆의 💬를 누르면 모르는 사람에게도 말을 걸 수 있어요.<br>✏️ 하고 싶은 말을 직접 적거나 정해진 말 · 이모지를 눌러요. 🛡️ 개인정보는 보낼 수 없어요. 받은 말은 📬 받은 말에서 보고 💬 답장!<br>싫은 사람은 🚫 차단하면 더 이상 말이 오지 않아요.' },
   { icon: '📊', title: '내 기록', text: '위쪽 👤 계정에서 📊 내 기록을 누르면 ⏱️ 지금까지 게임한 시간이 나와요!<br>몬스터 수, 도감, 가장 긴 연승, 이긴 전투, 미니게임 판수 같은 기록도 한눈에 볼 수 있어요.' },
   { icon: '🧪', title: '합체 실험실', text: '🐾 몬스터 탭의 🧪 합체 실험실에서 내 몬스터 두 마리를 합체해 봐요!<br>살라맨더 + 거북 = 살라북?! 웃긴 이름과 모습, 성격이 나와요. 마음에 들면 📒 앨범에 저장!<br>재미로만 하는 거라 진짜 몬스터는 그대로예요.' },
@@ -12287,6 +12401,7 @@ function updateHud() {
   updateMisDot();
   updateFullBtn();
   updateGoal();
+  { const e = $('#fameLv'); if (e) e.textContent = fameLv(); }
   [['gold', S.gold], ['gems', S.gems]].forEach(([id, v]) => {
     const el = $('#' + id);
     el.textContent = S.infinite ? '∞' : shortNum(v) + (id === 'gold' && boostOn() ? '⚡' : '');
@@ -12527,6 +12642,7 @@ const ACTIONS = {
   dmSend: (d) => dmSend(d.id, d.m).then(() => { if ($('#modalBox .dm-panel')) openDmSay(d.id); }),
   dmEmoji: (d) => { dmEmojiOpen = !dmEmojiOpen; openDmSay(d.id); },
   dmBox: () => openDmBox(),
+  fame: () => openFame(),
   dmWrite: (d) => { const i = $('#dmText'); dmSend(d.id, 0, i ? i.value : '').then(ok => { if (ok && $('#modalBox .dm-panel')) openDmSay(d.id); }); },
   dmBlock: (d) => dmBlock(d.id),
   dmUnblock: (d) => dmUnblock(d.id),
