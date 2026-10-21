@@ -7058,11 +7058,11 @@ function merge(t, lv) {
 
 // ===================== 화면: 모험 =====================
 const ENEMY_POOLS = { n: -1, p: {} };
-const foeScale = (st) => (st > 40 ? Math.pow(1.035, st - 40) : 1);
+const foeScale = (st) => (st > 80 ? Math.pow(1.025, st - 80) : 1);
 function enemyTeam(stage) {
   let seed = stage * 7919 + 13;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const tier = Math.min(RANK.mythic, Math.floor((stage - 1) / 2));
+  const tier = Math.min(RANK.mythic, Math.floor((stage - 1) / 6));
   const res = [];
   const count = stage === 1 ? 1 : stage === 2 ? 2 : 3;
   for (let i = 0; i < count; i++) {
@@ -7070,7 +7070,7 @@ function enemyTeam(stage) {
     if (ENEMY_POOLS.n !== CAT_LIST.length) { ENEMY_POOLS.n = CAT_LIST.length; ENEMY_POOLS.p = {}; }
     const pool = ENEMY_POOLS.p[ri] || (ENEMY_POOLS.p[ri] = CAT_LIST.filter(c => c.rarity === RAR_ORDER[ri]));
     const c = pool[Math.floor(rnd() * pool.length)];
-    const lv = Math.min(MAX_LV, stage + Math.floor(rnd() * 2));
+    const lv = Math.min(MAX_LV, Math.ceil(stage / 2) + Math.floor(rnd() * 2));
     res.push({ type: c.id, lv, sc: foeScale(stage) });
   }
   return res;
@@ -7094,6 +7094,7 @@ function renderAdventure() {
       <h3>🛡️ 내 팀</h3>
       <div class="team-row">${slots}</div>
       <div class="row"><button class="btn green" data-act="teamAuto" ${S.monsters.length ? '' : 'disabled'}>⚡ 자동 편성</button><button class="btn big" data-act="fight" ${team.length ? '' : 'disabled'}>⚔️ 전투 시작</button></div>
+      <div class="row"><button class="btn practice-btn" data-act="practice" ${team.length ? '' : 'disabled'}>🥊 연습 전투<small>내 팀이 이길 만한 적과 싸워서 💰 돈 · 🍖 먹이 벌기 (져도 잃는 것 없음)</small></button></div>
       <div class="row"><button class="btn loop-btn" data-act="fightLoop" ${team.length ? '' : 'disabled'}>🔁 연속 전투<small>이기면 다음 스테이지로 자동으로 계속! (자동 전투)</small></button></div>
     </div>
     <div class="stage-box pvp-box">
@@ -7333,6 +7334,33 @@ function loopNext() {
   startBattle();
 }
 
+// 내 팀 전투력의 70%보다 약한 적이 나오는 가장 높은 스테이지
+function practiceStage() {
+  const team = S.team.map(byUid).filter(Boolean);
+  const myPow = unitsPower(team.map((m, i) => mkUnit(m, 'me', i)));
+  let st = Math.max(1, S.stage);
+  for (let k = 0; k < 3000 && st > 1 && foePower(st) > myPow * 0.7; k++) st = Math.max(1, st - Math.max(1, Math.floor(st / 20)));
+  return st;
+}
+function startPractice() {
+  const team = S.team.map(byUid).filter(Boolean);
+  if (!team.length) { toast('먼저 팀을 짜 주세요 (⚡ 자동 편성)'); return; }
+  if (B) return;
+  tutFlag('practice', true);
+  const st = practiceStage();
+  const foes = enemyTeam(st);
+  B = {
+    stage: st, practice: true,
+    units: [...team.map((m, i) => mkUnit(m, 'me', i)), ...foes.map((m, i) => mkUnit(m, 'foe', i))],
+    order: [], cur: null, target: 'foe0', log: [], round: 0,
+    waiting: false, over: false, fast: !!S.fastBattle, auto: !!S.autoBattle, timer: null, result: null, built: false,
+  };
+  $('#battle').classList.remove('hidden');
+  updateGuide();
+  logB(`🥊 연습 전투 시작! (스테이지 ${st} 적 · 져도 잃는 것 없어요)`);
+  drawBattle();
+  later(nextTurn, 600);
+}
 function startBattle() {
   const team = S.team.map(byUid).filter(Boolean);
   if (!team.length || B) return;
@@ -7790,6 +7818,13 @@ function endBattle(win) {
   } else if (B.gwar) rewards.push(...gwarResult(win));
   else if (B.raid) rewards.push(...raidResult(win));
   else if (B.bossIdx != null) rewards.push(...bossRewards(win));
+  else if (B.practice) {
+    if (win) {
+      const gold = Math.max(50, Math.round(stageGold(B.stage) * 0.4)), food = 30 + B.stage * 5;
+      earn(gold); S.food += food;
+      rewards.push(`💰 ${fmt(gold)}`, `🍖 ${fmt(food)}`);
+    }
+  }
   else if (win) {
     const gold = Math.round(stageGold(B.stage) * (evtOn('tourney') ? 2 : 1));
     earn(gold);
@@ -7808,7 +7843,7 @@ function endBattle(win) {
   if (win) mission('win');
   const fastLoop = LOOP && bSpeed() >= 100;
   if (!fastLoop || performance.now() - lastLoopSave > 2000) { lastLoopSave = performance.now(); save(); }
-  if (LOOP && !B.pvp && !B.gwar && !B.raid && B.bossIdx == null) {
+  if (LOOP && !B.pvp && !B.gwar && !B.raid && B.bossIdx == null && !B.practice) {
     if (win) { const b = B; const go = () => { if (B === b && LOOP) loopNext(); }; if (bSpeed() >= 250) soon(go); else setTimeout(go, Math.max(60, 1600 / bSpeed())); }
     else { LOOP.wins = LOOP.wins; setTimeout(() => stopLoop('패배'), 300); }
   }
@@ -7898,7 +7933,7 @@ function drawBattle() {
     $('#battle').innerHTML = `
       <div class="b-inner">
         <div class="b-top">
-          <b>${B.raid ? `🔥 레이드 · ${raidDef().name}` : B.gwar ? `⚔️ 길드전 · ${esc(B.gwar.opp.emblem)} ${esc(B.gwar.def.n)}` : B.coop ? `🤝 협동 레이드 · ${B.units.find(u => u.boss) ? B.units.find(u => u.boss).c.name : ''}` : B.pvp ? `👥 친구 대전 · vs ${B.pvp.oppName}` : B.bossIdx != null ? `👹 보스전 · ${BOSSES[B.bossIdx].name}` : `스테이지 ${B.stage}`}</b><span class="muted" id="bRound"></span>${S.petOn && petById(S.petOn) && !(B.pvp && B.pvp.role === 'guest') ? `<span class="b-pet" title="${petBonusText(petById(S.petOn), petLv(S.petOn))}">${petById(S.petOn).e}</span>` : ''}
+          <b>${B.raid ? `🔥 레이드 · ${raidDef().name}` : B.gwar ? `⚔️ 길드전 · ${esc(B.gwar.opp.emblem)} ${esc(B.gwar.def.n)}` : B.coop ? `🤝 협동 레이드 · ${B.units.find(u => u.boss) ? B.units.find(u => u.boss).c.name : ''}` : B.pvp ? `👥 친구 대전 · vs ${B.pvp.oppName}` : B.bossIdx != null ? `👹 보스전 · ${BOSSES[B.bossIdx].name}` : B.practice ? `🥊 연습 전투 · 스테이지 ${B.stage}` : `스테이지 ${B.stage}`}</b><span class="muted" id="bRound"></span>${S.petOn && petById(S.petOn) && !(B.pvp && B.pvp.role === 'guest') ? `<span class="b-pet" title="${petBonusText(petById(S.petOn), petLv(S.petOn))}">${petById(S.petOn).e}</span>` : ''}
           <span class="spacer"></span>
           <button class="btn ghost small" data-act="typeChart">📘 상성표</button>
           ${B.pvp && !B.coop ? '' : '<button class="btn ghost small" data-act="bAuto" id="bAuto"></button>'}
@@ -7929,10 +7964,10 @@ function drawBattle() {
     const r = B.result;
     bottom = `<div class="b-result">
       <div class="result ${r.win ? 'win' : 'lose'}">${r.win ? '🏆 승리!' : '💥 패배…'}</div>
-      <p>${r.win || B.gwar || B.raid ? `${B.raid ? '' : '보상: '}${r.rewards.join(' · ')}` : '속성 상성을 생각하거나 몬스터를 키우고 룬을 끼워 보세요!'}</p>
+      <p>${r.win || B.gwar || B.raid ? `${B.raid ? '' : '보상: '}${r.rewards.join(' · ')}` : B.practice ? '연습이라 잃은 건 없어요. 🥊 연습 전투로 돈과 먹이를 모아 몬스터를 키워 봐요!' : '속성 상성을 생각하거나 몬스터를 키우고 룬을 끼워 보세요! 너무 세면 🥊 연습 전투로 돈과 먹이를 모아요'}</p>
       ${LOOP && r.win && !B.pvp && !B.gwar && !B.raid && B.bossIdx == null
         ? `<p class="loop-note">🔁 연속 전투 ${LOOP.wins + 1}연승! 곧 다음 스테이지…</p><button class="btn big" data-act="loopStop">⏹ 멈추기</button>`
-        : `<div class="row"><button class="btn big" data-act="bQuit">확인</button>${!B.pvp && !B.gwar && !B.raid && B.bossIdx == null ? `<button class="btn big green" data-act="${r.win ? 'nextStage' : 'fightLoop'}">${r.win ? '⏩ 다음 스테이지' : '🔁 다시 연속 전투'}</button>` : ''}</div>`}
+        : `<div class="row"><button class="btn big" data-act="bQuit">확인</button>${B.practice ? '<button class="btn big green" data-act="practiceAgain">🥊 한 번 더 연습</button>' : !B.pvp && !B.gwar && !B.raid && B.bossIdx == null ? `<button class="btn big green" data-act="${r.win ? 'nextStage' : 'fightLoop'}">${r.win ? '⏩ 다음 스테이지' : '🔁 다시 연속 전투'}</button>` : ''}</div>`}
     </div>`;
   } else if (B.waiting) {
     const u = B.cur, t = unitById(B.target);
@@ -12601,6 +12636,8 @@ const ACTIONS = {
   fightLoop: () => { if (B) { if (!B.over) return; B = null; $('#battle').classList.add('hidden'); } openLoopStart(); },
   loopGo: (d) => { if (!spOwned(Number(d.sp))) { if (buySpeed(d.sp)) openLoopStart(); return; } S.bSpeed = Number(d.sp) || 1; S.fastBattle = S.bSpeed > 1; if (S.bSpeed > 1) tutFlag('speed', true); save(); closeModal(); startLoop(); },
   loopStop: () => { stopLoop(); },
+  practice: () => startPractice(),
+  practiceAgain: () => { if (B) { clearTimeout(B.timer); B = null; $('#battle').classList.add('hidden'); } startPractice(); },
   nextStage: () => { if (B) { clearTimeout(B.timer); B = null; $('#battle').classList.add('hidden'); } startBattle(); },
   bSkill: (d) => playerSkill(d.i),
   bTarget: (d) => setTarget(d.id),

@@ -1,5 +1,13 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  "먼저 팀을 짜 주세요 (⚡ 자동 편성)": "Make a team first (⚡ Auto team)",
+  "🥊 연습 전투 시작! (스테이지 {} 적 · 져도 잃는 것 없어요)": "🥊 Practice battle! (stage {} enemies · you lose nothing if you lose)",
+  "🥊 연습 전투 · 스테이지 {}": "🥊 Practice · Stage {}",
+  "🥊 한 번 더 연습": "🥊 Practice again",
+  "연습이라 잃은 건 없어요. 🥊 연습 전투로 돈과 먹이를 모아 몬스터를 키워 봐요!": "It's practice, so you lost nothing. Earn gold and food in 🥊 Practice battles to grow your monsters!",
+  "속성 상성을 생각하거나 몬스터를 키우고 룬을 끼워 보세요! 너무 세면 🥊 연습 전투로 돈과 먹이를 모아요": "Think about element matchups, or level up monsters and equip runes! Too strong? Earn gold and food in 🥊 Practice battles",
+  "🥊 연습 전투": "🥊 Practice Battle",
+  "내 팀이 이길 만한 적과 싸워서 💰 돈 · 🍖 먹이 벌기 (져도 잃는 것 없음)": "Fight enemies your team can beat to earn 💰 gold · 🍖 food (nothing lost if you lose)",
   // 몬스터 이름 꾸밈말
   "아기": "Baby",
   "꼬마": "Little",

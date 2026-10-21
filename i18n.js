@@ -1,7 +1,7 @@
 'use strict';
 // 🌐 언어 고르기 (한국어 · English · 中文 · 日本語 · Deutsch)
 (function () {
-  var KEY = 'combining-lang', OK = ['ko', 'en', 'zh', 'ja', 'de'], V = {"en":"be8a11ce","zh":"77c516fb","ja":"cc333cfc","de":"a9f1b2d0"};
+  var KEY = 'combining-lang', OK = ['ko', 'en', 'zh', 'ja', 'de'], V = {"en":"b5ae77bc","zh":"52b3edf6","ja":"b566b3f2","de":"76cc0c61"};
   var lang = null;
   try { lang = localStorage.getItem(KEY); } catch (e) { /* 저장 불가 */ }
   if (OK.indexOf(lang) < 0) {
