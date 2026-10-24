@@ -5425,6 +5425,8 @@ function openHatchery(i = curHatch, slot) {
       : '<p class="muted">알이 없어요. 교배산이나 상점에서 알을 가져오세요!</p>'}</div>
     ${S.hatch.length + leftover.length > 1 ? '<div class="all-box"><button class="btn green" data-act="hatchAll">🐣 모두 부화 (알맞은 서식지로 자동 이사)</button></div>' : ''}
     ${S.hatch.length ? '<div class="all-box"><button class="btn" data-act="makeRoom">🏠 남은 알 살 곳 만들기 (빈 서식지 바꾸기 · 새로 짓기)</button></div>' : ''}
+    ${S.hatch.length + leftover.length ? `<div class="all-box"><button class="btn" data-act="boxStuck">📦 알 모두 보관함에 넣기 (${fmt(S.hatch.length + leftover.length)}개 · 개수 제한 없음)</button></div>` : ''}
+    <div class="all-box"><button class="btn ghost small" data-act="boxOpen">📦 몬스터 보관함 (${fmt(boxCount())}마리)</button></div>
     ${S.hatch.length + leftover.length ? `<div class="all-box"><button class="btn ghost small danger" data-act="dumpEggs">🗑️ 알 모두 버리기 (${fmt(S.hatch.length + leftover.length)}개)</button></div>` : ''}
     <p class="muted small-note">부화장 ${n}개가 알을 같이 보관해요 (${hatcheries().map(k => (S.plots[k].cap || HATCH_CAP) * EGG_MULT + '개').join(' + ')}${mtnPower() > 1 ? ` + 교배산 추가분 ${2 * (mtnPower() - 1) * EGG_MULT}개` : ''})</p>
     <div class="row">
@@ -5434,6 +5436,62 @@ function openHatchery(i = curHatch, slot) {
     </div>`);
 }
 
+const boxCount = () => { let n = 0; for (const k in (S.box || {})) n += S.box[k]; return n; };
+function boxPut(types) {
+  S.box = S.box || {};
+  let n = 0;
+  for (const t of types) { if (!CAT[t]) continue; S.box[t] = (S.box[t] || 0) + 1; S.dex[t] = true; n++; }
+  return n;
+}
+// 부화장에 남은 알을 모두 보관함으로
+function boxStuck() {
+  const left = allIncs().filter(x => x.b);
+  const types = S.hatch.slice();
+  left.forEach(({ k, s, b }) => { types.push(b.type); hatchIncs(S.plots[k])[s] = null; });
+  if (!types.length) { toast('넣을 알이 없어요'); return; }
+  S.hatch = [];
+  const n = boxPut(types);
+  mission('hatch', Math.min(n, 1000));
+  save(); render(); sfx('yay');
+  toast(`📦 ${fmt(n)}마리를 보관함에 넣었어요! (보관함 ${fmt(boxCount())}마리)`);
+  openBox();
+}
+// 보관함 → 빈 서식지로 꺼내기 (자리가 있는 만큼)
+function boxOut() {
+  const box = S.box || {}, types = [];
+  for (const t in box) for (let k = 0; k < box[t] && types.length < 200000; k++) types.push(t);
+  if (!types.length) { toast('보관함이 비어 있어요'); return; }
+  const r0 = fastPlace(types);
+  S.box = {};
+  boxPut(r0.stuck);
+  save(); render();
+  toast(r0.n ? `📤 ${fmt(r0.n)}마리가 서식지로 이사했어요! (보관함에 ${fmt(boxCount())}마리 남음)` : '😢 빈 서식지가 없어요. 겹치는 몬스터를 팔거나 서식지를 더 지어요');
+  openBox();
+}
+function boxClear() {
+  const n = boxCount();
+  if (!n) return;
+  if (!confirm(`🗑️ 보관함의 몬스터 ${fmt(n)}마리를 모두 버릴까요?\n(도감 기록은 그대로 남아요) 되돌릴 수 없어요!`)) return;
+  S.box = {};
+  save(); toast(`🗑️ 보관함을 비웠어요 (${fmt(n)}마리)`);
+  openBox();
+}
+function openBox() {
+  tutFlag('box', true);
+  const box = S.box || {}, n = boxCount();
+  const byR = {};
+  for (const t in box) { const rr = CAT[t] ? CAT[t].rarity : 'common'; byR[rr] = (byR[rr] || 0) + box[t]; }
+  const rows = RAR_ORDER.filter(rr => byR[rr]).reverse().map(rr => `<span><b style="color:${RAR[rr].color}">${RAR[rr].name.slice(0, 12)}</b> <small>${fmt(byR[rr])}마리</small></span>`).join('');
+  const top = Object.keys(box).sort((a, b) => RANK[CAT[b].rarity] - RANK[CAT[a].rarity]).slice(0, 30);
+  showModal(`<div class="box-panel"><h3>📦 몬스터 보관함 <small class="muted">${fmt(n)}마리</small></h3>
+    <p class="muted">살 서식지가 없는 몬스터를 <b>개수 제한 없이</b> 넣어 두는 곳이에요. 보관함 몬스터는 💰 돈을 벌지 않지만 📖 도감에는 기록돼요. 서식지에 자리가 생기면 📤 꺼내기!</p>
+    ${n ? `<div class="ut-grid">${rows}</div>
+      <div class="grid small">${top.map(t => card({ type: t, lv: 1 }, '', 'mini', box[t] > 1 ? `<div class="found-mark">×${fmt(box[t])}</div>` : '')).join('')}</div>
+      ${Object.keys(box).length > 30 ? `<p class="muted">… 외 ${fmt(Object.keys(box).length - 30)}종류</p>` : ''}` : '<p class="muted">보관함이 비어 있어요.</p>'}
+    ${S.hatch.length ? `<div class="all-box"><button class="btn green" data-act="boxStuck">📦 부화장 알 ${fmt(S.hatch.length)}개 보관함에 넣기</button></div>` : ''}
+    ${n ? `<div class="all-box"><button class="btn" data-act="boxOut">📤 빈 서식지로 꺼내기</button></div><div class="all-box"><button class="btn ghost small danger" data-act="boxClear">🗑️ 보관함 비우기</button></div>` : ''}
+    <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
+}
 function dumpEggs() {
   const left = allIncs().filter(x => x.b), n = S.hatch.length + left.length;
   if (!n) { toast('버릴 알이 없어요'); return; }
@@ -5766,7 +5824,8 @@ function oldHatchAll() {
       b.isNew ? '<div class="found-mark">🆕</div>' : '')).join('')}</div>${r.n > 60 ? `<p class="muted">… 외 ${fmt(r.n - 60)}마리</p>` : ''}
       <p class="muted">${fmt(r.n)}마리가 서식지로 이사했어요.${r.news ? ` (🆕 도감 ${fmt(r.news)}마리)` : ''}</p>` : ''}
     ${stuck.length ? `<p class="warn">${stuck.slice(0, 20).map(t => `${CAT[t].face} ${CAT[t].name}`).join(', ')}${stuck.length > 20 ? ` 외 ${fmt(stuck.length - 20)}마리` : ''}<br>살 수 있는 빈 서식지가 없어서 부화장에 남아 있어요.${stuck.some(isLegend) ? '<br>⭐ 전설 이상 몬스터는 🏛️ 전설의 서식지에서만 살아요!' : ''}</p>
-      <div class="row"><button class="btn green" data-act="makeRoom">🏠 남은 알 살 곳 만들기</button></div>` : ''}
+      <div class="row"><button class="btn green" data-act="makeRoom">🏠 남은 알 살 곳 만들기</button></div>
+      <div class="row"><button class="btn" data-act="boxStuck">📦 남은 알 모두 보관함에 넣기 (개수 제한 없음)</button></div>` : ''}
     <div class="row"><button class="btn" data-act="close">좋아!</button></div>`);
 }
 
@@ -10434,7 +10493,7 @@ const cmdPayload = (c) => JSON.stringify(['v2', c.kind, c.name, c.what || '', c.
 const cmdStore = () => { try { return JSON.parse(lsGet('combining-cmds') || '[]') || []; } catch (e) { return []; } };
 async function cmdVerify(c) {
   try {
-    if (!c || c.kind !== 'take' || typeof c.name !== 'string' || typeof c.at !== 'number' || typeof c.sig !== 'string') return false;
+    if (!c || (c.kind !== 'take' && c.kind !== 'give') || typeof c.name !== 'string' || typeof c.at !== 'number' || typeof c.sig !== 'string') return false;
     BAN_PUB = BAN_PUB || await crypto.subtle.importKey('jwk', ADMIN_PUB, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
     return await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, BAN_PUB, unb64u(c.sig), new TextEncoder().encode(cmdPayload(c)));
   } catch (e) { return false; }
@@ -10465,6 +10524,13 @@ function cmdApply() {
   const notes = [];
   for (const c of mine) {
     done.add(c.sig.slice(0, 24));
+    if (c.kind === 'give') {
+      const m = /^(gold|gems):(.+)$/.exec(c.what || '');
+      const amt = m ? Math.max(0, Math.min(MONEY_CAP, parseAmount(m[2]) || 0)) : 0;
+      if (amt > 0 && !S.infinite) S[m[1]] = Math.min(MONEY_CAP, (S[m[1]] || 0) + amt);
+      if (amt > 0) notes.push(`🎁 제작자가 ${m[1] === 'gold' ? '💰 돈' : '💎 보석'} ${shortNum(amt)}을 선물했어요!${c.text ? ' · ' + esc(c.text) : ''}`);
+      continue;
+    }
     if (TAKE_TEST[c.what]) {
       const test = TAKE_TEST[c.what];
       const gone = new Set(S.monsters.filter(m => CAT[m.type] && test(m.type)).map(m => m.uid));
@@ -10549,6 +10615,22 @@ async function adminTake(what) {
   const ok = await ntfyPost(BAN_URL, c, false);
   toast(ok ? `🫳 "${name}"에게서 ${label}을(를) 가져가요 (게임을 켜면 바로)` : '⚠️ 인터넷으로 보내지 못했어요. 다시 해 주세요');
 }
+async function adminGive(cur) {
+  const name = (($('#giveName') || {}).value || '').trim();
+  const why = (($('#giveWhy') || {}).value || '').trim();
+  const spec = (($('#giveAmt') || {}).value || '').replace(/[,\s]/g, '');
+  if (!name) { toast('선물할 사람의 이름을 적어 주세요'); return; }
+  const amt = parseAmount(spec);
+  if (!(amt > 0)) { toast('얼마나 줄지 적어 주세요 (예: 3Ce · 500만 · 1M)'); return; }
+  const label = `${cur === 'gold' ? '💰 돈' : '💎 보석'} ${shortNum(Math.min(amt, MONEY_CAP))}`;
+  if (!confirm(`🎁 "${name}"에게 ${label}을(를) 선물할까요?\n(그 사람이 게임을 켜면 바로 들어가요)`)) return;
+  const k = await adminKey();
+  if (!k) { toast('❌ 제작자 비밀번호를 먼저 넣어 주세요'); return; }
+  const c = { kind: 'give', name: name.toLowerCase(), what: cur + ':' + spec, text: why.slice(0, 80), at: Date.now() };
+  c.sig = b64u(new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, k, new TextEncoder().encode(cmdPayload(c)))));
+  const ok = await ntfyPost(BAN_URL, c, false);
+  toast(ok ? `🎁 "${name}"에게 ${label}을(를) 보냈어요 (게임을 켜면 바로)` : '⚠️ 인터넷으로 보내지 못했어요. 다시 해 주세요');
+}
 async function adminSign(name, until, reason) {
   const k = await adminKey();
   if (!k) return null;
@@ -10574,17 +10656,17 @@ function adminFindHTML(q) {
       <span class="find-face">${esc(p.f || '🥚')}</span>
       <div class="find-info"><b>${esc(nm)}</b>${b && b.until > Date.now() ? ' <small class="ban-tag">⛔ 정지 중</small>' : ''}
         <small>📖 도감 ${fmt(p.dex || 0)} · ⚔️ 스테이지 ${fmt(p.st || 1)} · 🏆 ${fmt(p.tr || 0)}${p.gn ? ' · 🛡️ ' + esc(p.gn) : ''} · ${ago(p.t)} 접속</small></div>
-      <div class="find-btns"><button class="btn small" data-act="adminPick" data-n="${esc(nm)}" data-to="ban">⛔ 정지</button><button class="btn small" data-act="adminPick" data-n="${esc(nm)}" data-to="take">🫳 가져가기</button></div>
+      <div class="find-btns"><button class="btn small" data-act="adminPick" data-n="${esc(nm)}" data-to="ban">⛔ 정지</button><button class="btn small" data-act="adminPick" data-n="${esc(nm)}" data-to="take">🫳 가져가기</button><button class="btn small" data-act="adminPick" data-n="${esc(nm)}" data-to="give">🎁 선물</button></div>
     </div>`; }).join('')}</div>${all.length > list.length ? `<div class="row"><button class="btn ghost small" data-act="adminFindMore">⬇️ 더 보기 (${fmt(all.length - list.length)}명 더)</button></div>` : ''}`;
 }
 // 찾은 사람 이름을 정지 / 가져가기 칸에 넣고 그쪽으로
 function adminPick(name, to) {
-  const inp = $(to === 'ban' ? '#banName' : '#takeName');
+  const inp = $(to === 'ban' ? '#banName' : to === 'give' ? '#giveName' : '#takeName');
   if (!inp) return;
   inp.value = name;
   inp.scrollIntoView({ block: 'center' });
   inp.classList.add('flash-in'); setTimeout(() => inp.classList.remove('flash-in'), 900);
-  toast(to === 'ban' ? `⛔ "${name}" — 아래에서 정지할 시간을 골라요` : `🫳 "${name}" — 아래에서 가져갈 것을 골라요`);
+  toast(to === 'ban' ? `⛔ "${name}" — 아래에서 정지할 시간을 골라요` : to === 'give' ? `🎁 "${name}" — 아래에서 얼마나 선물할지 적어요` : `🫳 "${name}" — 아래에서 가져갈 것을 골라요`);
 }
 async function openAdmin(fresh = true) {
   if (!isAdminAcc() && !document.querySelector('#adminKeyIn')) return;
@@ -10614,6 +10696,11 @@ async function openAdmin(fresh = true) {
     <div class="ban-times">${Object.entries(TAKE_WHAT).map(([k, l]) => `<button class="btn small" data-act="adminTake" data-w="${k}">🫳 ${l}</button>`).join('')}</div>
     <div class="row as-search"><input id="takeAmt" maxlength="20" placeholder="얼마나? 예: 3Ce · 500만 · 50%" autocomplete="off"></div>
     <div class="ban-times"><button class="btn small" data-act="adminTake" data-w="goldAmt">🫳 💰 돈 이만큼</button><button class="btn small" data-act="adminTake" data-w="gemsAmt">🫳 💎 보석 이만큼</button></div>
+    <h4 class="sub">🎁 돈 · 보석 선물하기</h4>
+    <input id="giveName" maxlength="20" placeholder="선물할 사람 이름" autocomplete="off">
+    <input id="giveAmt" maxlength="20" placeholder="얼마나? 예: 3Ce · 500만 · 1M" autocomplete="off">
+    <input id="giveWhy" maxlength="80" placeholder="한마디 (그 사람에게 보여요 · 없어도 돼요)" autocomplete="off">
+    <div class="ban-times"><button class="btn small green" data-act="adminGive" data-c="gold">🎁 💰 돈 선물</button><button class="btn small green" data-act="adminGive" data-c="gems">🎁 💎 보석 선물</button></div>
     <h4 class="sub">지금 정지된 사람 (${bans.length})</h4>
     ${bans.length ? `<div class="ban-list">${bans.map(b => `<div class="ban-row"><b>${esc(b.name)}</b><small>${lockLeft(b)} 남음${b.reason ? ' · ' + esc(b.reason) : ''}</small><button class="btn ghost small" data-act="banUndo" data-n="${esc(b.name)}">✅ 풀기</button></div>`).join('')}</div>` : '<p class="muted">정지된 사람이 없어요</p>'}
     <div class="row"><button class="btn ghost small" data-act="adminRefresh">🔄 새로 받기</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
@@ -12628,6 +12715,11 @@ const ACTIONS = {
   upHabMax: (d) => upHabMax(d.i),
   hatchAll: () => hatchAll(),
   dumpEggs: () => dumpEggs(),
+  boxStuck: () => boxStuck(),
+  adminGive: (d) => adminGive(d.c),
+  boxOpen: () => openBox(),
+  boxOut: () => boxOut(),
+  boxClear: () => boxClear(),
   makeRoom: () => makeRoom(),
   feedAll: (d) => feedAll(d.mode),
   team: (d) => toggleTeam(d.uid),
