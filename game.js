@@ -918,7 +918,7 @@ const SEASON = 2;
 // 새 시즌에도 남기는 것: 이름 · 친구 · 채팅 · 길드 · 튜토리얼 · 게임한 시간 · 기기 맞추기 · 명예의 전당
 const SEASON_KEEP = ['nick', 'rankId', 'playerId', 'friends', 'frSeen', 'frReq', 'dms', 'dmBlock', 'guild', 'gMute', 'gReadSent', 'tutFlags', 'tutOff', 'welcomed',
   'loginDays', 'lastLoginDay', 'playSec', 'playSince', 'syncKey', 'rev', 'revBase', 'numStyle', 'krUnits', 'hideUI', 'monView', 'teamView', 'breedView', 'labAlbum',
-  'cmdDone', 'usedGifts', 'hall', 'fame'];
+  'cmdDone', 'usedGifts', 'hall', 'fame', 'ratings', 'myRate', 'rateId', 'rateAt'];
 function seasonReset(old, id) {
   // 혹시 몰라 예전 섬은 이 기기에 한 번 보관 (자리가 있으면)
   try { const k = 'combining-s' + (old.season || 1) + '-' + id, raw = lsGet(accKey(id)); if (raw && !lsGet(k) && raw.length < 3e6) lsSet(k, raw); } catch (e) { /* 자리 없음 */ }
@@ -11248,27 +11248,54 @@ setInterval(() => {
   if (!$('#login') || !$('#login').classList.contains('hidden')) return;
   const now = Date.now();
   // 내 평가는 인터넷 우편함에서 12시간이면 사라지니까 10시간마다 다시 올려 둔다
-  if (S.myRate && now - (S.rateSent || 0) > 10 * 3600000 && now - S.myRate.at < 120 * 86400000 && ntfyBgOk()) { S.rateSent = now; ntfyPost(RATE_URL, { v: 1, rate: S.myRate }, true); save(); return; }
+  if (S.myRate && now - (S.rateSent || 0) > 10 * 3600000 && ntfyBgOk()) { S.rateSent = now; ntfyPost(RATE_URL, { v: 1, rate: S.myRate }, true); save(); return; }
   if ((S.playSec || 0) < 1800 || now - (S.rateAt || 0) < RATE_EVERY || now - (S.rateAsk || 0) < 2 * 86400000) return;
   if (Math.random() < 0.15) openRate(true);
 }, 60000);
 // 제작자: 받은 평가를 모아 보기 (이 기기에 쌓아 둔다)
+function rateStore() {
+  let st = {};
+  try { st = JSON.parse(lsGet('combining-ratings') || '{}') || {}; } catch (e) { st = {}; }
+  // 제작자 계정 저장에 들어 있는 것도 합친다 (기기를 바꿔도 남게)
+  if (S && S.ratings) for (const k in S.ratings) if (!st[k] || st[k].at <= S.ratings[k].at) st[k] = S.ratings[k];
+  return st;
+}
+const rateClean = (r, t) => (r && typeof r.id === 'string' && r.s >= 1 && r.s <= 5
+  ? { id: r.id.slice(0, 12), s: Math.round(r.s), r: String(r.r || '').slice(0, GCHAT_MAX), n: String(r.n || '').slice(0, 10), lv: Number(r.lv) || 1, at: Number(r.at) || t } : null);
+let RATE_SYNC_AT = 0;
+async function rateSync() {
+  const store = rateStore();
+  RATE_SYNC_AT = Date.now();
+  const txt = await (await fetch(RATE_URL + '/json?poll=1&since=all')).text();
+  let newest = 0;
+  txt.split('\n').forEach(l => {
+    try {
+      const ev = JSON.parse(l); if (ev.event !== 'message') return;
+      newest = Math.max(newest, ev.time * 1000);
+      const d = JSON.parse(ev.message) || {};
+      (Array.isArray(d.bundle) ? d.bundle : [d.rate]).forEach(x => { const c = rateClean(x, ev.time * 1000); if (c && (!store[c.id] || store[c.id].at <= c.at)) store[c.id] = c; });
+    } catch (e) { /* 다른 글 */ }
+  });
+  lsSet('combining-ratings', JSON.stringify(store));
+  if (isAdminAcc()) { S.ratings = store; save(); }
+  // 서버에서는 12시간이면 사라지니까, 제작자 기기가 10시간마다 전부 묶어서 다시 올린다
+  const relayAt = Number(lsGet('combining-raterelay')) || 0;
+  const all = Object.values(store);
+  if (isAdminAcc() && all.length && Date.now() - Math.max(relayAt, newest) > 10 * 3600000) {
+    lsSet('combining-raterelay', String(Date.now()));
+    let pack = [], size = 0;
+    const flush = () => { if (pack.length) ntfyPost(RATE_URL, { v: 1, bundle: pack }, true); pack = []; size = 0; };
+    for (const c of all) { const len = JSON.stringify(c).length; if (size + len > 3500) flush(); pack.push(c); size += len; }
+    flush();
+  }
+  return store;
+}
+// 제작자 계정이면 게임하는 동안 1시간마다 평가를 받아서 쌓아 둔다 (12시간 안에 사라지기 전에)
+setInterval(() => { if (typeof S !== 'undefined' && S && isAdminAcc() && !document.hidden && Date.now() - RATE_SYNC_AT > 3600000) rateSync().catch(() => {}); }, 5 * 60000);
+setTimeout(() => { if (typeof S !== 'undefined' && S && isAdminAcc()) rateSync().catch(() => {}); }, 20000);
 async function openRatings() {
-  let store = {};
-  try { store = JSON.parse(lsGet('combining-ratings') || '{}') || {}; } catch (e) { store = {}; }
-  try {
-    const txt = await (await fetch(RATE_URL + '/json?poll=1&since=all')).text();
-    txt.split('\n').forEach(l => {
-      try {
-        const ev = JSON.parse(l); if (ev.event !== 'message') return;
-        const r = (JSON.parse(ev.message) || {}).rate;
-        if (!r || typeof r.id !== 'string' || !(r.s >= 1 && r.s <= 5)) return;
-        const c = { id: r.id.slice(0, 12), s: Math.round(r.s), r: String(r.r || '').slice(0, GCHAT_MAX), n: String(r.n || '').slice(0, 10), lv: Number(r.lv) || 1, at: Number(r.at) || ev.time * 1000 };
-        if (!store[c.id] || store[c.id].at <= c.at) store[c.id] = c;
-      } catch (e) { /* 다른 글 */ }
-    });
-    lsSet('combining-ratings', JSON.stringify(store));
-  } catch (e) { toast('📴 새 평가를 받아 오지 못했어요 (저장해 둔 것만 보여요)'); }
+  let store = rateStore();
+  try { store = await rateSync(); } catch (e) { toast('📴 새 평가를 받아 오지 못했어요 (저장해 둔 것만 보여요)'); }
   const list = Object.values(store).sort((a, b) => b.at - a.at);
   const avg = list.length ? list.reduce((s, x) => s + x.s, 0) / list.length : 0;
   const cnt = [0, 0, 0, 0, 0, 0]; list.forEach(x => cnt[x.s]++);
@@ -11277,7 +11304,7 @@ async function openRatings() {
       <div class="rate-dist">${[5, 4, 3, 2, 1].map(n => `<div><span>${n}⭐</span><i style="width:${list.length ? cnt[n] / list.length * 100 : 0}%"></i><small>${cnt[n]}</small></div>`).join('')}</div>
       <div class="rate-list">${list.map(x => `<div class="rate-row"><div><b>${'⭐'.repeat(x.s)}</b> <small class="muted">${esc(x.n)} · 🎖️${x.lv} · ${syncWhen(x.at)}</small></div><div>${esc(x.r)}</div></div>`).join('')}</div>`
       : '<p class="muted">아직 받은 평가가 없어요. 사람들이 게임을 30분 넘게 하면 가끔 물어봐요.</p>'}
-    <p class="muted small-note">💡 평가는 인터넷 우편함에 12시간 남아요. 이 창을 열 때마다 이 기기에 쌓아 둬요.</p>
+    <p class="muted small-note">💡 평가는 <b>평생</b> 남아요! 제작자 계정에 저장되고(☁️ 기기 맞추기로 다른 기기에도), 10시간마다 인터넷에도 다시 올려 둬요.</p>
     <div class="row"><button class="btn ghost small" data-act="adminOpen">← 제작자 메뉴</button><button class="btn ghost small" data-act="close">닫기</button></div></div>`);
 }
 function statAdd(k, n) { S.stat = S.stat || {}; S.stat[k] = (S.stat[k] || 0) + n; }

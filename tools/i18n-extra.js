@@ -1,5 +1,8 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  "💡 평가는": "💡 Reviews stay",
+  "평생": "forever",
+  "남아요! 제작자 계정에 저장되고(☁️ 기기 맞추기로 다른 기기에도), 10시간마다 인터넷에도 다시 올려 둬요.": "! They're saved in the creator account (and on other devices via ☁️ sync), and re-uploaded online every 10 hours.",
   "넣을 알이 없어요": "No eggs to put in",
   "📦 {}마리를 보관함에 넣었어요! (보관함 {}마리)": "📦 Put {} in storage! (storage: {})",
   "보관함이 비어 있어요": "Storage is empty",
