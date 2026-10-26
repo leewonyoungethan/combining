@@ -4710,6 +4710,8 @@ const fillBtnHTML = () => { const n = islFree().length; return n && !VISIT ? `<b
 // 골고루: 모든 속성을 돌아가며
 const MIX_ELS = () => [...EL.map(e => e.id), 'legend'];
 const fillEls = (el, n) => { const mix = MIX_ELS(); return Array.from({ length: n }, (_, k) => (el === 'mix' ? mix[k % mix.length] : el)); };
+// 섬을 채울 수 있는 다른 건물: [종류, 그림, 이름, 하나 값, 색]
+const FILL_BLD = [['mountain', '🏔️', '교배산', () => MOUNTAIN_COST, '#a3754d'], ['farm', '🌾', '농장', () => FARM_COST, '#7dff8f'], ['hatchery', '🪺', '부화장', () => HATCHERY_COST, '#ffd24a']];
 function openFillIsland() {
   tutFlag('fillIsl', true);
   const free = islFree(), th = ISLANDS[S.isl || 0];
@@ -4723,11 +4725,24 @@ function openFillIsland() {
       ${EL.map(e => opt(e.id, habEmoji(e.id), habName(e.id), habColor(e.id))).join('')}
       ${opt('legend', habEmoji('legend'), habName('legend'), habColor('legend'))}
     </div>
+    <h4 class="sub">🏗️ 다른 건물로 채우기</h4>
+    <div class="build-list">
+      ${FILL_BLD.map(([k, ico, nm, cost, color]) => `<button class="build-opt" data-act="fillIsl" data-el="${k}" style="--hc:${color}"><span class="bo-ico">${ico}</span><span class="bo-nm">${nm} ${free.length}개</span><span class="bo-cost">💰 ${shortNum(cost() * free.length)}</span></button>`).join('')}
+    </div>
     <div class="row"><button class="btn ghost small" data-act="close">닫기</button></div>`);
 }
 function fillIsland(el) {
   const free = islFree();
   if (!free.length) { toast('이 섬에는 빈 땅이 없어요'); return; }
+  // 🏔️ 교배산 · 🌾 농장 · 🪺 부화장으로 채우기
+  const bld = FILL_BLD.find(b => b[0] === el);
+  if (bld) {
+    if (!spend(bld[3]() * free.length)) return;
+    free.forEach(j => { S.plots[j] = el === 'mountain' ? { kind: 'mountain', breeds: [null] } : el === 'farm' ? { kind: 'farm', crop: null, end: 0 } : { kind: 'hatchery', cap: HATCH_CAP }; });
+    sfx('yay'); save(); closeModal(); render(); updateHud();
+    toast(`${bld[1]} ${bld[2]} ${free.length}개를 한 번에 지었어요!`);
+    return;
+  }
   const els = fillEls(el, free.length), cost = els.reduce((s, e) => s + habBuildCost(e), 0);
   if (!spend(cost)) return;
   free.forEach((j, k) => { S.plots[j] = { kind: 'hab', el: els[k], lv: 1, gold: 0 }; });

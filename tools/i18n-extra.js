@@ -1,5 +1,10 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  "🏗️ 다른 건물로 채우기": "🏗️ Fill with other buildings",
+  "{} {} {}개를 한 번에 지었어요!": "Built {2} {0} {1} at once!",
+  "교배산 {}개": "Breeding Mountain ×{}",
+  "농장 {}개": "Farm ×{}",
+  "부화장 {}개": "Hatchery ×{}",
   "부화할 알이 없어요": "No eggs to hatch",
   "🐣 다 된 알 {}개 한 번에 부화": "🐣 Hatch all {} ready eggs at once",
   "🐣 교배산의 다 된 알 {}개까지 모두 한 번에 부화": "🐣 Hatch everything at once, including {} ready eggs from breeding mountains",
