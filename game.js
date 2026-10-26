@@ -5191,6 +5191,7 @@ function openBreed(i = curMtn, slot) {
     <div class="row">
       <button class="btn big" data-act="breed" data-i="${i}" ${ma && mb ? '' : 'disabled'}>⛰️ 교배 시작${ma && mb ? ` (💰 ${fmt(breedCost(ma, mb))})` : ''}</button>
     </div>
+    ${(() => { const nf = freeBreedSlots().length; return nf > 1 ? `<div class="row"><button class="btn green" data-act="breedAll" data-i="${i}" ${ma && mb ? '' : 'disabled'}>⛰️⛰️ 같은 짝으로 빈 칸 ${fmt(nf)}곳 모두 교배${ma && mb ? ` (💰 ${shortNum(breedCost(ma, mb) * nf)})` : ''}</button></div>` : ''; })()}
     ${breedPickHTML()}
     ${breedLogHTML(i)}
     ${mountainFooter(i)}`);
@@ -5295,20 +5296,17 @@ function pickBreed(uid) {
   box.scrollTop = y;
 }
 
-function startBreed(i = curMtn) {
-  i = Number(i);
-  const p = S.plots[i];
-  const [a, b] = sel.map(byUid);
-  if (!p || p.kind !== 'mountain' || !a || !b || mtnSlots(p)[curSlot]) return;
-  if (a.lv < BREED_LV || b.lv < BREED_LV) { toast(`두 마리 모두 Lv.${BREED_LV} 이상이어야 해요`); return; }
+// 교배산 p의 slot 칸에서 a + b 교배 시작 (돈이 모자라면 false)
+function breedInto(p, slot, a, b, quiet) {
   const paid = breedCost(a, b);
-  if (!spend(paid)) return;
+  if (quiet ? !(S.infinite || S.gold >= paid) : !spend(paid)) return false;
+  if (quiet && !S.infinite) S.gold -= paid;
   let type = breedResult(a.type, b.type);
   if ((S.potLuck || 0) > 0) {
     const t2 = breedResult(a.type, b.type);
     if (rIdx(t2) > rIdx(type)) type = t2;
     S.potLuck--;
-    toast(`🍀 행운 물약을 썼어요! (${S.potLuck}개 남음)`);
+    if (!quiet) toast(`🍀 행운 물약을 썼어요! (${S.potLuck}개 남음)`);
   }
   if (cosLv('luck') && Math.random() * 100 < Math.min(80, cosLv('luck') * 8)) {
     const t3 = breedResult(a.type, b.type);
@@ -5317,13 +5315,47 @@ function startBreed(i = curMtn) {
   const base = RAR[CAT[type].rarity].time;
   const total = Math.max(1, Math.round(base * (evtOn('breedrush') ? 0.5 : 1)));
   const logId = S.nextLog = (S.nextLog || 0) + 1;
-  mtnSlots(p)[curSlot] = { type, total, base, end: Date.now() + total * 1000, parents: [CAT[a.type].name, CAT[b.type].name], logId, cost: S.infinite ? 0 : paid };
+  mtnSlots(p)[slot] = { type, total, base, end: Date.now() + total * 1000, parents: [CAT[a.type].name, CAT[b.type].name], logId, cost: S.infinite ? 0 : paid };
+  S.breedLog = [{ id: logId, a: a.uid, b: b.uid, at: a.type, bt: b.type, rt: type, t: Date.now() }, ...(S.breedLog || [])].slice(0, BREED_LOG_MAX);
+  mission('breed');
+  return true;
+}
+// 비어 있는 교배산 칸 전부 (이 교배산부터)
+function freeBreedSlots(first) {
+  const out = [];
+  const add = (k) => { const p = S.plots[k]; if (!p || p.kind !== 'mountain') return; mtnSlots(p).forEach((b, s) => { if (!b) out.push([k, s]); }); };
+  if (first != null) add(first);
+  S.plots.forEach((p, k) => { if (k !== first) add(k); });
+  return out;
+}
+// 🏔️ 같은 두 마리로 비어 있는 교배산 칸에서 한꺼번에 교배
+function breedEverywhere(i = curMtn) {
+  i = Number(i);
+  const [a, b] = sel.map(byUid);
+  if (!a || !b) return;
+  if (a.lv < BREED_LV || b.lv < BREED_LV) { toast(`두 마리 모두 Lv.${BREED_LV} 이상이어야 해요`); return; }
+  const free = freeBreedSlots(i);
+  if (!free.length) { toast('비어 있는 칸이 없어요'); return; }
+  let n = 0;
+  for (const [k, s] of free) { if (!breedInto(S.plots[k], s, a, b, true)) break; n++; }
+  if (!n) { sfx('err'); toast('💰 골드가 부족해요'); return; }
+  sel = [];
+  sfx('breed'); save(); updateHud(); refreshLive();
+  toast(`⛰️ 같은 짝으로 ${fmt(n)}곳에서 한꺼번에 교배를 시작했어요!${n < free.length ? ` (💰 골드가 모자라서 ${fmt(free.length - n)}칸은 남았어요)` : ''}`);
+  render();
+  openBreed(i, 0);
+}
+function startBreed(i = curMtn) {
+  i = Number(i);
+  const p = S.plots[i];
+  const [a, b] = sel.map(byUid);
+  if (!p || p.kind !== 'mountain' || !a || !b || mtnSlots(p)[curSlot]) return;
+  if (a.lv < BREED_LV || b.lv < BREED_LV) { toast(`두 마리 모두 Lv.${BREED_LV} 이상이어야 해요`); return; }
+  if (!breedInto(p, curSlot, a, b, false)) return;
   // 다음에 창을 열면 비어 있는 다음 칸으로
   const nextFree = mtnFreeSlot(p);
-  S.breedLog = [{ id: logId, a: a.uid, b: b.uid, at: a.type, bt: b.type, rt: type, t: Date.now() }, ...(S.breedLog || [])].slice(0, BREED_LOG_MAX);
   sel = [];
   sfx('breed');
-  mission('breed');
   save();
   openBreed(i, nextFree >= 0 && mtnSlots(p).length > 1 ? nextFree : curSlot);
   if (nextFree >= 0 && mtnSlots(p).length > 1) toast(`⛰️ 칸 ${curSlot + 1}에서 교배를 시작했어요! 비어 있는 칸이 더 있어요`);
@@ -12681,6 +12713,7 @@ const ACTIONS = {
   farmGem: (d) => farmGem(d.i),
   pick: (d) => pickBreed(d.uid),
   breed: (d) => startBreed(d.i),
+  breedAll: (d) => breedEverywhere(d.i),
   breedGem: (d) => breedGem(d.i, d.s),
   takeEgg: (d) => takeEgg(d.i, d.s),
   mtnSlot: (d) => { const box = $('#modalBox'), y = box.scrollTop; openBreed(curMtn, Number(d.s)); box.scrollTop = y; },
