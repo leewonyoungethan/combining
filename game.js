@@ -5127,9 +5127,9 @@ let curSlot = 0;
 const hatchCap = () => (Math.max(HATCH_CAP, hatcheries().reduce((s, k) => s + (S.plots[k].cap || HATCH_CAP), 0)) + 2 * Math.max(0, mtnPower() - 1)) * EGG_MULT;
 
 function mountainFooter(i) {
-  const n = mountains().length;
+  const n = mountains().length, ready = readyEggs();
   const canDemolish = n > 1 && !mtnBusy(S.plots[i]).length;
-  return `<div class="row">
+  return `${ready ? `<div class="row"><button class="btn green" data-act="hatchEverything">🐣 다 된 알 ${fmt(ready)}개 한 번에 부화</button></div>` : ""}<div class="row">
     ${n > 1 ? `<span class="muted small-note">교배산 ${mountains().indexOf(i) + 1}/${n} ${islandLabel(i)}</span>` : ''}
     ${(S.plots[i].lv || 1) > 1 ? `<span class="muted small-note">⭐ 큰 교배산 Lv.${S.plots[i].lv} · 동시에 ${mtnSlots(S.plots[i]).length}쌍 교배</span>` : ''}
     ${(S.plots[i].lv || 1) > 1 ? `<button class="btn ghost small" data-act="splitMtn" data-i="${i}">🔓 합치기 취소 (${S.plots[i].lv}개로 나누기)</button>` : ''}
@@ -5456,6 +5456,7 @@ function openHatchery(i = curHatch, slot) {
       ? S.hatch.slice(0, 120).map((t, k) => `<button class="egg-slot" data-act="incubate" data-idx="${k}"><span class="egg small ${eggLv(t)}">🥚</span><span>🐣 부화!</span></button>`).join('') + (S.hatch.length > 120 ? `<p class="muted">… 외 ${fmt(S.hatch.length - 120)}개 (🐣 모두 부화로 한 번에!)</p>` : '')
       : '<p class="muted">알이 없어요. 교배산이나 상점에서 알을 가져오세요!</p>'}</div>
     ${S.hatch.length + leftover.length > 1 ? '<div class="all-box"><button class="btn green" data-act="hatchAll">🐣 모두 부화 (알맞은 서식지로 자동 이사)</button></div>' : ''}
+    ${readyEggs() ? `<div class="all-box"><button class="btn green" data-act="hatchEverything">🐣 교배산의 다 된 알 ${fmt(readyEggs())}개까지 모두 한 번에 부화</button></div>` : ''}
     ${S.hatch.length ? '<div class="all-box"><button class="btn" data-act="makeRoom">🏠 남은 알 살 곳 만들기 (빈 서식지 바꾸기 · 새로 짓기)</button></div>' : ''}
     ${S.hatch.length + leftover.length ? `<div class="all-box"><button class="btn" data-act="boxStuck">📦 알 모두 보관함에 넣기 (${fmt(S.hatch.length + leftover.length)}개 · 개수 제한 없음)</button></div>` : ''}
     <div class="all-box"><button class="btn ghost small" data-act="boxOpen">📦 몬스터 보관함 (${fmt(boxCount())}마리)</button></div>
@@ -5765,6 +5766,14 @@ function mergeHatch(i, k) {
 }
 
 // 모든 알을 부화시켜 빈자리가 있는 알맞은 서식지로 자동 이사
+// 🐣 모든 교배산의 다 된 알 + 부화장 알을 한 번에 부화
+const readyEggs = () => { const now = Date.now(); let n = 0; S.plots.forEach(p => { if (p && p.kind === 'mountain') mtnSlots(p).forEach(b => { if (b && now >= b.end) n++; }); }); return n; };
+function hatchEverything() {
+  const now = Date.now(); let n = 0;
+  S.plots.forEach(p => { if (!p || p.kind !== 'mountain') return; const sl = mtnSlots(p); sl.forEach((b, k) => { if (b && now >= b.end) { S.hatch.push(b.type); sl[k] = null; n++; } }); });
+  if (!n && !S.hatch.length && !allIncs().some(x => x.b)) { toast('부화할 알이 없어요'); return; }
+  return hatchAll();
+}
 function hatchAll() {
   // 예전 부화 칸에 남은 알은 대기 알로 되돌린 뒤 한꺼번에 부화
   allIncs().forEach(({ k, s, b }) => { if (b) { S.hatch.push(b.type); hatchIncs(S.plots[k])[s] = null; } });
@@ -12774,6 +12783,7 @@ const ACTIONS = {
   upAllHabs: (d) => upAllHabs(d.i),
   upHabMax: (d) => upHabMax(d.i),
   hatchAll: () => hatchAll(),
+  hatchEverything: () => hatchEverything(),
   dumpEggs: () => dumpEggs(),
   boxStuck: () => boxStuck(),
   adminGive: (d) => adminGive(d.c),

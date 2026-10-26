@@ -1,5 +1,8 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  "부화할 알이 없어요": "No eggs to hatch",
+  "🐣 다 된 알 {}개 한 번에 부화": "🐣 Hatch all {} ready eggs at once",
+  "🐣 교배산의 다 된 알 {}개까지 모두 한 번에 부화": "🐣 Hatch everything at once, including {} ready eggs from breeding mountains",
   "⛰️⛰️ 같은 짝으로 빈 칸 {}곳 모두 교배{}": "⛰️⛰️ Breed the same pair in all {} empty slots{}",
   "⛰️ 같은 짝으로 {}곳에서 한꺼번에 교배를 시작했어요!{}": "⛰️ Started breeding the same pair in {} places at once!{}",
   " (💰 골드가 모자라서 {}칸은 남았어요)": " ({} slots left empty — not enough 💰 gold)",
