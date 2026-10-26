@@ -5346,6 +5346,7 @@ function freeBreedSlots(first) {
 // 🏔️ 같은 두 마리로 비어 있는 교배산 칸에서 한꺼번에 교배
 function breedEverywhere(i = curMtn) {
   i = Number(i);
+  tutFlag('breedAll', true);
   const [a, b] = sel.map(byUid);
   if (!a || !b) return;
   if (a.lv < BREED_LV || b.lv < BREED_LV) { toast(`두 마리 모두 Lv.${BREED_LV} 이상이어야 해요`); return; }
@@ -5784,6 +5785,7 @@ function mergeHatch(i, k) {
 // 🐣 모든 교배산의 다 된 알 + 부화장 알을 한 번에 부화
 const readyEggs = () => { const now = Date.now(); let n = 0; S.plots.forEach(p => { if (p && p.kind === 'mountain') mtnSlots(p).forEach(b => { if (b && now >= b.end) n++; }); }); return n; };
 function hatchEverything() {
+  tutFlag('hatchEvery', true);
   const now = Date.now(); let n = 0;
   S.plots.forEach(p => { if (!p || p.kind !== 'mountain') return; const sl = mtnSlots(p); sl.forEach((b, k) => { if (b && now >= b.end) { S.hatch.push(b.type); sl[k] = null; n++; } }); });
   if (!n && !S.hatch.length && !allIncs().some(x => x.b)) { toast('부화할 알이 없어요'); return; }
@@ -11271,6 +11273,7 @@ let RATE_PICK = 0;
 const RATE_FACE = ['', '😢', '😕', '🙂', '😄', '🤩'];
 const RATE_WORD = ['', '별로예요', '조금 아쉬워요', '괜찮아요', '재밌어요', '최고예요!'];
 function openRate(auto) {
+  tutFlag('rate', true);
   if (auto) { S.rateAsk = Date.now(); save(); }
   RATE_PICK = RATE_PICK || 0;
   showModal(`<div class="rate-panel"><h3>⭐ 몬스터 합치기, 어때요?</h3>
@@ -12052,7 +12055,7 @@ TUT.push(
 TUT.push(
   { text: '💬 길드의 💬 채팅에서 메시지를 보내 봐요 (노란 숫자 = 안 읽은 길드원 수 · 모든 날 저장!)', done: () => tutFlag('gchat') || (!S.guild && tutFlag('guild')),
     go: () => { closeModal(); if (S.guild) { guildTab = 'chat'; openGuild('chat'); } else { tab = 'adventure'; render(); openGuild(); } } },
-  { text: '🌐 ☰ 메뉴의 🌐 English로 게임을 영어로 바꿀 수 있어요', done: () => tutFlag('lang') || tutFlag('menuSeen'), go: () => { closeModal(); openMenu(); } },
+  { text: '🌐 ☰ 메뉴의 🌐 언어에서 한국어 · English · 中文 · 日本語 · Deutsch를 골라요', done: () => tutFlag('lang') || tutFlag('menuSeen'), go: () => { closeModal(); openMenu(); } },
 );
 TUT.push(
   { text: '🏁 🎮 미니게임의 🏁 경주에서 1등할 몬스터를 맞혀 봐요 (하루 1번 무료!)', done: () => tutFlag('race') || stat('race') > 0, go: () => { closeModal(); tab = 'island'; render(); openRace(); } },
@@ -12145,6 +12148,18 @@ TUT.push(
 TUT.push(
   { text: '💬 위쪽 💬 채팅 버튼을 눌러 봐요 (메신저처럼 다른 사람과 이야기해요!)', done: () => tutFlag('dm'),
     go: () => { closeModal(); openDmBox(); } },
+);
+TUT.push(
+  { text: '🥊 모험 탭의 🥊 연습 전투를 해 봐요 (이길 만한 적과 싸워 돈 · 먹이를 벌어요. 져도 잃는 것 없어요!)', done: () => tutFlag('practice'),
+    go: () => { closeModal(); tab = 'adventure'; render(); } },
+  { text: '📦 부화장 창의 📦 몬스터 보관함을 열어 봐요 (살 곳 없는 알을 개수 제한 없이 넣어 둬요!)', done: () => tutFlag('box'),
+    go: () => { closeModal(); openBox(); } },
+  { text: '⛰️ 교배산이 2개 이상이면 ⛰️⛰️ 같은 짝으로 빈 칸 모두 교배를 눌러 봐요 (한꺼번에 여러 마리!)', done: () => tutFlag('breedAll') || mountains().length < 2,
+    go: () => { closeModal(); openBreed(mountains()[0], 0); } },
+  { text: '🐣 교배산의 다 된 알은 🐣 다 된 알 한 번에 부화로 한꺼번에 깨워요', done: () => tutFlag('hatchEvery') || (!readyEggs() && tutFlag('breedAll')),
+    go: () => { closeModal(); openHatchery(); } },
+  { text: '⭐ 👤 계정 메뉴의 ⭐ 게임 평가하기로 별점과 이유를 제작자에게 보내 봐요', done: () => tutFlag('rate'),
+    go: () => { closeModal(); openRate(false); } },
 );
 // 🎉 이벤트는 기본 튜토리얼 10단계 (첫 전투 다음)
 { const ei = TUT.findIndex(t => t.text.startsWith('🎉')); if (ei > 9) TUT.splice(9, 0, TUT.splice(ei, 1)[0]); }
@@ -12426,6 +12441,22 @@ function tutPoint(k) {
     case 65: // 💬 말 걸기
       if (inModal) return ['#modalBox [data-act=close]'];
       return ['.hud [data-act=dmBox]'];
+    case 66: // 🥊 연습 전투
+      if (inModal) return ['#modalBox [data-act=close]'];
+      if (tab !== 'adventure') return [bottomBtn('adventure')];
+      return ['#view [data-act=practice]'];
+    case 67: // 📦 보관함
+      if (inModal) return ['#modalBox [data-act=boxOpen]', '#modalBox [data-act=boxStuck]', '#modalBox [data-act=close]'];
+      return null;
+    case 68: // ⛰️⛰️ 같은 짝 모두 교배
+      if (inModal) return ['#modalBox [data-act=breedAll]:not([disabled])', '#modalBox [data-act=pick]', '#modalBox [data-act=close]'];
+      return null;
+    case 69: // 🐣 한 번에 부화
+      if (inModal) return ['#modalBox [data-act=hatchEverything]', '#modalBox [data-act=hatchAll]', '#modalBox [data-act=close]'];
+      return null;
+    case 70: // ⭐ 게임 평가
+      if (inModal) return ['#modalBox .rate-star', '#modalBox [data-act=close]'];
+      return ['.hud [data-act=account]'];
   }
   return null;
 }
@@ -12613,6 +12644,10 @@ const WELCOME = [
   { icon: '🧬', title: '복제기', text: '상점의 <b>🧬 복제기</b>는 💰 10Qi(1해의 10배!)나 하는 최고급 기계예요.<br>섬에 세우고 누르면, 몬스터를 골라 <b>레벨·별까지 똑같은</b> 몬스터를 하나 더 만들어요. 한 번에 💰 10M!<br>(룬은 복제되지 않고, 알맞은 서식지에 빈자리가 있어야 해요)' },
   { icon: '🌍', title: '월드 보스', text: '⚔️ 모험 탭의 🌍 월드 보스! 12시간마다 거대한 보스가 나타나요.<br>게임하는 모든 사람이 같이 때려요. 한 사람이 3번씩 공격할 수 있고, 팀이 셀수록 데미지가 커요.<br>공격하면 💎 5, 다 같이 쓰러뜨리면 💎 50, 데미지 1등은 💎 100 더!' },
   { icon: '🌱', title: '시즌 2 · 명성 레벨', text: '시즌 2에서는 모두 새로 시작해요! 돈은 천천히 모이고, 좋은 몬스터는 더 드물고, 모험 적은 끝없이 강해져요.<br>위쪽 <b>🎖️ 명성</b>은 끝이 없는 레벨! 도감 · 모험 · 교배 · 퀘스트로 올리고, 10레벨마다 새 칭호!<br>📜 스토리 퀘스트도 30개 뒤에 <b>♾️ 끝없는 모험</b>이 계속돼요. 지난 시즌 기록은 명예의 전당에!' },
+  { icon: '🥊', title: '연습 전투', text: '🥊 모험 탭의 <b>🥊 연습 전투</b>는 내 팀이 이길 만한 적과 싸워요.<br>이기면 💰 돈 · 🍖 먹이를 받고, 져도 <b>잃는 게 없어요</b> (스테이지도 그대로).<br>적이 너무 세면 연습 전투로 몬스터를 키운 다음 다시 도전!' },
+  { icon: '📦', title: '몬스터 보관함', text: '살 서식지가 없는 알은 부화장의 <b>📦 알 모두 보관함에 넣기</b>로 보관함에 넣어요. <b>개수 제한이 없어요!</b><br>보관함 몬스터는 돈은 안 벌지만 도감에는 기록돼요.<br>서식지에 자리가 생기면 <b>📤 빈 서식지로 꺼내기</b>!' },
+  { icon: '⛰️', title: '한꺼번에 교배 · 부화', text: '교배산이 여러 개면 두 마리를 고르고 <b>⛰️⛰️ 같은 짝으로 빈 칸 모두 교배</b>!<br>비어 있는 교배산 칸 전부에서 한꺼번에 교배해요 (결과는 칸마다 달라요).<br>다 되면 <b>🐣 다 된 알 한 번에 부화</b>로 모두 꺼내서 바로 부화해요.<br>💡 섬 하나를 🏔️ 교배산으로 꽉 채우면 한 번에 25마리!' },
+  { icon: '⭐', title: '게임 평가하기', text: '👤 계정 메뉴의 <b>⭐ 게임 평가하기</b>에서 별점(1~5)과 <b>왜 그렇게 생각하는지</b> 적어서 제작자에게 보내요.<br>게임을 오래 하면 가끔 먼저 물어보기도 해요. 처음 보내면 💎 20!' },
   { icon: '💬', title: '말 걸기', text: '위쪽 💬 채팅 버튼을 누르면 메신저처럼 대화 목록이 나와요! 🏆 랭킹에서 사람 옆의 💬를 누르면 모르는 사람에게도 말을 걸 수 있어요.<br>✏️ 하고 싶은 말을 직접 적거나 정해진 말 · 이모지를 눌러요. 🛡️ 개인정보는 보낼 수 없어요. 받은 말은 📬 받은 말에서 보고 💬 답장!<br>싫은 사람은 🚫 차단하면 더 이상 말이 오지 않아요.' },
   { icon: '📊', title: '내 기록', text: '위쪽 👤 계정에서 📊 내 기록을 누르면 ⏱️ 지금까지 게임한 시간이 나와요!<br>몬스터 수, 도감, 가장 긴 연승, 이긴 전투, 미니게임 판수 같은 기록도 한눈에 볼 수 있어요.' },
   { icon: '🧪', title: '합체 실험실', text: '🐾 몬스터 탭의 🧪 합체 실험실에서 내 몬스터 두 마리를 합체해 봐요!<br>살라맨더 + 거북 = 살라북?! 웃긴 이름과 모습, 성격이 나와요. 마음에 들면 📒 앨범에 저장!<br>재미로만 하는 거라 진짜 몬스터는 그대로예요.' },
@@ -12622,7 +12657,7 @@ const WELCOME = [
   { icon: '🏝️', title: '한 번에 키우기', text: '🗺️ 섬 지도에서 🏝️🏝️ 섬 여러 개 한 번에 사기를 누르면 1 · 5 · 10 · 25개나 돈 되는 만큼 섬을 사고, 서식지까지 꽉 채워 줘요.<br>⏫ 모든 서식지 돈 되는 만큼 올리기를 누르면 낮은 레벨부터 골고루 Lv.100까지 올려요!' },
   { icon: '💾', title: '저장 버튼', text: '게임은 저절로 저장되지만, 위쪽 💾 버튼을 누르면 지금 바로 저장해요!<br>컴퓨터에서는 Ctrl + S 키로도 저장할 수 있어요.<br>저장이 잘 되면 시간과 크기를 알려 줘요.' },
   { icon: '⏫', title: '서식지 Lv.100', text: '서식지는 이제 Lv.100까지 올릴 수 있어요!<br>레벨만큼 몬스터가 살 수 있고 (Lv.100 = 100마리), 레벨마다 골드 수입 +25%.<br>서식지를 눌러 ⏫ 돈 되는 만큼 올리기를 누르면 한 번에 쭉 올라가요.' },
-  { icon: '🏠', title: '섬 전체에 서식지', text: '섬 이름(🗺️ 섬 지도)이나 빈 땅의 🏗️ 건설하기에서 🏠 이 섬 빈 땅 전부에 서식지 짓기를 눌러요.<br>속성 하나를 고르거나 🌈 골고루를 고르면 섬의 빈 땅을 한 번에 꽉 채워요!' },
+  { icon: '🏠', title: '섬 전체에 서식지', text: '섬 이름(🗺️ 섬 지도)이나 빈 땅의 🏗️ 건설하기에서 🏠 이 섬 빈 땅 전부에 서식지 짓기를 눌러요.<br>속성 하나를 고르거나 🌈 골고루를 고르면 섬의 빈 땅을 한 번에 꽉 채워요!<br>🏗️ 다른 건물로 채우기에서 🏔️ 교배산 · 🌾 농장 · 🪺 부화장으로도 채울 수 있어요.' },
   { icon: '🗑️', title: '알 모두 버리기', text: '부화장에 알이 너무 많이 쌓였나요?<br>부화장 창 아래쪽 🗑️ 알 모두 버리기를 누르면 한 번에 비울 수 있어요.<br>버린 알은 되돌릴 수 없으니 조심!' },
   { icon: '🏝️', title: '새 섬 사기', text: '섬 이름(🗺️ 섬 지도)을 누르면 맨 위에 🏝️ 새 섬 사기 버튼이 있어요.<br>섬 18개는 처음부터 있고, 19번째부터는 💰 골드로 살 수 있어요 (최대 100개)!<br>섬 하나마다 빈 땅이 25칸씩 생기고, 살 때마다 값이 올라가요.' },
   { icon: '🛒', title: '몬스터 전부 사기', text: '상점 🥚 알 칸에서 🛒 없는 몬스터 전부 사기를 누르면<br>아직 없는 몬스터를 한 번에 모두 사서 바로 부화시켜요!<br>알맞은 서식지가 없으면 부화장에서 기다려요.' },
@@ -12635,7 +12670,7 @@ const WELCOME = [
   { icon: '🎡', title: '행운의 룰렛', text: '<b>🎡 룰렛</b>(섬 왼쪽 버튼)을 하루 1번 <b>무료</b>로 돌려요! 💎10이면 5번 더.<br>💰 골드 · 🤑 골드 대박 · 💎 보석 · 🍖 먹이 · 📦 룬 · 🥚 희귀 알… 그리고 아주 가끔 <b>🎰 잭팟 💎100</b>!' },
   { icon: '🏁', title: '몬스터 경주', text: '<b>🏁 경주</b>(섬 왼쪽 버튼)에서 몬스터 5마리가 달리기 시합을 해요!<br>1등할 것 같은 몬스터를 응원하고 골드를 걸면, 맞혔을 때 <b>4.5배</b>!<br>하루 1번은 <b>🎟️ 무료 응원권</b> (맞히면 💎15). 💨부스터 · 🍌미끄러짐 · 😴낮잠… 끝까지 몰라요!' },
   { icon: '💬', title: '길드 채팅', text: '🛡️ 길드 창의 <b>💬 채팅</b>에서 길드원과 자유롭게 이야기해요.<br>메시지 옆 <b style="color:#ffe066">노란 숫자</b>는 아직 안 읽은 길드원 수 (읽을수록 줄어요, 카톡처럼!).<br>채팅은 <b>모든 날 저장</b>되고, 📅 날짜 줄로 나눠져 보여요.<br>전화번호·주소·링크는 막히고, 욕은 5번 물어봐요. 싫은 사람은 🙈' },
-  { icon: '🌐', title: '영어 모드', text: '☰ 메뉴 · 👤 계정 메뉴 · 로그인 화면의 <b>🌐 English</b>를 누르면 게임이 <b>영어</b>로 바뀌어요.<br>몬스터 이름까지 모두 영어! 다시 누르면 한국어로 돌아와요.' },
+  { icon: '🌐', title: '5개 나라 말', text: '☰ 메뉴 · 👤 계정 메뉴 · 로그인 화면의 <b>🌐 언어</b>를 누르면<br>🇰🇷 한국어 · 🇺🇸 English · 🇨🇳 中文 · 🇯🇵 日本語 · 🇩🇪 Deutsch 중에서 골라요.<br>몬스터 이름까지 모두 바뀌어요!' },
   { icon: '🔇', title: '무음 모드', text: '위쪽 <b>🔊</b> 버튼을 누르면 <b>🔇 무음 모드</b>! 배경음악과 효과음이 한 번에 모두 꺼져요.<br>다시 누르면 소리가 돌아와요. (☰ 메뉴 · 👤 계정 메뉴에도 있어요)' },
   { icon: '🌈', title: '새 속성 9개', text: `속성이 <b>20개</b>가 되었어요! 새 특수 속성은 두 속성 몬스터를 교배하면 나와요 (상점 알로도 살 수 있어요).<br>${ADV_RECIPES.slice(3).map(r => `${EL[ELI[r.el]].emoji}<b>${EL[ELI[r.el]].name}</b> = ${r.need.map(x => EL[ELI[x]].emoji + EL[ELI[x]].name).join('+')}`).join(' · ')}` },
   { icon: '🎣', title: '낚시', text: '섬 왼쪽의 <b>🎣 낚시</b>에서 미끼를 던져요.<br><b>❗</b>가 뜨면 움직이는 🪝가 <b style="color:#7dff8f">초록 칸</b>에 올 때 <b>낚아채기</b>! 가운데 노란 칸이면 <b>✨ 완벽</b> (보상 1.5배).<br>물고기 20종 · 💰골드 · 💎보석 · 🥚알 · 🎁보물상자! 미끼는 20분마다 1개 (최대 5개).' },
