@@ -1,5 +1,6 @@
 // 새로 넣는 번역 (한국어: 영어)
 module.exports = {
+  "🌌 근원의 문이 열리지 않았어요… (합성 제단은 50% 확률이에요. 재료는 그대로니 다시 해 봐요!)": "🌌 The Gate of Origin did not open… (the Fusion Altar has a 50% chance. Your materials are safe, try again!)",
   "🥊 모험 탭의 🥊 연습 전투를 해 봐요 (이길 만한 적과 싸워 돈 · 먹이를 벌어요. 져도 잃는 것 없어요!)": "🥊 Try a 🥊 Practice battle on the Adventure tab (fight beatable enemies for gold · food. Nothing lost if you lose!)",
   "📦 부화장 창의 📦 몬스터 보관함을 열어 봐요 (살 곳 없는 알을 개수 제한 없이 넣어 둬요!)": "📦 Open 📦 Monster storage in the hatchery window (store homeless eggs with no limit!)",
   "⛰️ 교배산이 2개 이상이면 ⛰️⛰️ 같은 짝으로 빈 칸 모두 교배를 눌러 봐요 (한꺼번에 여러 마리!)": "⛰️ With 2+ breeding mountains, tap ⛰️⛰️ Breed the same pair in all empty slots (many at once!)",

@@ -632,19 +632,21 @@ const shuffle = (arr) => {
   return a;
 };
 
-const SHOP_BREED_CHANCE = [0.06, 0.025, 0.005];   // 전설 상점 몬스터: 약한 부모와 같은 등급 / 한 단계 위 / 두 단계 위
+const SHOP_BREED_CHANCE = [0.15, 0.08, 0.02];   // 전설 상점 몬스터: 약한 부모와 같은 등급 / 한 단계 위 / 두 단계 위
 // 근원은 교배 확률표에서 빼고, 아래 "근원의 문"으로만 아주아주 드물게 나온다
 const SHOP_BREED_MUL = { origin: 0 };
 // 🌌 근원의 문: 게임한 시간 1000시간(하루 1시간씩 약 3년)에 한 번쯤 열린다.
 // 기회가 올 때마다 "지난 기회부터 게임한 시간 ÷ 1000시간" 확률이라, 아무리 많이 눌러도 더 자주 열리지 않는다
-const ORIGIN_EVERY_SEC = 1000 * 3600;
-function originLuck() {
-  const now = S.playSec || 0, last = S.oriLuckAt == null ? 0 : S.oriLuckAt;
-  S.oriLuckAt = now;
-  return Math.random() < Math.min(1, Math.max(0, now - last) / ORIGIN_EVERY_SEC);
+// (예전엔 게임 1000시간에 한 번쯤이었는데, 이제 교배할 때마다 기회!)
+const ORIGIN_CHANCE = { legendary: 0.02, mythic: 0.05, divine: 0.1, holy: 0.2 };
+function originLuck(ta, tb) {
+  if (!ta || !tb) return Math.random() < 0.5;   // 합성 제단은 50%
+  const lo = Math.min(rIdx(ta), rIdx(tb));
+  const p = lo >= RANK.holy ? ORIGIN_CHANCE.holy : lo >= RANK.divine ? ORIGIN_CHANCE.divine : lo >= RANK.mythic ? ORIGIN_CHANCE.mythic : lo >= RANK.legendary ? ORIGIN_CHANCE.legendary : 0;
+  return Math.random() < p;
 }
-const LEGEND_RECIPE_CHANCE = 0.15;               // 족보를 맞췄을 때 레전더리 한 마리당 확률
-const LUCKY_LEGEND = { rare: 0.01, epic: 0.03 }; // 두 부모가 모두 레어 이상 / 에픽 이상일 때 행운의 레전더리
+const LEGEND_RECIPE_CHANCE = 0.4;               // 족보를 맞췄을 때 레전더리 한 마리당 확률
+const LUCKY_LEGEND = { rare: 0.04, epic: 0.1 }; // 두 부모가 모두 레어 이상 / 에픽 이상일 때 행운의 레전더리
 
 // 두 부모로 교배했을 때 각 몬스터가 나올 확률 { type: 확률 }
 function breedDist(ta, tb) {
@@ -706,7 +708,7 @@ function breedDist(ta, tb) {
 
 function breedResult(ta, tb) {
   // 전설 이상끼리 교배할 때만 근원의 문이 열릴 수 있다
-  if (isLegend(ta) && isLegend(tb) && originLuck()) {
+  if (isLegend(ta) && isLegend(tb) && originLuck(ta, tb)) {
     const pool = CAT_LIST.filter(c => c.rarity === 'origin');
     if (pool.length) { const c = pool[Math.floor(Math.random() * pool.length)]; setTimeout(() => toast('🌌✨ 근원의 문이 열렸어요!! 정말 정말 드문 일이에요!'), 300); return c.id; }
   }
@@ -1178,7 +1180,7 @@ const habLvBonus = (i) => (S.plots[i].lv - 1) * HAB_LV_BONUS;
 let INC_T = { t: -1e9, s: null, n: -1, ml: -1, arr: null };
 const incDirty = () => { INC_T.t = -1e9; };
 // 🌱 시즌 2: 서식지에서 버는 골드 · 모험 골드를 4분의 1로 (너무 빨리 부자가 되지 않게)
-const ECON_INC = 0.25;
+const ECON_INC = 1;   // 시즌 2 전처럼 (예전엔 ¼이었음)
 function incTable() {
   const now = performance.now();
   if (INC_T.arr && INC_T.s === S && INC_T.n === S.plots.length && INC_T.ml === S.monsters.length && now - INC_T.t < 1000) return INC_T.arr;
@@ -6259,7 +6261,7 @@ function altarFuse() {
   if (mats.some(m => S.team.includes(m.uid)) && !confirm('재료 중에 모험 팀 몬스터가 있어요. 그래도 바칠까요?')) return;
   if (mats.some(m => (m.star || 0) > 0) && !confirm('재료 중에 별(★)이 있는 몬스터가 있어요. 그래도 바칠까요?')) return;
   if (altarNext(altarRank) === 'creator') { sfx('err'); toast('👑 이건 정말로 불가능해요! 근원보다 높은 등급은 아무도 만들 수 없어요'); return; }
-  if (altarNext(altarRank) === 'origin' && !originLuck()) { sfx('err'); toast('🌌 근원의 문이 열리지 않았어요… (근원은 게임한 시간 1000시간에 한 번쯤만 열려요. 재료는 그대로예요)'); return; }
+  if (altarNext(altarRank) === 'origin' && !originLuck()) { sfx('err'); toast('🌌 근원의 문이 열리지 않았어요… (합성 제단은 50% 확률이에요. 재료는 그대로니 다시 해 봐요!)'); return; }
   if (!spend(altarCost(altarRank))) return;
   // 재료 속성과 겹칠수록 가중치 ↑
   const els = new Set(mats.flatMap(m => CAT[m.type].els));
@@ -7175,7 +7177,7 @@ function merge(t, lv) {
 
 // ===================== 화면: 모험 =====================
 const ENEMY_POOLS = { n: -1, p: {} };
-const foeScale = (st) => (st > 80 ? Math.pow(1.025, st - 80) : 1);
+const foeScale = () => 1;   // 시즌 2 전처럼: 적은 어느 정도까지만 세진다
 function enemyTeam(stage) {
   let seed = stage * 7919 + 13;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -7358,7 +7360,6 @@ const foePower = (st) => unitsPower(enemyTeam(st).map((f, i) => mkUnit(f, 'foe',
 // 나올 수 있는 가장 센 적 (몇 천 스테이지를 살펴보고 조금 넉넉하게)
 let FOE_CAP = 0;
 function foeCap() {
-  return Infinity;   // 🌱 시즌 2: 적이 끝없이 강해지니까 '가장 센 적'은 없다
   if (FOE_CAP) return FOE_CAP;
   let mx = 0;
   for (let k = 0; k < 3000; k++) mx = Math.max(mx, foePower(60 + k * 37));
@@ -11242,9 +11243,6 @@ function openSeasonNews() {
     <div class="sorry-box"><b>🙇 정말 미안해요!</b><br>시즌 2가 시작되면서 그동안 열심히 키운 섬과 몬스터, 모아 둔 돈이 <b>모두 지워졌어요.</b><br>여러분이 얼마나 오랫동안 열심히 했는지 알아서 정말 마음이 아파요. 😢<br>그런데 너무 빨리 끝나 버리면 금방 심심해질 것 같아서, 더 오래오래 재밌게 할 수 있도록 새로 시작하기로 했어요.<br>지난 기록은 🏆 <b>명예의 전당</b>에 영원히 남아 있어요. 이번 시즌도 함께해 줘서 고마워요! 💖<br><small>— 제작자 이원영 올림</small></div>
     <p>모두가 <b>새로 시작</b>해요! 이번 시즌은 천천히, 오래오래 즐기는 시즌이에요.</p>
     <ul class="fame-list">
-      <li>💰 돈은 천천히 모여요 (서식지 · 모험 골드 ¼)</li>
-      <li>🐉 전설 · 신화 같은 좋은 몬스터는 훨씬 드물게</li>
-      <li>⚔️ 모험 적은 <b>끝없이</b> 강해져요. 어디까지 갈 수 있을까요?</li>
       <li>🎖️ <b>명성 레벨</b>은 끝이 없어요. 10레벨마다 새 칭호!</li>
       <li>📜 스토리 퀘스트는 30개가 끝나도 <b>끝없는 모험</b>이 계속돼요</li>
     </ul>
